@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { run } from './process.js';
 import {
-  BACKEND_REPOSITORY, backendLock, backendPackageName, backendAssetUrl,
+  BACKEND_REPOSITORY, backendPackageName, backendAssetUrl, compareVersions, minimumBackendVersion,
   validateBackendManifest, validateBackendArchive, type BackendPackageManifest,
 } from './backend-package.js';
 
@@ -33,18 +33,27 @@ export async function discoverBackend(fetcher: typeof fetch): Promise<BackendArt
     assets?: Array<{ name?: string; browser_download_url?: string }>;
   }>;
   if (!Array.isArray(releases)) throw new Error('Invalid backend release list.');
-  // Launcher/runtime releases must never hide the matching backend release.
-  const tag = `backend-v${backendLock.version}`;
-  const release = releases.find(item => !item.draft && !item.prerelease && item.tag_name === tag);
-  const asset = (name: string) => backendAssetUrl(tag, name, release?.assets?.find(item => item.name === name)?.browser_download_url);
-  if (!release) throw new Error('No compatible Nexus backend release has been published yet.');
-  const archive = `${backendPackageName}.tar.xz`;
-  const manifest = validateBackendManifest(JSON.parse((await bytes(asset(`${backendPackageName}.manifest.json`), fetcher, 100_000)).toString()));
-  const checksum = (await bytes(asset(`${backendPackageName}.sha512sum`), fetcher, 1000)).toString().trim();
+  // Accept the newest stable backend-vX.Y.Z release at or above the launcher's
+  // minimum version; the launcher is not pinned to one backend release.
+  let selected: { tag: string; version: string; release: NonNullable<typeof releases[number]> } | undefined;
+  for (const item of releases) {
+    if (item.draft || item.prerelease) continue;
+    const match = /^backend-v(\d+\.\d+\.\d+)$/.exec(item.tag_name ?? '');
+    if (!match || compareVersions(match[1], minimumBackendVersion) < 0) continue;
+    if (!selected || compareVersions(match[1], selected.version) > 0) selected = { tag: item.tag_name!, version: match[1], release: item };
+  }
+  if (!selected) throw new Error('No compatible Nexus backend release has been published yet.');
+  const tag = selected.tag;
+  const packageName = backendPackageName(selected.version);
+  const asset = (name: string) => backendAssetUrl(tag, name, selected!.release.assets?.find(item => item.name === name)?.browser_download_url);
+  const archive = `${packageName}.tar.xz`;
+  const manifest = validateBackendManifest(JSON.parse((await bytes(asset(`${packageName}.manifest.json`), fetcher, 100_000)).toString()));
+  if (manifest.version !== selected.version) throw new Error('The backend release does not match its manifest.');
+  const checksum = (await bytes(asset(`${packageName}.sha512sum`), fetcher, 1000)).toString().trim();
   if (checksum !== `${manifest.archiveSha512}  ${archive}`) throw new Error('Backend SHA-512 manifest mismatch.');
   // Distribution must include the matching corresponding source, not just binaries.
-  asset(`${backendPackageName}-source.tar.xz`);
-  asset(`${backendPackageName}-source.sha512sum`);
+  asset(`${packageName}-source.tar.xz`);
+  asset(`${packageName}-source.sha512sum`);
   return { tag, manifest, archiveUrl: asset(archive) };
 }
 
@@ -82,12 +91,13 @@ export async function installBackend(
     const listing = await runner('tar', ['-tJf', archive], { maxOutput: 100_000 });
     const verbose = await runner('tar', ['-tvJf', archive], { maxOutput: 100_000 });
     if (listing.code !== 0 || verbose.code !== 0) throw new Error('The backend archive is invalid.');
-    validateBackendArchive(listing.output.trimEnd().split('\n'), verbose.output.trimEnd().split('\n'));
+    const packageName = backendPackageName(manifest.version);
+    validateBackendArchive(listing.output.trimEnd().split('\n'), verbose.output.trimEnd().split('\n'), packageName);
     const extracted = path.join(staging, 'extracted');
     await fs.mkdir(extracted);
     const result = await runner('tar', ['-xJf', archive, '--no-same-owner', '--no-same-permissions', '-C', extracted]);
     if (result.code !== 0) throw new Error('Backend extraction failed.');
-    const candidate = path.join(extracted, backendPackageName);
+    const candidate = path.join(extracted, packageName);
     const verifyFiles = async (root: string) => {
       for (const [name, expected] of Object.entries(manifest.files)) {
         const target = path.join(root, name);
@@ -109,7 +119,7 @@ export async function installBackend(
     phase('Checking backend commands and runtime libraries…');
     await verifyFiles(candidate);
     await assertIdle();
-    const release = path.join(managedRoot, 'releases', `${backendPackageName}-${manifest.archiveSha512.slice(0, 16)}`);
+    const release = path.join(managedRoot, 'releases', `${packageName}-${manifest.archiveSha512.slice(0, 16)}`);
     await fs.mkdir(path.dirname(release), { recursive: true });
     try { await fs.rename(candidate, release); }
     catch (error) {

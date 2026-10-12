@@ -4,7 +4,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import type { BackendCapabilities, BackendStatus } from '../shared/types.js';
 import { parseBackendHelp } from '../shared/utils.js';
 import { run } from './process.js';
-import { backendLock, backendRecipeSha256, backendAssets } from './backend-package.js';
+import { backendLock, backendRecipeSha256, backendAssets, compareVersions } from './backend-package.js';
 import { discoverBackend, installBackend, type BackendArtifact } from './backend-releases.js';
 
 const REPOSITORY = backendLock.repository;
@@ -138,7 +138,8 @@ export class BackendManager {
       const pointer = await this.readPointer();
       this.status.releaseAvailable = true;
       this.status.releaseVersion = this.artifact.manifest.version;
-      this.status.updateAvailable = !this.status.available || pointer?.recipeSha256 !== backendRecipeSha256 || pointer.delivery !== 'release';
+      this.status.updateAvailable = !this.status.available || pointer?.delivery !== 'release' ||
+        !pointer?.version || compareVersions(pointer.version, this.artifact.manifest.version) < 0;
       this.status.blockReason = undefined;
     } catch (error) {
       this.artifact = undefined;
@@ -171,13 +172,14 @@ export class BackendManager {
         this.status.phase = message; this.emitLog('backend', message); onStatus();
       });
       await this.assertUpdateAllowed();
-      const pointer: ManagedPointer = { commit: backendLock.commit, binaryPath, builtAt: new Date().toISOString(),
-        linuxRunPatch: LINUX_RUN_PATCH, recipeSha256: backendRecipeSha256, version: backendLock.version, delivery: 'release' };
+      const manifest = this.artifact.manifest;
+      const pointer: ManagedPointer = { commit: manifest.commit, binaryPath, builtAt: new Date().toISOString(),
+        linuxRunPatch: manifest.compatibility, recipeSha256: manifest.recipeSha256, version: manifest.version, delivery: 'release' };
       const temporary = `${this.pointerFile}.${randomUUID()}.tmp`;
       try { await fs.writeFile(temporary, JSON.stringify(pointer, null, 2)); await fs.rename(temporary, this.pointerFile); }
       finally { await fs.rm(temporary, { force: true }); }
       await this.refresh();
-      Object.assign(this.status, { releaseAvailable: true, releaseVersion: backendLock.version, updateAvailable: false, phase: 'Backend is ready.' });
+      Object.assign(this.status, { releaseAvailable: true, releaseVersion: manifest.version, updateAvailable: false, phase: 'Backend is ready.' });
     } catch (error) {
       this.status.blockReason = (error as Error).message;
       this.status.phase = 'Backend update failed; the previous backend was kept.';

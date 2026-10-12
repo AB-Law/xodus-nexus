@@ -33,7 +33,7 @@ describe('prebuilt backend', () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-backend-test-'));
     try {
       const build = path.join(root, 'build');
-      const bundle = path.join(build, backendPackageName);
+      const bundle = path.join(build, backendPackageName(backendLock.version));
       await fs.mkdir(bundle, { recursive: true });
       const cli = elf();
       if (scenario === 'missing-capability') cli[63] = 1;
@@ -50,13 +50,13 @@ describe('prebuilt backend', () => {
         else await fs.link(path.join(bundle, 'xodus-cli'), path.join(bundle, 'xodus-service'));
       }
       if (scenario === 'missing-service') await fs.unlink(path.join(bundle, 'xodus-service'));
-      const archive = `${backendPackageName}.tar.xz`;
-      expect((await run('tar', ['-cJf', path.join(build, archive), '-C', build, backendPackageName])).code).toBe(0);
+      const archive = `${backendPackageName(backendLock.version)}.tar.xz`;
+      expect((await run('tar', ['-cJf', path.join(build, archive), '-C', build, backendPackageName(backendLock.version)])).code).toBe(0);
       const data = await fs.readFile(path.join(build, archive));
       const manifest = { schema: 1, version: backendLock.version, commit: backendLock.commit, compatibility: backendLock.compatibility,
-        recipeSha256: scenario === 'recipe' ? '0'.repeat(64) : backendRecipeSha256, platform: 'linux', arch: 'x64', archive,
+        recipeSha256: scenario === 'recipe' ? 'not-a-valid-hash' : backendRecipeSha256, platform: 'linux', arch: 'x64', archive,
         archiveSha512: scenario === 'archive-digest' ? '0'.repeat(128) : sha(data, 'sha512'), files };
-      const assets = [archive, `${backendPackageName}.manifest.json`, `${backendPackageName}.sha512sum`, `${backendPackageName}-source.tar.xz`, `${backendPackageName}-source.sha512sum`];
+      const assets = [archive, `${backendPackageName(backendLock.version)}.manifest.json`, `${backendPackageName(backendLock.version)}.sha512sum`, `${backendPackageName(backendLock.version)}-source.tar.xz`, `${backendPackageName(backendLock.version)}-source.sha512sum`];
       let downloading = false;
       const fetcher = vi.fn(async (input: URL | RequestInfo) => {
         const target = String(input);
@@ -115,13 +115,46 @@ describe('prebuilt backend', () => {
   });
 
   it('rejects wrong source/platform and traversal archive layouts', () => {
-    expect(() => validateBackendManifest({ schema: 1, commit: 'a'.repeat(40) })).toThrow('pinned');
-    expect(() => validateBackendArchive([`${backendPackageName}/../../outside`], ['-rw-r--r-- user/group 1 time outside'])).toThrow('Unsafe');
+    expect(() => validateBackendManifest({ schema: 1, commit: 'a'.repeat(40) })).toThrow('not a valid compatible release');
+    expect(() => validateBackendArchive([`${backendPackageName(backendLock.version)}/../../outside`], ['-rw-r--r-- user/group 1 time outside'])).toThrow('Unsafe');
+  });
+
+  it('discovers the newest stable backend release above the launcher minimum, ignoring older ones', async () => {
+    const newest = `backend-v9.9.9`;
+    const name = (version: string, suffix: string) => `xodus-nexus-backend-${version}-linux-x86_64${suffix}`;
+    const manifest = { schema: 1, version: '9.9.9', commit: 'a'.repeat(40), recipeSha256: 'b'.repeat(64), compatibility: 'linux-run-fixture',
+      platform: 'linux', arch: 'x64', archive: name('9.9.9', '.tar.xz'), archiveSha512: 'c'.repeat(128),
+      files: { 'xodus-cli': 'd'.repeat(64), 'xodus-service': 'e'.repeat(64), LICENSE: 'f'.repeat(64) } };
+    const newestUrl = (asset: string) => `https://github.com/domsvoboda/xodus-nexus/releases/download/${newest}/${asset}`;
+    const fetcher = (async (input: URL | RequestInfo) => {
+      const target = String(input);
+      if (target.includes('/releases?')) return new Response(JSON.stringify([
+        { tag_name: 'v9.9.9', assets: [] },
+        { tag_name: `backend-v${backendLock.version}`, assets: [{ name: name(backendLock.version, '.tar.xz'), browser_download_url: 'https://github.com/domsvoboda/xodus-nexus/releases/download/ignored/x' }] },
+        { tag_name: 'backend-v0.1.0', assets: [] },
+        { tag_name: newest, assets: ['.tar.xz', '.manifest.json', '.sha512sum', '-source.tar.xz', '-source.sha512sum']
+          .map(suffix => ({ name: name('9.9.9', suffix), browser_download_url: newestUrl(name('9.9.9', suffix)) })) },
+      ]));
+      if (target.endsWith('.manifest.json')) return new Response(JSON.stringify(manifest));
+      if (target.endsWith('.sha512sum')) return new Response(`${manifest.archiveSha512}  ${manifest.archive}\n`);
+      return new Response('source-or-archive-bytes');
+    }) as unknown as typeof fetch;
+    const artifact = await discoverBackend(fetcher);
+    expect(artifact.tag).toBe(newest);
+    expect(artifact.manifest.version).toBe('9.9.9');
+  });
+
+  it('rejects backend releases older than the launcher minimum', async () => {
+    const fetcher = (async () => new Response(JSON.stringify([
+      { tag_name: 'backend-v0.1.0', assets: [] },
+      { tag_name: 'v0.1.0', assets: [] },
+    ]))) as unknown as typeof fetch;
+    await expect(discoverBackend(fetcher)).rejects.toThrow('No compatible Nexus backend release');
   });
 
   it('rejects foreign asset URLs rather than downloading executable code from them', async () => {
     const fetcher = (async () => new Response(JSON.stringify([{ tag_name: tag, assets: [
-      { name: `${backendPackageName}.manifest.json`, browser_download_url: 'https://other.example/manifest' },
+      { name: `${backendPackageName(backendLock.version)}.manifest.json`, browser_download_url: 'https://other.example/manifest' },
     ] }]))) as typeof fetch;
     await expect(discoverBackend(fetcher)).rejects.toThrow('Unexpected');
   });
