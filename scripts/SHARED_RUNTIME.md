@@ -14,8 +14,9 @@ and the Mono path-bounds fix. No game-specific runtime selection is introduced.
 ## Build
 
 Requirements: Linux x86-64, Node 22+, Git, GCC/Make, MinGW-w64 x86-64,
-CMake, autoconf, flex, bison, Perl, Python 3, file, and Wine build prerequisites
-(including freetype/GnuTLS development packages). See the workflow's apt list.
+CMake, autoconf, flex, bison, Perl, Python 3, file, curl, GStreamer development
+headers, and Wine build prerequisites (including freetype/GnuTLS development
+packages). See the workflow's apt list.
 Native tests additionally require pgrep, OpenSSL, a working Proton loader and
 its host libraries. CI uses Xvfb; desktop tests can use the current display.
 
@@ -28,8 +29,11 @@ node scripts/build-shared-runtime.mjs \
 The work directory **must not already exist**. Without `--base-runtime`, the
 script builds components and probes only. A base is an extracted official
 Proton distribution containing `proton`, `files/bin/wine` and its default
-prefix, not a game prefix. The script does not download or install games,
-authenticate, switch the active runtime, or edit the base distribution.
+prefix, not a game prefix. A complete build downloads the exact FFmpeg source
+archive locked in [`runtime-media.lock.json`](runtime-media.lock.json), verifies
+its SHA-256, and builds LGPL shared decoder libraries. `--media-archive` accepts
+the same verified tarball for offline builds. The script does not download or
+install games, authenticate, switch the active runtime, or edit the base.
 
 The source lock is [`runtime-patches.lock.json`](runtime-patches.lock.json).
 It pins Wine b1dd3273, xgameruntime 64aebcab, and nghttp2 85e300c7/v1.70.0,
@@ -60,12 +64,26 @@ Output:
 
 - `components/`: newly built xgameruntime, winhttp, mscoree, libnghttp2, windows.web,
   licenses and a source/patch/toolchain/component checksum manifest.
+- `media/`: pinned FFmpeg 4.4.8 source archive, LGPL build, six shared
+  libraries, configure options and checksums. The archive accompanies the
+  distributed runtime source package.
 - `tests/`: four newly compiled native ABI probes and a WinRT JSON dependency probe.
 - `runtime/`: a **new copy** of the supplied Proton base with the five DLLs
   installed in both runtime and default-prefix locations, plus provenance.
 
 The base Wine/Unix loader and other Proton components are supplied by that
-distribution, not rebuilt here. Pin/checksum the base archive as well when
+distribution, not rebuilt here. Its GStreamer `libgstlibav.so` requires FFmpeg
+4.x ABI libraries missing from the base snapshot. Nexus now builds and bundles
+matching LGPL `libavcodec.so.58`, `libavformat.so.58`, `libavfilter.so.7`,
+`libavutil.so.56`, `libswresample.so.3` and `libswscale.so.5` in the one shared
+runtime. This introduces no per-game rule or dependency on host FFmpeg. The
+FFmpeg build disables GPL/nonfree components and installs its license in the
+runtime. CI builds these media libraries on Ubuntu 22.04 and rejects a
+glibc requirement above 2.35; a local build on a newer distribution is only
+diagnostic and must not be released as the portable artifact. Other optional
+Proton plugins may still lack unrelated dependencies;
+this work verifies H.264/AAC decoding, not universal media support.
+Pin/checksum the base archive as well when
 distributing a complete runtime. Reproducible source reconstruction does not
 claim byte-identical DLLs across paths or toolchain versions; DWARF paths,
 toolchains, and PE timestamps/build IDs can differ. Tool versions and output
@@ -109,6 +127,8 @@ node scripts/runtime-tests/run-contract-probes.mjs \
   /absolute/build/runtime /absolute/build/tests /absolute/build
 node scripts/runtime-tests/run-http2-suite.mjs \
   /absolute/build/runtime /absolute/build
+node scripts/runtime-tests/run-media-suite.mjs \
+  /absolute/build/runtime /absolute/build/media-tests
 npm run typecheck
 npm test
 npm run test:runtime-tools
@@ -123,6 +143,11 @@ candidate in a separate prefix before promotion, without overwriting the
 known-working runtime. The previous development candidate reached the Gears
 online lobby; that user confirmation must not be misattributed to a newly
 built DLL before testing it in-game.
+
+The media suite checks that GStreamer's libav plugin resolves FFmpeg only from
+the bundled runtime and registers H.264/AAC decoders. An isolated local
+candidate also decoded Minecraft Dungeons II's H.264/AAC intro MP4 to fake
+sinks. This is media evidence, not a sign-in or game-compatibility claim.
 
 The corrected five-component clean build has now passed the isolated Gears
 game test according to the user, after restoring the WinRT JSON dependency.

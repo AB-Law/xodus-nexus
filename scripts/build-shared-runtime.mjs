@@ -14,12 +14,12 @@ const options = {};
 for (let i = 2; i < process.argv.length; i++) {
   const key = process.argv[i];
   if (key === '--prepare-only') options.prepareOnly = true;
-  else if (['--work', '--jobs', '--wine-mirror', '--xgameruntime-mirror', '--nghttp2-mirror', '--base-runtime'].includes(key)) {
+  else if (['--work', '--jobs', '--wine-mirror', '--xgameruntime-mirror', '--nghttp2-mirror', '--base-runtime', '--media-archive'].includes(key)) {
     if (!process.argv[i + 1] || process.argv[i + 1].startsWith('--')) throw new Error(`Missing value for ${key}`);
     options[key.slice(2)] = process.argv[++i];
   } else throw new Error(`Unknown argument ${key}`);
 }
-if (!options.work) throw new Error('Usage: node scripts/build-shared-runtime.mjs --work NEW_DIRECTORY [--jobs 4] [--base-runtime PROTON_DIRECTORY] [--prepare-only] [--wine-mirror GIT_REPO] [--xgameruntime-mirror GIT_REPO] [--nghttp2-mirror GIT_REPO]');
+if (!options.work) throw new Error('Usage: node scripts/build-shared-runtime.mjs --work NEW_DIRECTORY [--jobs 4] [--base-runtime PROTON_DIRECTORY] [--media-archive PINNED_FFMPEG_TARBALL] [--prepare-only] [--wine-mirror GIT_REPO] [--xgameruntime-mirror GIT_REPO] [--nghttp2-mirror GIT_REPO]');
 const work = path.resolve(options.work);
 const jobs = options.jobs ?? '4';
 if (!/^[1-9][0-9]?$/.test(jobs)) throw new Error('jobs must be 1..99');
@@ -119,6 +119,9 @@ await fs.copyFile(path.join(source, 'dlls/xgameruntime/COPYING.LIB'), path.join(
 });
 await fs.writeFile(path.join(components, 'source-manifest.json'), JSON.stringify(provenance, null, 2) + '\n', { flag: 'wx' });
 if (options['base-runtime']) {
-  run('node', [path.join(project, 'scripts/assemble-shared-runtime.mjs'), '--base', path.resolve(options['base-runtime']), '--components', components, '--output', path.join(work, 'runtime')], project);
+  const media = path.join(work, 'media');
+  run('node', [path.join(project, 'scripts/build-runtime-media.mjs'), '--work', media,
+    '--jobs', String(Math.min(Number(jobs), 32)), ...(options['media-archive'] ? ['--archive', path.resolve(options['media-archive'])] : [])], project);
+  run('node', [path.join(project, 'scripts/assemble-shared-runtime.mjs'), '--base', path.resolve(options['base-runtime']), '--components', components, '--media', media, '--output', path.join(work, 'runtime')], project);
 }
 console.log(`Built shared runtime components and ABI probes: ${components}`);

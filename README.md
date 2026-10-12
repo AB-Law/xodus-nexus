@@ -90,4 +90,7 @@ verified and may encounter compatibility issues.
 Independent project, not affiliated with Microsoft or Xbox. A valid game license
 is required. Launcher: [MIT license](LICENSE). The separate Xodus backend retains
 its upstream GPLv3 license and ships with corresponding source.
+The Nexus runtime includes [FFmpeg](https://ffmpeg.org/) shared libraries under
+LGPL 2.1 or later; its corresponding pinned source and build recipe accompany
+each runtime release.
 [Contributing](CONTRIBUTING.md)

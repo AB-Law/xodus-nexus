@@ -8,8 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { runtimeInputsChanged } from './runtime-inputs.mjs';
 const script = fileURLToPath(new URL('./runtime-needed.mjs', import.meta.url));
 test('runtime inputs trigger native CI but documentation/UI-only diffs do not', () => {
-  for (const file of ['assets/fix.patch', 'assets/odd\nname.patch', 'scripts/runtime-patches.lock.json', 'scripts/runtime-base.lock.json',
-    'scripts/runtime-tests/winrt-json-probe.c', 'scripts/build-shared-runtime.mjs', 'scripts/assemble-shared-runtime.mjs',
+  for (const file of ['assets/fix.patch', 'assets/odd\nname.patch', 'scripts/runtime-patches.lock.json', 'scripts/runtime-base.lock.json', 'scripts/runtime-media.lock.json',
+    'scripts/runtime-tests/winrt-json-probe.c', 'scripts/runtime-tests/media-codecs-probe.c', 'scripts/build-shared-runtime.mjs', 'scripts/build-runtime-media.mjs', 'scripts/assemble-shared-runtime.mjs',
     '.github/workflows/runtime.yml', 'src/main/proton.ts']) assert.equal(runtimeInputsChanged([file]), true, file);
   assert.equal(runtimeInputsChanged(['docs/development/STATUS.md', 'src/renderer/App.tsx']), false);
 });

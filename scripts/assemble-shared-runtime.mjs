@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 const options = {};
 for (let i = 2; i < process.argv.length; i += 2) {
-  if (!['--base', '--components', '--output'].includes(process.argv[i]) || !process.argv[i + 1]) throw new Error('Usage: assemble-shared-runtime.mjs --base PROTON --components BUILT_COMPONENTS --output NEW_DIRECTORY');
+  if (!['--base', '--components', '--media', '--output'].includes(process.argv[i]) || !process.argv[i + 1]) throw new Error('Usage: assemble-shared-runtime.mjs --base PROTON --components BUILT_COMPONENTS [--media BUILT_MEDIA] --output NEW_DIRECTORY');
   options[process.argv[i].slice(2)] = path.resolve(process.argv[i + 1]);
 }
 if (!options.base || !options.components || !options.output) throw new Error('base, components and output are required');
@@ -48,6 +48,41 @@ for (const name of componentNames) {
 const licenseDirectory = path.join(options.output, 'files/share/doc/xodus-nexus-runtime');
 await safeParent('files/share/doc/xodus-nexus-runtime/license');
 for (const name of ['nghttp2-LICENSE', 'Wine-LICENSE', 'xgameruntime-LICENSE']) await fs.copyFile(path.join(options.components, name), path.join(licenseDirectory, name));
+let mediaMetadata;
+if (options.media) {
+  const mediaLock = JSON.parse(await fs.readFile(new URL('./runtime-media.lock.json', import.meta.url), 'utf8'));
+  const mediaManifest = JSON.parse(await fs.readFile(path.join(options.media, 'media-manifest.json'), 'utf8'));
+  if (mediaManifest.sourceSha256 !== mediaLock.sha256 || mediaManifest.version !== mediaLock.version ||
+      mediaManifest.license !== 'LGPL-2.1-or-later' ||
+      !/^[0-9]+\.[0-9]+$/.test(mediaManifest.maxGlibc ?? '') ||
+      !mediaManifest.configure?.includes('--disable-gpl') || !mediaManifest.configure.includes('--disable-nonfree') ||
+      Object.keys(mediaManifest.libraries).sort().join(',') !== Object.keys(mediaLock.libraries).sort().join(','))
+    throw new Error('Unexpected media source or library manifest.');
+  if (await shaFile(path.join(options.media, mediaLock.archive)) !== mediaLock.sha256)
+    throw new Error('Pinned FFmpeg source archive checksum mismatch.');
+  const sourceDir = path.join(options.media, `ffmpeg-${mediaLock.version}`);
+  const libraryDir = path.join(options.media, 'stage/usr/lib/x86_64-linux-gnu');
+  for (const [soname, filename] of Object.entries(mediaLock.libraries)) {
+    const item = mediaManifest.libraries[soname];
+    const source = path.join(libraryDir, filename);
+    const bytes = await fs.readFile(source);
+    if (item?.filename !== filename || createHash('sha256').update(bytes).digest('hex') !== item.sha256)
+      throw new Error(`Media library checksum mismatch: ${filename}`);
+    const relative = `files/lib/x86_64-linux-gnu/${filename}`;
+    await safeParent(relative);
+    const target = path.join(options.output, relative);
+    const temporary = `${target}.nexus-${process.pid}`;
+    await fs.writeFile(temporary, bytes, { flag: 'wx', mode: 0o644 });
+    await fs.rename(temporary, target);
+    const link = path.join(options.output, `files/lib/x86_64-linux-gnu/${soname}`);
+    const temporaryLink = `${link}.nexus-${process.pid}`;
+    await fs.symlink(filename, temporaryLink);
+    await fs.rename(temporaryLink, link);
+  }
+  await fs.copyFile(path.join(sourceDir, 'COPYING.LGPLv2.1'), path.join(licenseDirectory, 'FFmpeg-COPYING.LGPLv2.1'));
+  mediaMetadata = { version: mediaLock.version, sourceSha256: mediaLock.sha256,
+    maxGlibc: mediaManifest.maxGlibc, libraries: mediaManifest.libraries };
+}
 const baseWineSha256 = await shaFile(path.join(options.base, 'files/bin/wine'));
 if (baseWineSha256 !== await shaFile(path.join(options.output, 'files/bin/wine'))) throw new Error('Base Wine loader unexpectedly changed');
 let baseMetadata = {};
@@ -56,8 +91,9 @@ catch (e) { if (e.code !== 'ENOENT') throw e; }
 const metadata = {
   ...manifest, name: 'Nexus runtime',
   description: 'Pinned shared XGameRuntime and HTTP/2 compatibility line. Experimental; see limitations.',
-  features: [...new Set([...(baseMetadata.features ?? []), 'cloud-saves-pr28', 'xodus-tcp-bridge-v1', 'package-locale', 'xuser-contract-v1', 'wine-winhttp-http2-v1', 'nghttp2-v1', 'winrt-json-v1', 'xasync-provider-contract-v1', 'xtaskqueue-lifecycle-v1'])],
+  features: [...new Set([...(baseMetadata.features ?? []), 'cloud-saves-pr28', 'xodus-tcp-bridge-v1', 'package-locale', 'xuser-contract-v1', 'wine-winhttp-http2-v1', 'nghttp2-v1', 'winrt-json-v1', 'xasync-provider-contract-v1', 'xtaskqueue-lifecycle-v1', ...(mediaMetadata ? ['bundled-ffmpeg-media-v1'] : [])])],
   baseWineSha256, patchedDllSha256: manifest.components['xgameruntime.dll'],
+  ...(mediaMetadata ? { media: mediaMetadata } : {}),
 };
 const metadataTemporary = path.join(options.output, `.nexus-metadata-${process.pid}`);
 await fs.writeFile(metadataTemporary, JSON.stringify(metadata, null, 2) + '\n', { flag: 'wx' });
