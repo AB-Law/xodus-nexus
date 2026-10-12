@@ -1,4 +1,23 @@
 {
   "schema": 1,
-  "approvals": []
+  "approvals": [
+    {
+      "kind": "launcher",
+      "runId": "38272422874",
+      "commit": "3d2f7339b0328ea21bdc416edb76f0ddbdb250fa",
+      "manifestSha256": "920ccd9222e00b071374ec5f1a95f614f793610bbb69c781ff6cfd68c00d24bf",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Owner-authorized release 2026-10-12: exact CI artifact downloaded and manifest-verified (SHA-512/SHA-256, commit 3d2f733, run 38272422874); the exact AppImage passed an isolated XODUS_DEMO=1 boot with the normal Electron sandbox. No real game, account or cloud test was performed on these exact bytes; the owner accepted rebuilding a new release if the artifact misbehaves."
+    },
+    {
+      "kind": "backend",
+      "runId": "38272448042",
+      "commit": "3d2f7339b0328ea21bdc416edb76f0ddbdb250fa",
+      "manifestSha256": "d0039478196073804c7743032cde504f3f923df9ece8e45afe66e4154e2569ca",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Owner-authorized release 2026-10-12: exact CI artifact downloaded and manifest-verified (SHA-512/SHA-256, provenance metadata matches the pinned recipe lock, commit 3d2f733, run 38272448042); CI performed isolated install/reinstall and CLI feature validation. No real account, game or cloud operation was performed on these exact bytes; the owner accepted rebuilding a new release if the artifact misbehaves."
+    }
+  ]
 }
