@@ -18,6 +18,15 @@
       "approved": true,
       "approvedBy": "domsvoboda",
       "evidence": "Owner-authorized release 2026-10-12: exact CI artifact downloaded and manifest-verified (SHA-512/SHA-256, provenance metadata matches the pinned recipe lock, commit 3d2f733, run 38272448042); CI performed isolated install/reinstall and CLI feature validation. No real account, game or cloud operation was performed on these exact bytes; the owner accepted rebuilding a new release if the artifact misbehaves."
+    },
+    {
+      "kind": "runtime",
+      "runId": "38274332546",
+      "commit": "c276ecb82be64c34f24e896e4a16fc0f7800de77",
+      "manifestSha256": "f06522bcb98311a17a51de18d2ef55170d086ad9c678188a2225d2c9646ae46f",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Owner-authorized release 2026-10-12: exact CI artifact downloaded and manifest-verified (SHA-512/SHA-256, commit c276ecb, run 38274332546); CI native suite (4194 checks) and HTTP/2 suite (14 checks) passed with zero failures. The same locked DLL recipe line was previously validated by the owner in a real Gears of War: E-Day session (sign-in, cloud saves, online lobby) on 2026-10-12, but these exact CI bytes were not real-game tested; the owner accepted rebuilding a new release if the artifact misbehaves."
     }
   ]
 }
