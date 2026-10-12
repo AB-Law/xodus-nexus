@@ -4,7 +4,7 @@
   "repository": "https://github.com/xodus-gaming/xodus.git",
   "commit": "53ea781dcd073e31d7ea68e894134e9c959bff04",
   "rust": "1.99.0",
-  "cargoLockSha256": "74e68d39f3c0ec8a4fcb46f7a9df9694097c1133d3d0035eaff71c75f361624c",
+  "cargoLockSha256": "2259b343e00dadc263018beb7664b12e9d58a0b73bff502ad566f5f8619ce28a",
   "patchId": "linux-run-v9",
   "compatibility": "linux-run-v9 (#150 + launch chain + real launch images + memfd paths + account status + streaming cache flush + store license receipts)",
   "patches": [
