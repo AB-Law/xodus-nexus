@@ -1,12 +1,12 @@
 {
   "schema": 1,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "repository": "https://github.com/xodus-gaming/xodus.git",
   "commit": "53ea781dcd073e31d7ea68e894134e9c959bff04",
   "rust": "1.99.0",
-  "cargoLockSha256": "2259b343e00dadc263018beb7664b12e9d58a0b73bff502ad566f5f8619ce28a",
-  "patchId": "linux-run-v8",
-  "compatibility": "linux-run-v8 (#150 + launch chain + real launch images + memfd paths + account status + streaming cache flush)",
+  "cargoLockSha256": "74e68d39f3c0ec8a4fcb46f7a9df9694097c1133d3d0035eaff71c75f361624c",
+  "patchId": "linux-run-v9",
+  "compatibility": "linux-run-v9 (#150 + launch chain + real launch images + memfd paths + account status + streaming cache flush + store license receipts)",
   "patches": [
     { "file": "xodus-linux-run.patch", "sha256": "68f260ec2c6e9264c47ed1a650868511f5412a756725d4000a865804f4712e8b" },
     { "file": "xodus-offline-mirror.patch", "sha256": "c865fc2559c43a5b3eb2bc841035c076eae5c42a90fe488f90514384aa916986" },
@@ -14,6 +14,7 @@
     { "file": "xodus-streaming-cache-flush.patch", "sha256": "4dd7a129ab9b3aac74d46f926efe26f163741d50fe2853a07f292240ab522b05" },
     { "file": "xodus-launch-chain.patch", "sha256": "22dfbfc5cec911091351bb2d648f4b16bd274aa276ee4524be738a357c8b219a" },
     { "file": "xodus-memfd-path.patch", "sha256": "905cfda813f0a434a2c13fd2db973385f0311cbec5c86bc3549737a7838f49fd" },
-    { "file": "xodus-real-launch-images.patch", "sha256": "95fc642e3adfa50414648e40df6ee94262964f5eea0f3762a34765f56d7824b7" }
+    { "file": "xodus-real-launch-images.patch", "sha256": "95fc642e3adfa50414648e40df6ee94262964f5eea0f3762a34765f56d7824b7" },
+    { "file": "xodus-store-license.patch", "sha256": "99a89821e15ba144126515b5e8ec70b0673caf694d9295f16cd6661564b7c579" }
   ]
 }

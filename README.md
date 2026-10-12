@@ -36,8 +36,8 @@ curl -fsSL https://raw.githubusercontent.com/domsvoboda/xodus-nexus/main/scripts
 Download the AppImage from [Releases](https://github.com/domsvoboda/xodus-nexus/releases), then:
 
 ```sh
-chmod +x Xodus-Nexus-0.1.0-x86_64.AppImage
-./Xodus-Nexus-0.1.0-x86_64.AppImage
+chmod +x Xodus-Nexus-0.2.0-x86_64.AppImage
+./Xodus-Nexus-0.2.0-x86_64.AppImage
 ```
 
 No Rust, Cargo or `protoc` is needed for the prebuilt backend. It requires GTK 3,
