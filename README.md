@@ -36,8 +36,8 @@ curl -fsSL https://raw.githubusercontent.com/domsvoboda/xodus-nexus/main/scripts
 Download the AppImage from [Releases](https://github.com/domsvoboda/xodus-nexus/releases), then:
 
 ```sh
-chmod +x Xodus-Nexus-0.2.0-x86_64.AppImage
-./Xodus-Nexus-0.2.0-x86_64.AppImage
+chmod +x Xodus-Nexus-0.2.2-x86_64.AppImage
+./Xodus-Nexus-0.2.2-x86_64.AppImage
 ```
 
 No Rust, Cargo or `protoc` is needed for the prebuilt backend. It requires GTK 3,
@@ -74,9 +74,11 @@ verified and may encounter compatibility issues.
 
 | Game | Playable | Status |
 | --- | --- | --- |
-| Gears of War: E-Day | Yes | Launch, account sign-in, existing saves and online lobby work. |
-| Deep Rock Galactic | Yes | Account sign-in and game lobby work; no DRG servers appear in the server browser. |
-| Minecraft Dungeons II | No | Stuck at Signing in. |
+| Gears of War: E-Day | Yes | Playable online. |
+| Deep Rock Galactic | Yes | Playable online. |
+| Minecraft Dungeons II | Yes | Playable online. |
+| No Man's Sky | No | Stuck at loading. |
+| Valor Mortis | Yes | Fully playable. |
 
 [Full compatibility list](https://github.com/domsvoboda/xodus-nexus/wiki/Compatibility)
 
