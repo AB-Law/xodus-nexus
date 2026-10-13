@@ -145,3 +145,28 @@ describe('inspectGameDirectory artwork', () => {
     expect(game.coverDataUrl).toBe('data:image/png;base64,UE5HREFUQQ==');
   });
 });
+
+describe('inspectGameDirectory titles containing quotes', () => {
+  it('keeps the full title when the display name contains an apostrophe', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'xodus-nexus-title-'));
+    created.push(directory);
+    await writeFile(path.join(directory, 'MicrosoftGame.config'),
+      '<Game><ExecutableList><Executable Name="Game.exe" /></ExecutableList><ShellVisuals DefaultDisplayName="No Man\'s Sky" PublisherDisplayName="Hello Games" /><StoreId>TEST123</StoreId></Game>');
+    await writeFile(path.join(directory, '.xodus-streaming.msixvc'), 'container');
+    await writeFile(path.join(directory, 'Game.exe'), 'MZ executable');
+    const game = await inspectGameDirectory(directory);
+    expect(game.title).toBe("No Man's Sky");
+    expect(game.publisher).toBe('Hello Games');
+  });
+
+  it('keeps single-quoted attribute values containing a double quote', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'xodus-nexus-title-dq-'));
+    created.push(directory);
+    await writeFile(path.join(directory, 'MicrosoftGame.config'),
+      "<Game><ExecutableList><Executable Name='Game.exe' /></ExecutableList><ShellVisuals DefaultDisplayName='A \"quoted\" Game' /></Game>");
+    await writeFile(path.join(directory, '.xodus-streaming.msixvc'), 'container');
+    await writeFile(path.join(directory, 'Game.exe'), 'MZ executable');
+    const game = await inspectGameDirectory(directory);
+    expect(game.title).toBe('A "quoted" Game');
+  });
+});

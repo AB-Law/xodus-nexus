@@ -116,7 +116,9 @@ function attr(xml: string, element: string, attribute: string): string | undefin
   // Windows manifests are case-insensitive and may carry a namespace prefix
   // (for example uap:VisualElements in appxmanifest.xml).
   const tag = xml.match(new RegExp(`<(?:[\\w.]+:)?${element}\\b[^>]*>`, 'i'))?.[0];
-  return tag?.match(new RegExp(`\\b${attribute}=["']([^"']+)["']`, 'i'))?.[1];
+  // The value may contain the other quote style ("No Man's Sky"), so the
+  // closing quote must match the opening one.
+  return tag?.match(new RegExp(`\\b${attribute}=(["'])(.*?)\\1`, 'i'))?.[2];
 }
 
 function text(xml: string, element: string): string | undefined {

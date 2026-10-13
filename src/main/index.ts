@@ -1,5 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
-import { constants, createWriteStream, promises as fs } from 'node:fs';
+import { app, BrowserWindow, dialog, ipcMain, screen, shell } from 'electron';
+import { constants, createWriteStream, promises as fs, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -172,7 +172,12 @@ async function runAuth(command: 'login' | 'logout'): Promise<void> {
   const id = `auth-${randomUUID()}`;
   authState = { ...authState, running: true, lastResult: undefined };
   emitSnapshot();
-  const tracked = spawnTracked(binary, [command], { onLine: (line) => emitLog('auth', line) });
+  // The sign-in webview is WebKitGTK. Its DMA-BUF renderer shows a blank
+  // window on several Wayland setups (seen on KDE Plasma with AMD/NVIDIA);
+  // the non-DMA-BUF path renders reliably, and this one window does not
+  // need the performance. Keep every other environment variable intact.
+  const env = command === 'login' ? { ...process.env, WEBKIT_DISABLE_DMABUF_RENDERER: '1' } : process.env;
+  const tracked = spawnTracked(binary, [command], { env, onLine: (line) => emitLog('auth', line) });
   operations.set(id, tracked.child);
   try {
     const result = await tracked.result;
@@ -834,6 +839,39 @@ function registerIpc(): void {
   });
 }
 
+interface WindowState { x: number; y: number; width: number; height: number; maximized: boolean; }
+
+function readWindowState(): WindowState | undefined {
+  try {
+    const state = JSON.parse(readFileSync(path.join(app.getPath('userData'), 'window-state.json'), 'utf8')) as Partial<WindowState>;
+    if (typeof state.x !== 'number' || typeof state.y !== 'number' || typeof state.width !== 'number'
+      || typeof state.height !== 'number' || typeof state.maximized !== 'boolean') return undefined;
+    return state as WindowState;
+  } catch { /* No state yet, or unreadable; fall back to the default placement. */ }
+}
+
+function saveWindowState(window: BrowserWindow): void {
+  if (window.isMinimized()) return;
+  const bounds = window.getNormalBounds();
+  try {
+    writeFileSync(path.join(app.getPath('userData'), 'window-state.json'), JSON.stringify({
+      x: Math.round(bounds.x), y: Math.round(bounds.y),
+      width: Math.round(bounds.width), height: Math.round(bounds.height),
+      maximized: window.isMaximized(),
+    }));
+  } catch { /* Placement is cosmetic; never block shutdown. */ }
+}
+
+function restoredBoundsOnScreen(state: WindowState): boolean {
+  // A monitor that the state was saved on may be unplugged; check that the
+  // restored point is still part of the desktop before applying it.
+  return screen.getAllDisplays().some((display) => {
+    const area = display.workArea;
+    return state.x >= area.x - 8 && state.y >= area.y - 8
+      && state.x < area.x + area.width && state.y < area.y + area.height;
+  });
+}
+
 async function createWindow(): Promise<void> {
   const smokeScreenshot = process.env.XODUS_NEXUS_SMOKE_SCREENSHOT;
   const smokeStoreQuery = process.env.XODUS_NEXUS_SMOKE_STORE_QUERY;
@@ -841,9 +879,26 @@ async function createWindow(): Promise<void> {
   const demoCaptureDir = process.env.XODUS_DEMO_CAPTURE_DIR;
   if (demoCaptureDir && !demoMode) throw new Error('Demo capture requires XODUS_DEMO=1; real account data must not be captured.');
   const hiddenCapture = Boolean(smokeScreenshot || demoCaptureDir);
+  // The compositor places unpositioned windows, which under Xwayland often
+  // means the wrong monitor (see issue #5). Restore the last user placement
+  // when it is still on a connected display, otherwise center on the primary.
+  const windowState = hiddenCapture ? undefined : readWindowState();
+  const bounds = windowState && restoredBoundsOnScreen(windowState)
+    ? windowState
+    : { x: undefined as number | undefined, y: undefined as number | undefined,
+        width: 1440, height: 900, maximized: false };
+  if (bounds.x === undefined) {
+    const primary = screen.getPrimaryDisplay();
+    bounds.width = Math.min(bounds.width, primary.workArea.width);
+    bounds.height = Math.min(bounds.height, primary.workArea.height);
+    bounds.x = primary.workArea.x + Math.floor((primary.workArea.width - bounds.width) / 2);
+    bounds.y = primary.workArea.y + Math.floor((primary.workArea.height - bounds.height) / 2);
+  }
   mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
+    width: bounds.width,
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y,
     minWidth: 1050,
     minHeight: 680,
     backgroundColor: '#080a0c',
@@ -863,6 +918,10 @@ async function createWindow(): Promise<void> {
   mainWindow.webContents.on('render-process-gone', (_event, details) => console.error('Renderer process exited', details.reason));
   if (smokeScreenshot) mainWindow.webContents.on('console-message', (_event, level, message) => console.error(`Renderer console [${level}]`, message));
   if (!hiddenCapture) mainWindow.once('ready-to-show', () => mainWindow?.show());
+  if (!hiddenCapture) {
+    if (windowState?.maximized) mainWindow.maximize();
+    mainWindow.on('close', () => { if (mainWindow) saveWindowState(mainWindow); });
+  }
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) void shell.openExternal(url);
     return { action: 'deny' };
