@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include "xtaskqueue.h"
 #include "xasyncprovider.h"
+#include "xnetworking.h"
 
 static IXThreadingImpl *threads;
 static XTaskQueueHandle queue;
@@ -15,6 +16,7 @@ struct test_context {
     HRESULT begin_result, work_result, expected;
     LONG callbacks, cleanup, work;
     BOOL schedule, complete_work, complete_pending, provider_copy, check_deferred_cleanup;
+    SIZE_T result_capacity;
 };
 static void WINAPI completed(XAsyncBlock *block)
 {
@@ -38,6 +40,10 @@ static HRESULT WINAPI provider(XAsyncOp op, const XAsyncProviderData *data)
             if (test->check_deferred_cleanup) CHECK("cleanup-waits-for-provider-return", test->cleanup == 0);
         }
         return test->work_result;
+    case XAsyncOp_GetResult:
+        CHECK("provider-receives-caller-buffer-capacity", data->bufferSize == test->result_capacity);
+        *(DWORD *)data->buffer = 0x12345678;
+        break;
     case XAsyncOp_Cleanup: ++test->cleanup; break;
     default: break;
     }
@@ -62,6 +68,18 @@ static void WINAPI free_completed(XAsyncBlock *block)
     ++test->callbacks;
     CHECK("free-callback-status", IXThreadingImpl_XAsyncGetStatus(threads, block, FALSE) == S_OK);
     CHECK("free-user-block-inside-completion", VirtualFree(block, 0, MEM_RELEASE));
+}
+struct connectivity_test {
+    LONG callbacks;
+    BOOL initialized;
+    HANDLE event;
+};
+static void WINAPI connectivity_changed(void *context, const XNetworkingConnectivityHint *hint)
+{
+    struct connectivity_test *test = context;
+    test->initialized = hint->networkInitialized;
+    InterlockedIncrement(&test->callbacks);
+    if (test->event) SetEvent(test->event);
 }
 int main(void)
 {
@@ -115,6 +133,20 @@ int main(void)
     drain();
     CHECK("first-terminal-result-wins", IXThreadingImpl_XAsyncGetStatus(threads, &test.block, FALSE) == S_OK);
     CHECK("completion-once", test.callbacks == 1 && test.cleanup == 1);
+    init(&test); test.expected = S_OK;
+    {
+        DWORD result[5] = {0};
+        SIZE_T used = 0;
+        test.result_capacity = sizeof(result);
+        CHECK("payload-begin", IXThreadingImpl_XAsyncBegin(threads, &test.block, &test, &test, "capacity", provider) == S_OK);
+        IXThreadingImpl_XAsyncComplete(threads, &test.block, S_OK, sizeof(DWORD));
+        CHECK("reject-wrong-result-identity", IXThreadingImpl_XAsyncGetResult(threads, &test.block, NULL, sizeof(result), result, &used) == E_INVALIDARG);
+        CHECK("reject-null-result-buffer", IXThreadingImpl_XAsyncGetResult(threads, &test.block, &test, sizeof(result), NULL, &used) == E_INVALIDARG);
+        CHECK("accept-larger-result-buffer", IXThreadingImpl_XAsyncGetResult(threads, &test.block, &test, sizeof(result), result, &used) == S_OK);
+        CHECK("payload-and-used-size", result[0] == 0x12345678 && used == sizeof(DWORD));
+        drain();
+        CHECK("payload-cleanup-once", test.callbacks == 1 && test.cleanup == 1);
+    }
     IXThreadingImpl_XTaskQueueCloseHandle(threads, queue);
     /* Immediate completion can free the user block while DoWork is still
      * running. Runtime post-provider handling must not touch freed memory. */
@@ -132,6 +164,67 @@ int main(void)
         CHECK("immediate-completion-and-cleanup-once", test.callbacks == 1 && test.cleanup == 1);
     }
     IXThreadingImpl_XTaskQueueCloseHandle(threads, queue);
+    /* Async providers can own external work without a queued callback yet.
+     * Closing the public handle must not free their completion queue. */
+    CHECK("retained-queue-create", IXThreadingImpl_XTaskQueueCreate(threads, XTaskQueueDispatchMode_ThreadPool, XTaskQueueDispatchMode_ThreadPool, &queue) == S_OK);
+    init(&test); test.expected = S_OK;
+    CHECK("retained-queue-begin", IXThreadingImpl_XAsyncBegin(threads, &test.block, &test, NULL, "retained-queue", provider) == S_OK);
+    IXThreadingImpl_XTaskQueueCloseHandle(threads, queue);
+    IXThreadingImpl_XAsyncComplete(threads, &test.block, S_OK, 0);
+    CHECK("retained-queue-completion", IXThreadingImpl_XAsyncGetStatus(threads, &test.block, TRUE) == S_OK && test.callbacks == 1);
+    {
+        IXNetworkingImpl2 *network;
+        XAsyncBlock block = {0};
+        XNetworkingSecurityInformation result, *information = NULL;
+        SIZE_T required = 0, used = 0;
+        CHECK("network-interface", query(&CLSID_XNetworkingImpl, &IID_IXNetworkingImpl2, (void **)&network) == S_OK);
+        {
+            XTaskQueueRegistrationToken first, second;
+            struct connectivity_test one = {0}, two = {0};
+            CHECK("connectivity-manual-queue", IXThreadingImpl_XTaskQueueCreate(threads, XTaskQueueDispatchMode_Manual, XTaskQueueDispatchMode_Manual, &queue) == S_OK);
+            CHECK("connectivity-register-first", IXNetworkingImpl2_XNetworkingRegisterConnectivityHintChanged(network, queue, &one, connectivity_changed, &first) == S_OK);
+            CHECK("connectivity-register-second", IXNetworkingImpl2_XNetworkingRegisterConnectivityHintChanged(network, queue, &two, connectivity_changed, &second) == S_OK && first.token != second.token);
+            CHECK("connectivity-manual-not-inline", !one.callbacks && !two.callbacks);
+            CHECK("connectivity-unregister-before-dispatch", IXNetworkingImpl2_XNetworkingUnregisterConnectivityHintChanged(network, second, TRUE));
+            drain();
+            CHECK("connectivity-initial-notification", one.callbacks == 1 && one.initialized);
+            CHECK("connectivity-suppresses-unregistered", !two.callbacks);
+            CHECK("connectivity-unregister-first", IXNetworkingImpl2_XNetworkingUnregisterConnectivityHintChanged(network, first, TRUE));
+            CHECK("connectivity-reject-stale-token", !IXNetworkingImpl2_XNetworkingUnregisterConnectivityHintChanged(network, first, TRUE));
+            IXThreadingImpl_XTaskQueueCloseHandle(threads, queue);
+            ZeroMemory(&one, sizeof(one));
+            one.event = CreateEventW(NULL, TRUE, FALSE, NULL);
+            CHECK("connectivity-default-queue", IXNetworkingImpl2_XNetworkingRegisterConnectivityHintChanged(network, NULL, &one, connectivity_changed, &first) == S_OK);
+            CHECK("connectivity-default-callback", WaitForSingleObject(one.event, 3000) == WAIT_OBJECT_0 && one.callbacks == 1);
+            CHECK("connectivity-default-unregister", IXNetworkingImpl2_XNetworkingUnregisterConnectivityHintChanged(network, first, TRUE));
+            CloseHandle(one.event);
+        }
+        CHECK("security-reject-null-url", IXNetworkingImpl2_XNetworkingQuerySecurityInformationForUrlAsync(network, NULL, &block) == E_INVALIDARG);
+        CHECK("security-reject-insecure-url", IXNetworkingImpl2_XNetworkingQuerySecurityInformationForUrlAsync(network, "http://example.invalid/", &block) == E_INVALIDARG);
+        CHECK("security-reject-empty-url", IXNetworkingImpl2_XNetworkingQuerySecurityInformationForUrlAsync(network, "", &block) == E_INVALIDARG);
+        CHECK("security-reject-insecure-websocket", IXNetworkingImpl2_XNetworkingQuerySecurityInformationForUrlAsync(network, "ws://example.invalid/", &block) == E_INVALIDARG);
+        CHECK("security-reject-empty-websocket-host", IXNetworkingImpl2_XNetworkingQuerySecurityInformationForUrlAsync(network, "wss://", &block) == E_INVALIDARG);
+        CHECK("security-utf16-begin", IXNetworkingImpl2_XNetworkingQuerySecurityInformationForUrlUtf16Async(network, L"https://example.invalid/", &block) == S_OK);
+        CHECK("security-complete", IXThreadingImpl_XAsyncGetStatus(threads, &block, TRUE) == S_OK);
+        CHECK("security-result-size", IXNetworkingImpl2_XNetworkingQuerySecurityInformationForUrlUtf16AsyncResultSize(network, &block, &required) == S_OK && required == sizeof(result));
+        CHECK("security-small-result", IXNetworkingImpl2_XNetworkingQuerySecurityInformationForUrlUtf16AsyncResult(network, &block, sizeof(result) - 1, &used, (UINT8 *)&result, &information) == HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER) && information == NULL);
+        CHECK("security-result", IXNetworkingImpl2_XNetworkingQuerySecurityInformationForUrlUtf16AsyncResult(network, &block, sizeof(result), &used, (UINT8 *)&result, &information) == S_OK && information == &result && used == sizeof(result));
+        CHECK("security-tls-policy", result.enabledHttpSecurityProtocolFlags == 0x2800 && !result.thumbprintCount && !result.thumbprints);
+        CHECK("security-invalid-certificate-handle", FAILED(IXNetworkingImpl2_XNetworkingVerifyServerCertificate(network, (void *)1, &result)));
+        ZeroMemory(&block, sizeof(block));
+        CHECK("security-utf8-begin", IXNetworkingImpl2_XNetworkingQuerySecurityInformationForUrlAsync(network, "https://example.invalid/", &block) == S_OK);
+        CHECK("security-utf8-complete", IXThreadingImpl_XAsyncGetStatus(threads, &block, TRUE) == S_OK);
+        CHECK("security-utf8-result", IXNetworkingImpl2_XNetworkingQuerySecurityInformationForUrlAsyncResult(network, &block, sizeof(result), &used, (UINT8 *)&result, &information) == S_OK);
+        ZeroMemory(&block, sizeof(block));
+        CHECK("security-wss-begin", IXNetworkingImpl2_XNetworkingQuerySecurityInformationForUrlAsync(network, "wss://example.invalid:443/client/hubs/test", &block) == S_OK);
+        CHECK("security-wss-complete", IXThreadingImpl_XAsyncGetStatus(threads, &block, TRUE) == S_OK);
+        CHECK("security-wss-result", IXNetworkingImpl2_XNetworkingQuerySecurityInformationForUrlAsyncResult(network, &block, sizeof(result), &used, (UINT8 *)&result, &information) == S_OK && result.enabledHttpSecurityProtocolFlags == 0x2800);
+        ZeroMemory(&block, sizeof(block));
+        CHECK("security-wss-uppercase-begin", IXNetworkingImpl2_XNetworkingQuerySecurityInformationForUrlUtf16Async(network, L"WSS://example.invalid/", &block) == S_OK);
+        CHECK("security-wss-uppercase-complete", IXThreadingImpl_XAsyncGetStatus(threads, &block, TRUE) == S_OK);
+        CHECK("security-wss-uppercase-result", IXNetworkingImpl2_XNetworkingQuerySecurityInformationForUrlUtf16AsyncResult(network, &block, sizeof(result), &used, (UINT8 *)&result, &information) == S_OK);
+        IXNetworkingImpl2_Release(network);
+    }
     IXThreadingImpl_Release(threads);
     printf("ASYNC PROVIDER CHECKS %ld FAILURES %ld\n", checks, failures);
     return failures ? 1 : 0;
