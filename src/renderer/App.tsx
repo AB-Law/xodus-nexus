@@ -481,6 +481,13 @@ export function SettingsPage({ data, toast }: { data: AppSnapshot; toast: (value
   </main>;
 }
 
+function backendSetupHint(backend: AppSnapshot['backend']): string {
+  if (backend.checking) return 'Checking for the Xodus backend…';
+  if (backend.updating) return backend.phase ? `Installing the Xodus backend… ${backend.phase}` : 'Installing the Xodus backend…';
+  if (backend.blockReason) return backend.blockReason;
+  return 'Sign-in unlocks once the Xodus backend is installed.';
+}
+
 function FirstRunWizard({ data, toast }: { data: AppSnapshot; toast: (value: Toast) => void }) {
   const [installRoot, setInstallRoot] = useState(data.settings.installRoot);
   const [saving, setSaving] = useState(false);
@@ -516,7 +523,7 @@ function FirstRunWizard({ data, toast }: { data: AppSnapshot; toast: (value: Toa
         <small>New games download and extract into this folder.</small>
       </label>
       <div className="wizard-account">
-        <div><strong>Microsoft account</strong><small>{data.auth.stored === true ? `Signed in as ${data.auth.username ?? 'stored account'}` : data.auth.stored === false ? 'Not signed in yet — Store browsing works without an account' : 'Account status is still being checked'}</small></div>
+        <div><strong>Microsoft account</strong><small>{data.backend.available ? (data.auth.stored === true ? `Signed in as ${data.auth.username ?? 'stored account'}` : data.auth.stored === false ? 'Not signed in yet — Store browsing works without an account' : 'Account status is still being checked') : backendSetupHint(data.backend)}</small></div>
         <button className="secondary" disabled={!data.backend.capabilities.login || signingIn} onClick={() => void signIn()}>{signingIn ? <LoaderCircle className="spin" /> : <LogIn />}{data.auth.stored ? 'Sign in again' : 'Sign in'}</button>
       </div>
       <div className="wizard-actions">

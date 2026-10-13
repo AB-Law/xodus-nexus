@@ -938,7 +938,20 @@ app.whenReady().then(async () => {
   backend = new BackendManager(app.getPath('userData'), store.settings.externalXodusRoot, emitLog, () => operations.size > 0 || runtime?.current.updating === true);
   await backend.refresh();
   await runtime.refresh();
-  void backend.checkUpdate().then(() => emitSnapshot(), () => { /* Keep the installed backend available if GitHub is unreachable. */ });
+  void backend.checkUpdate().then(async () => {
+    // First run: install the prebuilt backend automatically so the setup
+    // wizard's sign-in step works without a detour into Settings. Users who
+    // configured a validated external backend are left alone; the managed
+    // release never touches an external checkout.
+    if (!store.settings.firstRunCompleted && !backend.current.available &&
+        backend.current.releaseAvailable && backend.current.updateAvailable) {
+      try {
+        await backend.update(emitSnapshot);
+        await refreshAccount(false);
+      } catch { /* The block reason stays visible in the wizard and Settings. */ }
+    }
+    emitSnapshot();
+  }, () => { /* Keep the installed backend available if GitHub is unreachable. */ });
   void runtime.checkNexus().then(() => emitSnapshot(), () => { /* Nexus runtime is optional. */ });
   await syncManagedWinePath();
   await refreshAccount(false);
