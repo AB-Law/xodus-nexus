@@ -10,6 +10,11 @@ pinned Git checkouts. It includes the PR #28/cloud-save line, subsequent
 XUser/Store/license/receipt work, Mistral's package/network/event/system API
 additions, the queue and XAsync fixes, HTTP/2 WinHTTP, nghttp2, WinRT JSON,
 and the Mono path-bounds fix. No game-specific runtime selection is introduced.
+It also includes initial connectivity notifications, HTTPS/WSS security queries,
+GDK WinHTTP options, installed-package metadata, verified Store update queries
+and background token/signature authorization. Store queries require Nexus
+backend 0.2.1 or newer and currently support the verified current-game no-update
+case, not DLC or update installation.
 
 ## Build
 
@@ -135,10 +140,12 @@ npm run test:runtime-tools
 ```
 
 Expected contract checks: queue teardown 20, queue stress 1,302, XAsync
-provider 58, completion lifetime 2,805 (4,185 total), plus 9 WinRT JSON checks
+provider 104, completion lifetime 2,805, token dispatch/lifetime 44,
+and 9 WinRT JSON checks (4,284 total), plus
 and 14 HTTP/2 checks. The JSON probe exercises real activation, parsing,
 object access and nested array/object access without account data or network.
-ABI/transport tests are not a substitute for a game test: test the clean-build
+The token-dispatch probe uses a synthetic delayed failure, not a real identity
+or token. ABI/transport tests are not a substitute for a game test: test the clean-build
 candidate in a separate prefix before promotion, without overwriting the
 known-working runtime. The previous development candidate reached the Gears
 online lobby; that user confirmation must not be misattributed to a newly

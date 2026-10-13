@@ -6,7 +6,7 @@ import { SettingsPage } from './App';
 describe('Settings diagnostics', () => {
   it('does not call an unpublished development build the latest published release', () => {
     const html = renderToStaticMarkup(<SettingsPage data={demoSnapshot()} toast={() => {}} />);
-    expect(html).toContain('0.2.0');
+    expect(html).toContain(`<h2>${demoSnapshot().launcherUpdate?.currentVersion}</h2>`);
     expect(html).not.toContain('latest published release');
     expect(html).toContain('Check GitHub for launcher updates.');
   });

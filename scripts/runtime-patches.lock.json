@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "release",
+  "status": "development",
   "sources": {
     "wine": {
       "url": "https://github.com/xodus-gaming/wine.git",
@@ -40,12 +40,36 @@
     {
       "file": "assets/wine-mscoree-mono-path-bounds.patch",
       "sha256": "b9ba21027ad489b8c364c4c3c919722bbdd38d75a28add1df27951978139803a"
+    },
+    {
+      "file": "assets/wine-winhttp-gdk-options.patch",
+      "sha256": "53f7121ece52bd096e0c69ab8219c2e0c449a1479cb4e71988e1abbf29030c9b"
+    },
+    {
+      "file": "assets/xgameruntime-network-async-experimental.patch",
+      "sha256": "51b8fec258be9d695429a37ec009ba9da15a0a628bb6e6f87268aba5fc4dbc73"
+    },
+    {
+      "file": "assets/xgameruntime-user-signin.patch",
+      "sha256": "d4c7a1ca0a86c6fd7cc69d538f5b673c8c4d70cd351c61e61c9a87d6c20414ea"
+    },
+    {
+      "file": "assets/xgameruntime-package-identity.patch",
+      "sha256": "711aade072bb9a566d2bdebd816b6af63f995bb00c1e27da8176d4f7583ecef5"
+    },
+    {
+      "file": "assets/xgameruntime-store-updates.patch",
+      "sha256": "1532f4e9de02510ef401f09631ca3de0e551e4fafbec52d6d7cc218e736abbc4"
+    },
+    {
+      "file": "assets/xgameruntime-token-worker.patch",
+      "sha256": "295e03ffbcbb6884e34d53cf7240d7a66cba57c88986fb96cff4fb177861f78e"
     }
   ],
   "expectedXgameruntimeSources": {
-    "dlls/xgameruntime/Makefile.in": "0425398d958c253ab1a488734fbf74996e193c26871e24752a7c811d122b9279",
+    "dlls/xgameruntime/Makefile.in": "703a51c5f2a25deb15543b43cf4136260c06118f20e921db617f183c76a2ea6f",
     "dlls/xgameruntime/main.c": "4a8e82963075d60eecb5a1a7b6d96e310b0c13fef48ebcfbacf54ef1d7d23957",
-    "dlls/xgameruntime/private.h": "75f33116244bb6f4c82eb00dffe811971bc59dbf87832812df82f6f00d61224f",
+    "dlls/xgameruntime/private.h": "e18838cc06ccb00f98b8e64f736c2e69770706b4677e33f4b4b744f64eb51f22",
     "dlls/xgameruntime/xerror.c": "f0dc4b456af5c4cfdcc1036f1dd422848a1ce97abd6cd1722bf654c51927b694",
     "dlls/xgameruntime/xgame.c": "7d7edff91a839cac522f910c54d4625d8efa61121c7a32f4bd3665cca184abae",
     "dlls/xgameruntime/xgameactivation.c": "48a729040d7be7aac3e28b27aa06f8285bcef3f27767fa79ddfbe33c7b629dbc",
@@ -54,20 +78,22 @@
     "dlls/xgameruntime/xgameruntime.spec": "e2418b8dafca476ae2119228e74e5cf23987e3a7b9a5bde3c0cb150f1c2823da",
     "dlls/xgameruntime/xgamesave.c": "c7c767edd7d38bf4981ee3d8367055f03bd3d337f372a55743f06f40e4cdb4b7",
     "dlls/xgameruntime/xgamesave.idl": "544319e88951f65b21c74f785fb9376c10cac8b1d57e98c7aa3079348162ccab",
-    "dlls/xgameruntime/xnetworking.c": "e4e33f09b2be409dcedc4ec6c4aad1b810890f6cc34cd83de654e93bac2f5b96",
-    "dlls/xgameruntime/xpackage.c": "efd41ec751cae13428a976608f2e68041919fd7db6093c1c41c94d9fca7ce736",
+    "dlls/xgameruntime/xnetworking.c": "cfd8d0110b7ebd622f62317d3134dd866e6538e4a697b06912fa752517fe7caa",
+    "dlls/xgameruntime/xpackage.c": "72cc335bc981647fb1a5cd6f01f08c04eff82895f39b56ce7e99e8993639ba24",
     "dlls/xgameruntime/xpackage.idl": "afb602c0f76a97f6358950baf48e7a49df61e150134989b676879e7001a60108",
     "dlls/xgameruntime/xpersistentlocalstorage.c": "48111212dcfe4ef328fa482dc8b426ef853b7c961d575aefeaa3b559788809b2",
-    "dlls/xgameruntime/xstore.c": "6a8b5275edcde0d3c28d00544ee4f26c6cb43d3015d854c198eecbac0571d849",
+    "dlls/xgameruntime/xstore.c": "25d4c481d017cf31d74f5a9cbe3e545197b1f70423a56df24bf93f639e5527c3",
     "dlls/xgameruntime/xsystem.c": "974c83fe2e1b97e6b2c86e95a558b31d2effe6b9d2b3166c2c4d1882a4341058",
     "dlls/xgameruntime/xsystemanalytics.c": "189e99c83273b429325ecefa2b9246c45863c22f0c4006a791ec57b8f7b9d384",
-    "dlls/xgameruntime/xthreading.c": "6679fa0c92e40821f53d86037ce7a053e78f5f687c6e80a6d1e0d47c9b8e871b",
-    "dlls/xgameruntime/xuser.c": "76a3bee331750157ba1c13f656aeb8d839624130b1bd2b2ab155198f0faa5040",
+    "dlls/xgameruntime/xthreading.c": "9541d2d6907ef06b403cf1dd041f10228b8858660ce9aab3b2bd0b8b2a22baa8",
+    "dlls/xgameruntime/xuser.c": "020bde95bf039a2523303c967b2bf7ae937bc6cfb0df07d2f9ece0efbcc956a2",
     "dlls/xgameruntime/util.c": "aebf1a7ebef0dff89d3a1683bc40e16c821eaeb5cc1160ce474b905d14d7cb5c",
     "dlls/xgameruntime/util.h": "b739dba8a69a36103e72afc8dcaeaf324470d9ed47a5a7dd81b18e4e511ae69a",
     "dlls/xgameruntime/userprovider.idl": "66fb09670b7dabfc55257475094239018ea9a19ec2be348e56cf2b17ef615d7a"
   },
+  "requiresBackendVersion": "0.2.1",
   "limitations": [
+    "Store update queries support the verified current-game no-update case; DLC, mandatory updates and downloads remain unsupported",
     "Incomplete XAsync cancellation/resource reclamation",
     "Partial package/event/privilege APIs are not complete GDK implementations",
     "Single HTTP/2 stream per connection; chunked uploads and proxy/client-certificate transport gaps",
