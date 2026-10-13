@@ -67,6 +67,7 @@ for (const [relative, expected] of Object.entries(lock.expectedXgameruntimeSourc
 const provenance = {
   schema: 1, status: lock.status, sourceLockSha256: sha(lockBytes), sources: lock.sources,
   patches: lock.patches, verifiedXgameruntimeSources: lock.expectedXgameruntimeSources,
+  requiresBackendVersion: lock.requiresBackendVersion,
   limitations: lock.limitations, components: {},
   configure: ['--enable-win64', '--without-x', '--without-wayland', '--disable-tests'],
   toolchain: Object.fromEntries(['gcc', 'x86_64-w64-mingw32-gcc', 'cmake', 'make', 'autoconf', 'bison', 'flex'].map(tool => [tool, run(tool, ['--version'], work, true).split('\n')[0]])),
