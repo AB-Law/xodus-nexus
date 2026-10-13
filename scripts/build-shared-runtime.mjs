@@ -110,7 +110,7 @@ for (const test of ['taskqueue-teardown', 'taskqueue-contract', 'async-provider-
   run('x86_64-w64-mingw32-gcc', ['-D__WINESRC__', '-O2', '-Wall', '-I', path.join(build, 'dlls/xgameruntime'), '-I', path.join(source, 'dlls/xgameruntime'), path.join(project, `scripts/runtime-tests/${test}-probe.c`), '-o', path.join(tests, `${test}-probe.exe`)], work);
 }
 // windows.web generated these WinRT headers from the pinned IDL sources.
-run('x86_64-w64-mingw32-gcc', ['-D__WINESRC__', '-O2', '-Wall', '-I', path.join(build, 'dlls/xgameruntime'), '-I', path.join(source, 'dlls/xgameruntime'), path.join(project, 'scripts/runtime-tests/token-dispatch-probe.c'), '-o', path.join(tests, 'token-dispatch-probe.exe'), '-lruntimeobject'], work);
+run('x86_64-w64-mingw32-gcc', ['-D__WINESRC__', '-O2', '-Wall', '-I', path.join(build, 'dlls/xgameruntime'), '-I', path.join(source, 'dlls/xgameruntime'), '-I', path.join(build, 'include'), '-I', path.join(source, 'include'), path.join(project, 'scripts/runtime-tests/token-dispatch-probe.c'), '-o', path.join(tests, 'token-dispatch-probe.exe'), '-lruntimeobject'], work);
 // Ubuntu's older MinGW SDK need not contain windows.data.json.h at all.
 run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-I', path.join(build, 'include'), '-I', path.join(source, 'include'), path.join(project, 'scripts/runtime-tests/winrt-json-probe.c'), '-o', path.join(tests, 'winrt-json-probe.exe'), '-lruntimeobject'], work);
 await fs.copyFile(path.join(ngSource, 'COPYING'), path.join(components, 'nghttp2-LICENSE'));
