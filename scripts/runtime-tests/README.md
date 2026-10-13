@@ -29,6 +29,10 @@ Never copy a candidate DLL into an active or production prefix.
 - `winrt-json-probe.c`: real WinRT JSON activation, Parse, GetObject and
   nested array/object access (9 checks). Required by XUser endpoint parsing;
   HTTP 200 alone does not establish successful account initialization.
+- `token-dispatch-probe.c`: synthetic delayed authorization failure through
+  the real ANSI/UTF-16 token provider; manual Work dispatch must return without
+  waiting for authorization. Checks completion and retained user lifetime when
+  a terminal abort happens while work is running (44 checks, no network/account).
 
 Build with MinGW against the matching xgameruntime source/generated headers:
 
