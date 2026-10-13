@@ -5,8 +5,18 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { runtimeInputsChanged } from './runtime-inputs.mjs';
+import { runtimeInputsChanged, runtimeRecipeMetadataOnly } from './runtime-inputs.mjs';
 const script = fileURLToPath(new URL('./runtime-needed.mjs', import.meta.url));
+test('approval-only status does not rebuild binaries; changed recipes still do', () => {
+  const before = { schema: 1, status: 'development', patches: ['pinned'] };
+  assert.equal(runtimeRecipeMetadataOnly(before, { ...before, status: 'release' }), true);
+  assert.equal(runtimeRecipeMetadataOnly(before, { ...before, status: 'release', patches: ['changed'] }), false);
+  assert.equal(runtimeRecipeMetadataOnly(before, { ...before, status: 'invalid' }), false);
+  assert.equal(runtimeInputsChanged(['scripts/runtime-patches.lock.json'], true), false);
+  assert.equal(runtimeInputsChanged(['scripts/runtime-patches.lock.json']), true);
+  assert.equal(runtimeInputsChanged(['scripts/runtime-patches.lock.json', 'assets/real.patch'], true), true);
+  assert.equal(runtimeInputsChanged(['scripts/ci/promote-candidate.mjs', 'scripts/ci/runtime-needed.mjs']), false);
+});
 test('runtime inputs trigger native CI but documentation/UI-only diffs do not', () => {
   for (const file of ['assets/fix.patch', 'assets/odd\nname.patch', 'scripts/runtime-patches.lock.json', 'scripts/runtime-base.lock.json', 'scripts/runtime-media.lock.json',
     'scripts/runtime-tests/winrt-json-probe.c', 'scripts/runtime-tests/media-codecs-probe.c', 'scripts/build-shared-runtime.mjs', 'scripts/build-runtime-media.mjs', 'scripts/assemble-shared-runtime.mjs',

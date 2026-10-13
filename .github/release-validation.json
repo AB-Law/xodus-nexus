@@ -54,6 +54,33 @@
       "approved": true,
       "approvedBy": "domsvoboda",
       "evidence": "Owner-authorized release 2026-10-13: exact CI artifact Xodus-Nexus-0.2.1-x86_64.AppImage (run 38364013579, commit 6954689) downloaded, SHA-512 verified, and passed a clean first-run install test on Fedora 43: fresh profile showed the setup wizard, the prebuilt backend installed automatically during setup, and sign-in unlocked in the wizard without the Settings detour."
+    },
+    {
+      "kind": "launcher",
+      "runId": "38482805812",
+      "commit": "79103ec8919938f603913c1be095c739a58957e7",
+      "manifestSha256": "2038cbbb9fa53ce27b75b3ade916e376bcc5e655699431391fc7bf3ca3405e45",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit owner authorization 2026-10-14: publish after successful main CI and exact package verification, without another game run. Downloaded binary/checksum/candidate manifests and corresponding source where applicable passed SHA-256/SHA-512 verification. All main launcher/backend/runtime CI builds succeeded; runtime 4284 native checks plus HTTP/2 and H.264/AAC checks passed. Owner confirmed local sign-in/Online and authorized no additional real-game test of these exact CI bytes. Owner explicitly approved post-validation metadata-only recipe approval with unchanged source/base/media/build inputs and unchanged candidate bytes."
+    },
+    {
+      "kind": "backend",
+      "runId": "38482805951",
+      "commit": "79103ec8919938f603913c1be095c739a58957e7",
+      "manifestSha256": "99af02bbd224ba72e2d60e087dbcd327117fd8c4a4f73a2ce0468f989895843b",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit owner authorization 2026-10-14: publish after successful main CI and exact package verification, without another game run. Downloaded binary/checksum/candidate manifests and corresponding source where applicable passed SHA-256/SHA-512 verification. All main launcher/backend/runtime CI builds succeeded; runtime 4284 native checks plus HTTP/2 and H.264/AAC checks passed. Owner confirmed local sign-in/Online and authorized no additional real-game test of these exact CI bytes. Owner explicitly approved post-validation metadata-only recipe approval with unchanged source/base/media/build inputs and unchanged candidate bytes."
+    },
+    {
+      "kind": "runtime",
+      "runId": "38482805798",
+      "commit": "79103ec8919938f603913c1be095c739a58957e7",
+      "manifestSha256": "54b0526977ad7a77912e7f0fb8389d877d48665cb03f4b7438511928b22a3951",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit owner authorization 2026-10-14: publish after successful main CI and exact package verification, without another game run. Downloaded binary/checksum/candidate manifests and corresponding source where applicable passed SHA-256/SHA-512 verification. All main launcher/backend/runtime CI builds succeeded; runtime 4284 native checks plus HTTP/2 and H.264/AAC checks passed. Owner confirmed local sign-in/Online and authorized no additional real-game test of these exact CI bytes. Owner explicitly approved post-validation metadata-only recipe approval with unchanged source/base/media/build inputs and unchanged candidate bytes."
     }
   ]
 }
