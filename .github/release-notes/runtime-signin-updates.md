@@ -2,6 +2,7 @@
 
 ## Bug fixes
 
+- Bundle pinned H.264/AAC decoders so intro videos play instead of color bars.
 - Accept the GDK WinHTTP IPv6 fallback and websocket timeout options.
 - Deliver the initial connectivity notification required by network clients.
 - Support secure websocket (WSS) security queries with actual TLS verification.
