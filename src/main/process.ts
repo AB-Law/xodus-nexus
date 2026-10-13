@@ -1,4 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { accessSync, constants as fsConstants } from 'node:fs';
 import { stripAnsi } from '../shared/utils.js';
 
 export interface RunOptions {
@@ -14,18 +15,49 @@ export interface RunResult {
   output: string;
 }
 
+// util-linux script(1) locations, tried before a PATH lookup. A process
+// launched from the desktop can carry a minimal PATH, so resolving the PTY
+// wrapper by absolute path keeps downloads working there.
+const SCRIPT_PATHS = ['/usr/bin/script', '/bin/script', '/usr/local/bin/script'];
+
+export function resolveScriptCommand(): string | null {
+  const pathDirs = (process.env.PATH ?? '').split(':').filter(Boolean);
+  const candidates = [...SCRIPT_PATHS, ...pathDirs.map((dir) => `${dir}/script`)];
+  for (const candidate of candidates) {
+    try {
+      accessSync(candidate, fsConstants.X_OK);
+      return candidate;
+    } catch {
+      // Try the next known location.
+    }
+  }
+  return null;
+}
+
+// Wrap a command for script(1) so indicatif keeps rendering progress bars.
+// When script(1) is unavailable the command runs directly: the progress bars
+// disappear, but the download itself proceeds instead of failing outright.
+export function wrapForTerminal(
+  command: string,
+  args: string[],
+  scriptCommand: string | null,
+): { command: string; args: string[] } {
+  if (!scriptCommand) return { command, args };
+  const shellQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
+  return {
+    command: scriptCommand,
+    args: ['-q', '-f', '-e', '-c', [command, ...args].map(shellQuote).join(' '), '/dev/null'],
+  };
+}
+
 export function spawnTracked(command: string, args: string[], options: RunOptions = {}): {
   child: ChildProcessWithoutNullStreams;
   result: Promise<RunResult>;
 } {
   // indicatif deliberately hides progress bars when stdout is a pipe. Give only
   // streaming downloads a PTY; other Xodus commands keep their direct spawn.
-  const shellQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
-  const actualCommand = options.terminal ? 'script' : command;
-  const actualArgs = options.terminal
-    ? ['-q', '-f', '-e', '-c', [command, ...args].map(shellQuote).join(' '), '/dev/null']
-    : args;
-  const child = spawn(actualCommand, actualArgs, {
+  const actual = options.terminal ? wrapForTerminal(command, args, resolveScriptCommand()) : { command, args };
+  const child = spawn(actual.command, actual.args, {
     cwd: options.cwd,
     env: options.terminal ? { ...(options.env ?? process.env), TERM: 'xterm' } : options.env ?? process.env,
     shell: false,
