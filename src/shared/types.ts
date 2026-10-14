@@ -71,6 +71,8 @@ export interface Game {
   path: string;
   storeId?: string;
   publisher?: string;
+  installedVersion?: string;
+  packageName?: string;
   executable?: string;
   winePath?: string; // Legacy saved field; ignored for launch. The runtime is global.
   launchArgs?: string;
@@ -147,7 +149,24 @@ export interface LauncherUpdate {
   releaseUrl?: string;
   checking: boolean;
   checkedAt?: string;
+  updating?: boolean;
+  progress?: number;
+  phase?: string;
+  error?: string;
+  canInstall?: boolean;
+  restartRequired?: boolean;
+  canRollback?: boolean;
 }
+
+export interface GameUpdate {
+  checking: boolean;
+  available?: boolean;
+  latestVersion?: string;
+  checkedAt?: string;
+  error?: string;
+}
+
+export interface DiagnosticLog { name: string; content: string; truncated: boolean }
 
 export interface AppSnapshot {
   backend: BackendStatus;
@@ -158,6 +177,8 @@ export interface AppSnapshot {
   auth: AuthStatus;
   launcherUpdate?: LauncherUpdate;
   gameOperation?: GameOperation;
+  gameUpdates?: Record<string, GameUpdate>;
+  downloadProgressSupported?: boolean;
 }
 
 export interface InstallRequest {
@@ -209,6 +230,11 @@ export interface LauncherApi {
   rollbackRuntimePreview(): Promise<void>;
   refreshAccount(): Promise<AuthStatus>;
   checkLauncherUpdate(): Promise<LauncherUpdate | undefined>;
+  installLauncherUpdate(): Promise<void>;
+  restartLauncher(): Promise<void>;
+  rollbackLauncherUpdate(): Promise<void>;
+  checkGameUpdates(id?: string): Promise<void>;
+  readDiagnosticLog(operationId: string): Promise<DiagnosticLog>;
   login(): Promise<void>;
   logout(): Promise<void>;
   searchCatalog(query: string, cursor?: string): Promise<CatalogSearchResult>;

@@ -47,9 +47,9 @@ export function progressFromLine(line: string): number | null {
 }
 
 export function progressBytesFromLine(line: string): { current: number; total: number } | null {
-  const bytes = line.match(/([\d.]+)\s*(B|KiB|MiB|GiB|TiB)\s*\/\s*([\d.]+)\s*(B|KiB|MiB|GiB|TiB)/i);
+  const bytes = line.match(/([\d.]+)\s*(B|KiB|MiB|GiB|TiB|KB|MB|GB|TB)\s*\/\s*([\d.]+)\s*(B|KiB|MiB|GiB|TiB|KB|MB|GB|TB)/i);
   if (!bytes) return null;
-  const units: Record<string, number> = { b: 1, kib: 1024, mib: 1024 ** 2, gib: 1024 ** 3, tib: 1024 ** 4 };
+  const units: Record<string, number> = { b: 1, kib: 1024, mib: 1024 ** 2, gib: 1024 ** 3, tib: 1024 ** 4, kb: 1000, mb: 1000 ** 2, gb: 1000 ** 3, tb: 1000 ** 4 };
   const current = Number(bytes[1]) * units[bytes[2].toLowerCase()];
   const total = Number(bytes[3]) * units[bytes[4].toLowerCase()];
   return Number.isFinite(current) && Number.isFinite(total) && total > 0 ? { current, total } : null;

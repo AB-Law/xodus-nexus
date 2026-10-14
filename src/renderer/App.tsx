@@ -5,7 +5,7 @@ import {
   LoaderCircle, LogIn, MoreHorizontal, PackageCheck, Play, Plus, RefreshCw, Rocket, Search, Settings2,
   Store, Terminal, Trash2, X,
 } from 'lucide-react';
-import type { AppSnapshot, CatalogProduct, CatalogSearchResult, Game, GameLaunchOptions, Page, Settings } from '../shared/types';
+import type { AppSnapshot, CatalogProduct, CatalogSearchResult, DiagnosticLog, Game, GameLaunchOptions, Page, Settings } from '../shared/types';
 import { estimateTimeRemaining } from '../shared/utils';
 import { runtimeDisplay } from '../shared/runtime-display';
 
@@ -46,6 +46,28 @@ function NavItem({ active, icon, label, badge, onClick }: {
   return <button className={`nav-item ${active ? 'active' : ''}`} onClick={onClick}>
     {icon}<span>{label}</span>{badge ? <b>{badge}</b> : null}
   </button>;
+}
+
+export function Sidebar({ data, page, go }: { data: AppSnapshot; page: Page; go: (page: Page) => void }) {
+  const count = data.downloads.filter(task => task.status === 'running').length;
+  const account = data.auth.username ?? (data.auth.stored === true ? 'Microsoft account' : 'Sign in');
+  return <aside className="sidebar">
+    <button className="account-summary" onClick={() => go('settings')}><div className="account-avatar"><CircleUserRound /></div><span><strong>{account}</strong><small>{data.auth.stored === true ? 'Credentials stored' : data.auth.stored === false ? 'Not signed in' : 'Status unavailable'}</small></span><ChevronRight /></button>
+    <nav><NavItem active={page === 'home'} icon={<Home />} label="Home" onClick={() => go('home')} /><NavItem active={page === 'store'} icon={<Store />} label="Store" onClick={() => go('store')} /><NavItem active={page === 'library'} icon={<Library />} label="My Library" onClick={() => go('library')} /></nav>
+    {data.games.length > 0 ? <div className="recents"><span>Most recent</span>{data.games.slice(0, 5).map(game => <button key={game.id} onClick={() => go('library')}><Cover game={game} /><strong>{game.title}</strong></button>)}</div> : null}
+    <div className="sidebar-bottom"><NavItem active={page === 'settings'} icon={<Cog />} label="Settings" onClick={() => go('settings')} /><button className={`queue-summary ${page === 'downloads' ? 'active' : ''}`} aria-current={page === 'downloads' ? 'page' : undefined} onClick={() => go('downloads')}><Download /><span><strong>Install Queue{count ? ` · ${count}` : ''}</strong><small>{count ? `${count} active installation${count === 1 ? '' : 's'}` : 'Manage installations'}</small></span></button></div>
+  </aside>;
+}
+
+export function TopStatus({ data, go }: { data: AppSnapshot; go: (page: Page) => void }) {
+  return <div className="top-status">
+    {data.launcherUpdate?.latestVersion || data.launcherUpdate?.restartRequired ? <button className="update-notice" title={data.launcherUpdate.restartRequired ? 'Restart to finish launcher update' : `Launcher ${data.launcherUpdate.latestVersion} is available`} onClick={() => go('settings')}><ArrowDownToLine /><strong>{data.launcherUpdate.restartRequired ? 'Restart available' : 'Update available'}</strong></button> : null}
+    <StatusDot tone={data.backend.available ? 'green' : 'red'} /><span>{data.backend.available ? 'Xodus ready' : 'Backend offline'}</span><button title="Settings" onClick={() => go('settings')}><Settings2 /></button>
+  </div>;
+}
+
+export function DiagnosticDialog({ log, close }: { log: DiagnosticLog; close: () => void }) {
+  return <div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}><section className="game-dialog diagnostic-dialog" role="dialog" aria-modal="true" aria-label="Diagnostic log"><h2>{log.name}</h2><p>Private diagnostic log — review before sharing.{log.truncated ? ' Showing the most recent 512 KiB.' : ''}</p><pre>{log.content || 'The log is empty.'}</pre><div className="dialog-actions"><button className="secondary" onClick={close}>Close</button></div></section></div>;
 }
 
 function Cover({ game, className = '' }: { game: Game; className?: string }) {
@@ -244,6 +266,7 @@ export function LibraryPage({ data, toast }: { data: AppSnapshot; toast: (value:
   const [editLocale, setEditLocale] = useState('');
   const [localeOptions, setLocaleOptions] = useState<string[]>([]);
   const [dialogBusy, setDialogBusy] = useState(false);
+  const [diagnosticLog, setDiagnosticLog] = useState<DiagnosticLog>();
   const selected = data.games.find((game) => game.id === selectedId) ?? data.games[0];
   useEffect(() => { if (!selectedId && data.games[0]) setSelectedId(data.games[0].id); }, [data.games, selectedId]);
   useEffect(() => {
@@ -327,26 +350,36 @@ export function LibraryPage({ data, toast }: { data: AppSnapshot; toast: (value:
     } catch (error) { toast({ kind: 'error', message: errorMessage(error) }); }
   }
 
+  async function checkUpdates(id?: string) {
+    try { await window.launcher.checkGameUpdates(id); }
+    catch (error) { toast({ kind: 'error', message: errorMessage(error) }); }
+  }
+  async function openDiagnosticLog(id: string) {
+    try { setDiagnosticLog(await window.launcher.readDiagnosticLog(id)); }
+    catch (error) { toast({ kind: 'error', message: errorMessage(error) }); }
+  }
+
   const selectedOperation = selected && data.gameOperation?.gameId === selected.id ? data.gameOperation : undefined;
   const gameBusy = Boolean(selectedOperation && ['preparing', 'running', 'stopping'].includes(selectedOperation.status));
   const launchOptions = useGameLaunchOptions(selected, data);
   const menuGame = data.games.find((game) => game.id === menu?.id);
   const modalGame = data.games.find((game) => game.id === dialogGame?.id);
   return <main className="page library-page">
-    <header className="page-header"><div><h1>My Library</h1><p>Only games verified from local Xbox manifests are shown.</p></div><button className="secondary" onClick={importGame}><Plus />Import game</button></header>
+    <header className="page-header"><div><h1>My Library</h1><p>Only games verified from local Xbox manifests are shown.</p></div><div className="button-row"><button className="secondary" disabled={data.auth.stored !== true || gameBusy || Object.values(data.gameUpdates ?? {}).some(update => update.checking)} onClick={() => checkUpdates()}><RefreshCw />Check game updates</button><button className="secondary" onClick={importGame}><Plus />Import game</button></div></header>
     {data.games.length === 0 ? <div className="empty-state"><div><Library /></div><h2>Your library is empty</h2><p>Select a folder containing MicrosoftGame.config or appxmanifest.xml.</p><button className="primary" onClick={importGame}>Import a game</button></div> : <div className="library-layout">
-      <div className="library-grid">{data.games.map((game) => <div className="library-card-wrap" key={game.id} onContextMenu={(event) => { event.preventDefault(); openMenu(game, event.clientX, event.clientY); }}><button className={`library-card ${selected?.id === game.id ? 'selected' : ''}`} onClick={() => setSelectedId(game.id)} onKeyDown={(event) => { if (event.key === 'F10' && event.shiftKey) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); openMenu(game, rect.left + 16, rect.top + 16); } }}><Cover game={game} /><strong>{game.title}</strong><span>{game.publisher ?? 'Local installation'}</span></button><button className="library-card-menu-button" title={`Options for ${game.title}`} onClick={(event) => { event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); openMenu(game, rect.right, rect.bottom); }}><MoreHorizontal /></button></div>)}</div>
+      <div className="library-grid">{data.games.map((game) => <div className="library-card-wrap" key={game.id} onContextMenu={(event) => { event.preventDefault(); openMenu(game, event.clientX, event.clientY); }}><button className={`library-card ${selected?.id === game.id ? 'selected' : ''}`} onClick={() => setSelectedId(game.id)} onKeyDown={(event) => { if (event.key === 'F10' && event.shiftKey) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); openMenu(game, rect.left + 16, rect.top + 16); } }}><Cover game={game} /><strong>{game.title}</strong><span>{game.publisher ?? 'Local installation'}</span>{data.gameUpdates?.[game.id]?.available ? <b className="game-update-badge">Update available</b> : null}</button><button className="library-card-menu-button" title={`Options for ${game.title}`} onClick={(event) => { event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); openMenu(game, rect.right, rect.bottom); }}><MoreHorizontal /></button></div>)}</div>
       {selected ? <aside className="game-detail">
         <div className="detail-art"><Cover game={selected} /><div className="detail-shade" /><div><StatePill game={selected} /><h2>{selected.title}</h2><span>{selected.publisher ?? 'Publisher not provided'}</span></div></div>
         {selected.installMessage ? <div className="alert amber"><CircleAlert /><span>{selected.installMessage}</span></div> : null}
+<div className="game-update-status">{data.gameUpdates?.[selected.id]?.available ? <p className="success-text">Update available · {selected.installedVersion ?? 'Installed version'} → {data.gameUpdates[selected.id].latestVersion}</p> : data.gameUpdates?.[selected.id]?.available === false ? <p>Up to date · {data.gameUpdates[selected.id].latestVersion}</p> : null}{data.gameUpdates?.[selected.id]?.error ? <p className="error-text">{data.gameUpdates[selected.id].error}</p> : null}</div>
         <dl><div><dt>Store ID</dt><dd>{selected.storeId ?? 'Not found'}</dd></div><div><dt>Executable</dt><dd>{selected.executable ?? 'Not found'}</dd></div><div><dt>Location</dt><dd title={selected.path}>{selected.path}</dd></div></dl>
         <div className="detail-actions">
           <button className="primary" disabled={gameBusy || selected.installState !== 'ready' || !data.backend.capabilities.run || !(data.settings.winePath || data.runtime.winePath)} onClick={() => play()}>{gameBusy ? <LoaderCircle className="spin" /> : <Play fill="currentColor" />}{gameBusy ? 'Working…' : 'Play'}</button>
-          <button className="secondary" disabled={gameBusy || !selected.storeId || selected.installState !== 'ready' || !data.backend.capabilities.streaming || data.downloads.some((task) => task.status === 'running')} onClick={updateInstalledGame} title="Check and download changed game files with Xodus"><RefreshCw />Check for updates</button>
+          <button className="secondary" disabled={gameBusy || data.gameUpdates?.[selected.id]?.checking || !selected.storeId || selected.installState !== 'ready' || !data.backend.capabilities.streaming || data.downloads.some((task) => task.status === 'running')} onClick={() => data.gameUpdates?.[selected.id]?.available ? updateInstalledGame() : checkUpdates(selected.id)} title="Check the installed package version without changing game files"><RefreshCw />{data.gameUpdates?.[selected.id]?.checking ? 'Checking…' : data.gameUpdates?.[selected.id]?.available ? 'Update game' : 'Check for updates'}</button>
           {gameBusy && !(selectedOperation?.kind === 'prerequisite' && selectedOperation.status === 'running') ? <button className="secondary danger" onClick={stopGame}><X />Stop</button> : null}
           <button className="icon-button" onClick={() => window.launcher.openPath(selected.path)} title="Open game folder"><FolderOpen /></button>
         </div>
-        {selectedOperation ? <div className={`game-operation ${selectedOperation.status}`}><div><strong>{selectedOperation.kind === 'prerequisite' ? selectedOperation.status === 'failed' ? 'Prerequisite failed' : selectedOperation.status === 'complete' ? 'Prerequisite ready' : 'Installing prerequisite' : selectedOperation.status === 'failed' ? 'Launch failed' : selectedOperation.status === 'complete' ? 'Game exited' : 'Launching game'}</strong><span>{selectedOperation.phase}</span></div>{selectedOperation.log.length > 0 ? <pre>{selectedOperation.log.slice(-12).join('\n')}</pre> : null}{selectedOperation.logPath ? <button className="secondary" onClick={() => window.launcher.openPath(selectedOperation.logPath!)}><FolderOpen />Open diagnostic log</button> : null}</div> : null}
+        {selectedOperation ? <div className={`game-operation ${selectedOperation.status}`}><div><strong>{selectedOperation.kind === 'prerequisite' ? selectedOperation.status === 'failed' ? 'Prerequisite failed' : selectedOperation.status === 'complete' ? 'Prerequisite ready' : 'Installing prerequisite' : selectedOperation.status === 'failed' ? 'Launch failed' : selectedOperation.status === 'complete' ? 'Game exited' : 'Launching game'}</strong><span>{selectedOperation.phase}</span></div>{selectedOperation.log.length > 0 ? <pre>{selectedOperation.log.slice(-12).join('\n')}</pre> : null}{selectedOperation.logPath ? <button className="secondary" onClick={() => openDiagnosticLog(selectedOperation.id)}><FolderOpen />Open diagnostic log</button> : null}</div> : null}
       </aside> : null}
     </div>}
     {menu && menuGame ? <GameContextMenu x={menu.x} y={menu.y} game={menuGame} options={launchOptions} busy={gameBusy}
@@ -354,6 +387,7 @@ export function LibraryPage({ data, toast }: { data: AppSnapshot; toast: (value:
       onSettings={() => openDialog(menuGame, 'settings')}
       onInstallVc={() => { setMenu(undefined); void installVc(menuGame); }}
       onRemove={() => openDialog(menuGame, 'remove')} /> : null}
+{diagnosticLog ? <DiagnosticDialog log={diagnosticLog} close={() => setDiagnosticLog(undefined)} /> : null}
     {dialogGame && modalGame ? <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !dialogBusy) setDialogGame(undefined); }}><section className="game-dialog" role="dialog" aria-modal="true" aria-label={dialogGame.kind === 'remove' ? `Remove ${modalGame.title}` : `Settings for ${modalGame.title}`}>
       {dialogGame.kind === 'remove' ? <><h2>Remove {modalGame.title}?</h2><p>Keep the files, or move this installation folder to Trash. Saves stored outside this folder are not affected.</p><code className="remove-path">{modalGame.path}</code><div className="dialog-actions"><button className="secondary" disabled={dialogBusy} onClick={() => setDialogGame(undefined)}>Cancel</button><button className="secondary" disabled={dialogBusy} onClick={() => removeGame('library')}>Keep files</button><button className="secondary danger" disabled={dialogBusy} onClick={() => removeGame('trash-files')}><Trash2 />Move files to Trash</button></div></> : <form onSubmit={saveGameSettings}><h2>Game settings</h2><label>Display name<input required value={editTitle} onChange={(event) => setEditTitle(event.target.value)} /></label><label>Game language<select value={editLocale} onChange={(event) => setEditLocale(event.target.value)}><option value="">System default</option>{localeOptions.map((locale) => <option key={locale} value={locale}>{locale}</option>)}{editLocale && !localeOptions.some((locale) => locale.toLowerCase() === editLocale.toLowerCase()) ? <option value={editLocale}>{editLocale}</option> : null}</select></label><p>Available languages come from the game manifest. All games use the active Xodus Runtime.</p><div className="dialog-actions"><button type="button" className="secondary" disabled={dialogBusy} onClick={() => setDialogGame(undefined)}>Cancel</button><button className="primary" disabled={dialogBusy || !editTitle.trim()}><Check />Save</button></div></form>}
     </section></div> : null}
@@ -389,6 +423,7 @@ function DownloadsPage({ data, toast }: { data: AppSnapshot; toast: (value: Toas
   const finishedCount = data.downloads.filter((task) => task.status !== 'running' && task.status !== 'queued').length;
   return <main className="page downloads-page">
     <header className="page-header"><div><h1>Install Queue</h1></div>{finishedCount ? <button className="secondary" onClick={clearFinished}><Trash2 />Clear finished</button> : null}</header>
+    {data.downloadProgressSupported === false ? <div className="alert amber"><CircleAlert /><span>Numeric download progress requires util-linux (the script command). Install it or re-run the installer. Downloads can still finish without it.</span></div> : null}
     {data.downloads.length === 0 ? <div className="empty-state"><div><Download /></div><h2>Nothing in the queue</h2><p>Installations started from Store will appear here.</p></div> : <div className="download-list">{data.downloads.map((task) => {
       const running = task.status === 'running'; const failed = task.status === 'failed';
       return <article className={`download-item ${task.status}`} key={task.id}>
@@ -435,10 +470,16 @@ export function SettingsPage({ data, toast }: { data: AppSnapshot; toast: (value
     <header className="page-header"><div><h1>Settings</h1><p>Account, backend, runtime, and storage.</p></div></header>
 
     <section className="settings-card compact launcher-card">
-      <div className="settings-heading"><div className="settings-icon"><Rocket /></div><div><span className="overline">XODUS NEXUS</span><h2>{data.launcherUpdate?.currentVersion ?? 'Development build'}</h2><p>{data.launcherUpdate?.latestVersion ? `Version ${data.launcherUpdate.latestVersion} is available — re-run the install script or download the new AppImage.` : 'Check GitHub for launcher updates.'}</p></div></div>
+      {data.launcherUpdate?.phase ? <p>{data.launcherUpdate.phase}</p> : null}
+      {data.launcherUpdate?.updating ? <div className="progress-track"><i style={{ width: `${data.launcherUpdate.progress ?? 0}%` }} /></div> : null}
+      {data.launcherUpdate?.error ? <div className="alert amber"><CircleAlert /><span>{data.launcherUpdate.error}</span></div> : null}
+      <div className="settings-heading"><div className="settings-icon"><Rocket /></div><div><span className="overline">XODUS NEXUS</span><h2>{data.launcherUpdate?.currentVersion ?? 'Development build'}</h2><p>{data.launcherUpdate?.latestVersion ? `Version ${data.launcherUpdate.latestVersion} is available.` : 'Check GitHub for launcher updates.'}</p></div></div>
       <div className="button-row">
-        {data.launcherUpdate?.releaseUrl ? <a className="primary" href={data.launcherUpdate.releaseUrl} target="_blank" rel="noreferrer"><ArrowDownToLine />Download update</a> : null}
-        <button className="secondary" disabled={data.launcherUpdate?.checking} onClick={() => invoke('update-check', () => window.launcher.checkLauncherUpdate(), 'Update check finished.')}>{data.launcherUpdate?.checking ? <LoaderCircle className="spin" /> : <RefreshCw />}Check for updates</button>
+        {data.launcherUpdate?.latestVersion && data.launcherUpdate.canInstall && !data.launcherUpdate.restartRequired ? <button className="primary" disabled={data.launcherUpdate.updating || Boolean(busy)} onClick={() => { if (window.confirm('Install the verified launcher update? The current AppImage will be backed up. Games and downloads must be stopped first.')) void invoke('launcher-install', () => window.launcher.installLauncherUpdate()); }}><ArrowDownToLine />{data.launcherUpdate.updating ? 'Updating…' : 'Install launcher update'}</button> : null}
+        {data.launcherUpdate?.releaseUrl && !data.launcherUpdate.canInstall ? <a className="primary" href={data.launcherUpdate.releaseUrl} target="_blank" rel="noreferrer"><ArrowDownToLine />Download update</a> : null}
+        {data.launcherUpdate?.restartRequired ? <button className="primary" onClick={() => invoke('launcher-restart', () => window.launcher.restartLauncher())}><RefreshCw />Restart launcher</button> : null}
+        {data.launcherUpdate?.canRollback ? <button className="secondary" disabled={data.launcherUpdate.updating || Boolean(busy)} onClick={() => { if (window.confirm('Restore the previous launcher AppImage? Your settings and games will not change.')) void invoke('launcher-rollback', () => window.launcher.rollbackLauncherUpdate()); }}>Restore previous launcher</button> : null}
+        <button className="secondary" disabled={data.launcherUpdate?.checking || data.launcherUpdate?.updating || data.launcherUpdate?.restartRequired} onClick={() => invoke('update-check', () => window.launcher.checkLauncherUpdate(), 'Update check finished.')}>{data.launcherUpdate?.checking ? <LoaderCircle className="spin" /> : <RefreshCw />}Check for updates</button>
       </div>
     </section>
 
@@ -449,7 +490,7 @@ export function SettingsPage({ data, toast }: { data: AppSnapshot; toast: (value
     </section>
 
     <section className="settings-card">
-      <div className="settings-heading"><div className="settings-icon"><Terminal /></div><div><h2>Xodus backend</h2><p>{data.backend.version ? `Nexus backend ${data.backend.version}` : data.backend.available ? 'Ready to use' : 'Install the prebuilt Nexus backend'}</p></div><span className={`status-label ${data.backend.available ? 'ready' : 'off'}`}><StatusDot tone={data.backend.available ? 'green' : 'red'} />{data.backend.available ? 'VALIDATED' : 'OFFLINE'}</span></div>
+      <div className="settings-heading"><div className="settings-icon"><Terminal /></div><div><h2>Xodus backend</h2><p>{data.backend.version ? `Nexus backend ${data.backend.version}` : data.backend.available ? `Backend CLI ${data.backend.capabilities.version ?? 'unknown version'}` : 'Install the prebuilt Nexus backend'}</p></div><span className={`status-label ${data.backend.available ? 'ready' : 'off'}`}><StatusDot tone={data.backend.available ? 'green' : 'red'} />{data.backend.available ? 'VALIDATED' : 'OFFLINE'}</span></div>
       {data.backend.blockReason ? <div className="alert amber"><CircleAlert /><span>{data.backend.blockReason}</span></div> : null}
       {data.backend.phase ? <p className="runtime-phase">{data.backend.phase}</p> : null}
       <div className="button-row end"><button className="secondary" disabled={Boolean(busy) || data.backend.checking || data.backend.updating} onClick={() => invoke('backend-check', () => window.launcher.checkBackendUpdate())}>{busy === 'backend-check' || data.backend.checking ? <LoaderCircle className="spin" /> : <RefreshCw />}Check for updates</button>{data.backend.releaseAvailable && data.backend.updateAvailable ? <button className="primary" disabled={Boolean(busy) || data.backend.updating || data.backend.checking} onClick={() => invoke('backend-update', () => window.launcher.updateBackend(), 'The Nexus backend was verified, installed and activated.')}>{busy === 'backend-update' || data.backend.updating ? <LoaderCircle className="spin" /> : <ArrowDownToLine />}{data.backend.available ? 'Update backend' : 'Install backend'}</button> : null}</div>
@@ -556,23 +597,18 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const activeCount = data.downloads.filter((task) => task.status === 'running').length;
+
   const searchResults = useMemo(() => search.trim() ? data.games.filter((game) => `${game.title} ${game.storeId ?? ''}`.toLowerCase().includes(search.toLowerCase())) : [], [data.games, search]);
-  const accountTitle = data.auth.username ?? (data.auth.stored === true ? 'Microsoft account' : 'Sign in');
+
   function action(fn: () => Promise<unknown>, success?: string) { void fn().then(() => success && setToast({ kind: 'success', message: success })).catch((error) => setToast({ kind: 'error', message: errorMessage(error) })); }
 
   if (loading) return <div className="boot"><div className="brand-mark">X</div><LoaderCircle className="spin" /><span>Loading Xodus Nexus</span></div>;
   return <div className="app-shell">
     {!data.settings.firstRunCompleted ? <FirstRunWizard data={data} toast={(value) => setToast(value)} /> : null}
-    <aside className="sidebar">
-      <button className="account-summary" onClick={() => setPage('settings')}><div className="account-avatar"><CircleUserRound /></div><span><strong>{accountTitle}</strong><small>{data.auth.stored === true ? 'Credentials stored' : data.auth.stored === false ? 'Not signed in' : 'Status unavailable'}</small></span><ChevronRight /></button>
-      <nav><NavItem active={page === 'home'} icon={<Home />} label="Home" onClick={() => setPage('home')} /><NavItem active={page === 'store'} icon={<Store />} label="Store" onClick={() => setPage('store')} /><NavItem active={page === 'library'} icon={<Library />} label="My Library" onClick={() => setPage('library')} /><NavItem active={page === 'downloads'} icon={<Download />} label="Install Queue" badge={activeCount} onClick={() => setPage('downloads')} /></nav>
-      {data.games.length > 0 ? <div className="recents"><span>Most recent</span>{data.games.slice(0, 5).map((game) => <button key={game.id} onClick={() => setPage('library')}><Cover game={game} /><strong>{game.title}</strong></button>)}</div> : null}
-      <div className="sidebar-bottom"><NavItem active={page === 'settings'} icon={<Cog />} label="Settings" onClick={() => setPage('settings')} /><button className="queue-summary" onClick={() => setPage('downloads')}><Download /><span><strong>Install Queue</strong><small>{activeCount ? `${activeCount} active installation${activeCount === 1 ? '' : 's'}` : 'Manage installations'}</small></span></button></div>
-    </aside>
+    <Sidebar data={data} page={page} go={setPage} />
 
     <section className="content-shell">
-      <header className="topbar"><div className="search-box"><Search /><input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && search.trim().length >= 2) { setSubmittedSearch(search.trim()); setPage('store'); } }} placeholder="Search games, add-ons and your library" />{search ? <button onClick={() => setSearch('')}><X /></button> : null}{searchResults.length > 0 && page !== 'store' ? <div className="search-results">{searchResults.map((game) => <button key={game.id} onClick={() => { setSearch(''); setPage('library'); }}><Cover game={game} /><span><strong>{game.title}</strong><small>{game.storeId ?? game.path}</small></span></button>)}</div> : null}</div><div className="top-status"><StatusDot tone={data.backend.available ? 'green' : 'red'} /><span>{data.backend.available ? 'Xodus ready' : 'Backend offline'}</span><button onClick={() => setPage('settings')}><Settings2 /></button></div></header>
+      <header className="topbar"><div className="search-box"><Search /><input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && search.trim().length >= 2) { setSubmittedSearch(search.trim()); setPage('store'); } }} placeholder="Search games, add-ons and your library" />{search ? <button onClick={() => setSearch('')}><X /></button> : null}{searchResults.length > 0 && page !== 'store' ? <div className="search-results">{searchResults.map((game) => <button key={game.id} onClick={() => { setSearch(''); setPage('library'); }}><Cover game={game} /><span><strong>{game.title}</strong><small>{game.storeId ?? game.path}</small></span></button>)}</div> : null}</div><TopStatus data={data} go={setPage} /></header>
       <div className="page-scroll">{page === 'home' ? <HomePage data={data} go={setPage} action={action} /> : null}{page === 'store' ? <StorePage data={data} toast={setToast} go={setPage} initialQuery={submittedSearch} /> : null}{page === 'library' ? <LibraryPage data={data} toast={setToast} /> : null}{page === 'downloads' ? <DownloadsPage data={data} toast={setToast} /> : null}{page === 'settings' ? <SettingsPage data={data} toast={setToast} /> : null}</div>
     </section>
     {toast ? <div className={`toast ${toast.kind}`}>{toast.kind === 'success' ? <Check /> : toast.kind === 'error' ? <CircleAlert /> : <Terminal />}<span>{toast.message}</span><button onClick={() => setToast(undefined)}><X /></button></div> : null}
