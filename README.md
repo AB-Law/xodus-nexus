@@ -77,8 +77,9 @@ verified and may encounter compatibility issues.
 | Gears of War: E-Day | Yes | Playable online. |
 | Deep Rock Galactic | Yes | Playable online. |
 | Minecraft Dungeons II | Yes | Playable online. |
-| No Man's Sky | No | Stuck at loading. |
+| No Man's Sky | Yes | Playable online. |
 | Valor Mortis | Yes | Fully playable. |
+| Forza Horizon 6 | Yes | Playable online. |
 
 [Full compatibility list](https://github.com/domsvoboda/xodus-nexus/wiki/Compatibility)
 

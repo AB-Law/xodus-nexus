@@ -26,9 +26,18 @@ Never copy a candidate DLL into an active or production prefix.
 - `async-completion-lifetime-probe.c`: 400 completions with block deletion,
   result consumption and block reuse (2,805 checks). Callback changes for a
   reused block are made **before** Begin, matching the native snapshot contract.
+- `async-schedule-probe.c`: uninitialized/null/detached scheduling, valid provider
+  work, terminal-state rejection and original failure preservation (16 checks).
+  A vectored fault handler records the released DLL's read-0x20 crash without
+  opening a debugger. No real game, account, cloud or successful-save claim.
 - `winrt-json-probe.c`: real WinRT JSON activation, Parse, GetObject and
   nested array/object access (9 checks). Required by XUser endpoint parsing;
   HTTP 200 alone does not establish successful account initialization.
+- `gamesave-files-probe.c`: actual file-provider async completion, retained
+  synthetic user, restricted-handle sync child, stable UTF-8 folder, nested
+  containers and quota computed from real files (21 checks). Explicit offline
+  mode; no real account/network/cloud-success claim. The runner waits for final
+  post-exit synchronization before cleaning its disposable prefix.
 - `token-dispatch-probe.c`: synthetic delayed authorization failure through
   the real ANSI/UTF-16 token provider; manual Work dispatch must return without
   waiting for authorization. Checks completion and retained user lifetime when
