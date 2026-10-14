@@ -68,6 +68,11 @@ errors are shown in runtime-owned dialog windows on separate threads. Cancel is
 the default; save selection and device takeover always require a user choice.
 Callbacks supplied by the title are preserved individually, including context.
 Successful SDK initialization is not evidence of a successful cloud upload.
+Device takeover uses the SDK's `SyncLastSavedData` action: it synchronizes the
+last **completed** cloud save, not another device's pending progress. The dialog
+shows available pending/completed descriptors and warns that local files can be
+replaced. Missing completed-cloud metadata does not establish a usable profile.
+The adapter does not automatically recover a local backup or choose a rollback.
 
 Before normal `PFGameSaveFilesUninitializeAsync` cleanup, retained online users
 are uploaded through the original SDK with `ReleaseDeviceAsActive`. Cleanup runs

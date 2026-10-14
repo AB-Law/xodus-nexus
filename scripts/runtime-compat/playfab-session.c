@@ -88,9 +88,10 @@ static int choose(Dialog *dialog)
     const WCHAR *instruction,*first,*second;
     unsigned buttons=MB_YESNOCANCEL|MB_DEFBUTTON3|MB_ICONWARNING|MB_SETFOREGROUND|MB_TASKMODAL;
     if(dialog->kind==1) {
-        instruction=L"Continue on this device?";
-        first=L"Continue on this device";second=L"Retry";
-        wcscpy(text,L"Another device has an unfinished cloud-save session. Close the game on that device first.\n\nContinuing here prevents that device from uploading unsynchronized progress. No save version is selected by this confirmation.");
+        instruction=L"Synchronize the last completed cloud save?";
+        first=L"Sync last completed cloud save";second=L"Retry";
+        descriptor_text(&dialog->local,local,512);descriptor_text(&dialog->remote,remote,512);
+        swprintf(text,1800,L"Another device has an unfinished cloud-save session. Close the game on that device and let its upload finish first.\n\nSynchronizing here uses the last completed cloud save, NOT that device's unfinished progress. Local files may be replaced; if no completed cloud save exists, a profile may be missing. That device can no longer upload its unfinished session. Cancel makes no selection.\n\nUNFINISHED SESSION\n%ls\n\nLAST COMPLETED CLOUD SAVE\n%ls",local,remote);
     } else if(dialog->kind==2) {
         instruction=L"Choose which save to keep";first=L"Use cloud save";second=L"Use local save";
         descriptor_text(&dialog->local,local,512);descriptor_text(&dialog->remote,remote,512);
@@ -127,7 +128,7 @@ static int choose(Dialog *dialog)
         if(SUCCEEDED(hr)) return selected==100?1:selected==101?2:0;
     } else if(controls) FreeLibrary(controls);
     /* Explicit labels in fallback text, never rely on ambiguous Yes/No. */
-    if(second) wcscat(text,dialog->kind==2?L"\n\nYES = Cloud save; NO = Local save; CANCEL = Neither":L"\n\nYES = Continue here; NO = Retry; CANCEL = Stop synchronization");
+    if(second) wcscat(text,dialog->kind==2?L"\n\nYES = Cloud save; NO = Local save; CANCEL = Neither":L"\n\nYES = Sync last completed cloud save; NO = Retry; CANCEL = Stop synchronization");
     int selected=MessageBoxW(NULL,text,L"Nexus runtime — Cloud saves",buttons);
     return selected==IDYES||selected==IDRETRY?1:selected==IDNO?2:0;
 #endif
