@@ -462,7 +462,7 @@ async function launchGame(id: string): Promise<void> {
       env: environment,
       onLine: addGameLog,
       maxOutput: 8_000_000,
-    });
+    }, { stopPrefix: protonRunner?.stopPrefix });
     operations.set(operationId, tracked.child);
     gameProcesses.set(operationId, tracked);
     gameOperation.status = 'running';
@@ -472,9 +472,9 @@ async function launchGame(id: string): Promise<void> {
       addGameLog(`The Xodus process exited with code ${result.code}.`);
       if (!gameOperation || gameOperation.id !== operationId) return;
       gameOperation.finishedAt = new Date().toISOString();
-      if (result.code === 0) {
+      if (result.code === 0 || gameOperation.status === 'stopping') {
         gameOperation.status = 'complete';
-        gameOperation.phase = 'The game has exited.';
+        gameOperation.phase = result.code === 0 ? 'The game has exited.' : 'The game was stopped. Forced shutdown may leave unsynchronized saves.';
       } else {
         const detail = result.output.split('\n').map((line) => line.trim()).filter(Boolean).slice(-6).join(' | ');
         gameOperation.status = 'failed';
@@ -495,9 +495,9 @@ async function launchGame(id: string): Promise<void> {
         await serviceSession.stop().catch((error) => addGameLog(`Account service cleanup failed: ${(error as Error).message}`));
         serviceSessions.delete(operationId);
       }
+      await tracked.cleanup().catch((error) => console.error('Game service cleanup failed:', error));
       gameLog.flush();
       launchLog.end();
-      await tracked.cleanup().catch((error) => console.error('Game service cleanup failed:', error));
       emitSnapshot();
     });
   } catch (error) {

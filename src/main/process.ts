@@ -8,6 +8,10 @@ export interface RunOptions {
   onLine?: (line: string) => void;
   maxOutput?: number;
   terminal?: boolean;
+  /** Give a game its own Linux process group; downloads retain their defaults. */
+  detached?: boolean;
+  /** Optional bounded drain after the child exits but inherited pipes stay open. */
+  outputDrainMs?: number;
 }
 
 export interface RunResult {
@@ -61,6 +65,7 @@ export function spawnTracked(command: string, args: string[], options: RunOption
     cwd: options.cwd,
     env: options.terminal ? { ...(options.env ?? process.env), TERM: 'xterm' } : options.env ?? process.env,
     shell: false,
+    detached: options.detached ?? false,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   const chunks: string[] = [];
@@ -83,10 +88,34 @@ export function spawnTracked(command: string, args: string[], options: RunOption
   child.stdout.on('data', consume);
   child.stderr.on('data', consume);
   const result = new Promise<RunResult>((resolve, reject) => {
-    child.once('error', reject);
-    child.once('close', (code) => {
+    let finished = false;
+    let drain: ReturnType<typeof setTimeout> | undefined;
+    const finish = (code: number | null) => {
+      if (finished) return;
+      finished = true;
+      if (drain) clearTimeout(drain);
       if (buffered.trim()) options.onLine?.(buffered.trimEnd());
+      buffered = '';
       resolve({ code: code ?? -1, output: chunks.join('') });
+    };
+    child.once('error', (error) => {
+      finished = true;
+      if (drain) clearTimeout(drain);
+      reject(error);
+    });
+    child.once('exit', (code) => {
+      if (options.outputDrainMs === undefined || finished) return;
+      drain = setTimeout(() => {
+        // Only selected callers opt in. An inherited pipe is not evidence that
+        // its original process is still alive; retain the real exit status.
+        child.stdout.destroy();
+        child.stderr.destroy();
+        child.stdin.destroy();
+        finish(code);
+      }, options.outputDrainMs);
+    });
+    child.once('close', (code) => {
+      finish(code);
     });
   });
   return { child, result };
