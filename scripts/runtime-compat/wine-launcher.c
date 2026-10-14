@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MIT
  * Runtime staging in owner-private Xodus launch views. No title selection,
- * registry version claims, original-game writes or import-table hooks.
+ * original-game writes or import-table hooks. Temporary version metadata
+ * is explicitly opt-in through NEXUS_GAMING_SERVICES_VERSION_OVERRIDE.
  */
 #define _GNU_SOURCE
 #include <dirent.h>
@@ -14,6 +15,7 @@
 #include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include "pgs-exports.h"
 static uint16_t u16(const unsigned char *p) { return p[0] | (uint16_t)p[1] << 8; }
@@ -198,6 +200,30 @@ static void filter_map(const char *key)
     if (setenv(key, output, 1)) { perror("Nexus runtime file map"); exit(70); }
     free(output);
 }
+static int version_override(const char *binary, const char *loader)
+{
+    const char *enabled = getenv("NEXUS_GAMING_SERVICES_VERSION_OVERRIDE");
+    if (!enabled || strcmp(enabled, "1")) return 0;
+    const char *prefix = getenv("WINEPREFIX");
+    struct stat st;
+    if (!prefix || prefix[0] != '/' || lstat(prefix, &st) || !S_ISDIR(st.st_mode) || st.st_uid != geteuid() || (st.st_mode & 0022)) {
+        fprintf(stderr, "Nexus runtime: explicit owner-only-write WINEPREFIX required for version override.\n"); return -1;
+    }
+    char helper[PATH_MAX];
+    if (snprintf(helper, sizeof(helper), "%s/../share/xodus-nexus/compat/gaming-services-version.exe", binary) >= (int)sizeof(helper)) return -1;
+    pid_t child = fork();
+    if (child < 0) return -1;
+    if (!child) {
+        /* Bootstrap is a normal runtime executable, not a mapped game. */
+        unsetenv("WINE_DLL_FILE_MAP"); unsetenv("WINE_EXE_FILE_MAP");
+        unsetenv("XODUS_SOCKET"); unsetenv("XODUS_BRIDGE_KEY"); unsetenv("XODUS_BRIDGE_PORT");
+        execl(loader, loader, helper, "apply", (char *)NULL);
+        _exit(70);
+    }
+    int status;
+    while (waitpid(child, &status, 0) < 0) if (errno != EINTR) return -1;
+    return WIFEXITED(status) && !WEXITSTATUS(status) ? 0 : -1;
+}
 int main(int argc, char **argv)
 {
     char binary[PATH_MAX], loader[PATH_MAX], proxyPath[PATH_MAX], *slash;
@@ -207,6 +233,8 @@ int main(int argc, char **argv)
     if (snprintf(loader, sizeof(loader), "%s/wine.nexus-original", binary) >= (int)sizeof(loader) ||
         snprintf(proxyPath, sizeof(proxyPath), "%s/../share/xodus-nexus/compat/PlayFabGameSave.dll", binary) >= (int)sizeof(proxyPath)) return 70;
     struct stat executable;
+    if (argc > 1 && argv[1][0] == '/' && !lstat(argv[1], &executable) && S_ISREG(executable.st_mode) &&
+        getenv("WINE_DLL_FILE_MAP") && version_override(binary, loader)) return 70;
     if (argc > 1 && argv[1][0] == '/' && !lstat(argv[1], &executable) && S_ISREG(executable.st_mode) &&
         getenv("WINE_DLL_FILE_MAP") && strcmp(getenv("NEXUS_PLAYFAB_ADAPTER") ? getenv("NEXUS_PLAYFAB_ADAPTER") : "", "0")) {
         char *view = strdup(argv[1]); if (!view) return 70;

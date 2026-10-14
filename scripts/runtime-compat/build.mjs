@@ -24,13 +24,15 @@ export async function buildCompatibility(output) {
     path.join(source, 'playfab-save-folder.c'), path.join(source, 'playfab-save-folder.def')]);
   run('gcc', ['-O2', '-Wall', '-Wextra', '-Werror', '-I', output,
     '-o', path.join(output, 'wine-launcher'), path.join(source, 'wine-launcher.c')]);
+  run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-Wextra', '-Werror', '-Wl,--no-insert-timestamp',
+    '-o', path.join(output, 'gaming-services-version.exe'), path.join(source, 'gaming-services-version.c'), '-ladvapi32']);
   const elf = execFileSync('objdump', ['-T', path.join(output, 'wine-launcher')], { env, encoding: 'utf8' });
   for (const [, major, minor] of elf.matchAll(/GLIBC_(\d+)\.(\d+)/g)) {
     if (Number(major) > 2 || (Number(major) === 2 && Number(minor) > 35))
       throw new Error('Wine runtime shim must remain compatible with glibc <= 2.35');
   }
   const hashes = {};
-  for (const name of ['PlayFabGameSave.dll', 'wine-launcher'])
+  for (const name of ['PlayFabGameSave.dll', 'wine-launcher', 'gaming-services-version.exe'])
     hashes[name] = createHash('sha256').update(await fs.readFile(path.join(output, name))).digest('hex');
   await fs.copyFile(path.join(source, '../../LICENSE'), path.join(output, 'runtime-compat-LICENSE'));
   return hashes;

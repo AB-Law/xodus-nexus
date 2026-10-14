@@ -18,7 +18,7 @@ if (!manifest.components || Object.keys(manifest.components).some(name => !compo
 for (const name of componentNames) {
   if (!/^[a-f0-9]{64}$/.test(manifest.components[name] ?? '') || await shaFile(path.join(options.components, name)) !== manifest.components[name]) throw new Error(`Component checksum mismatch: ${name}`);
 }
-const compatibilityNames = ['PlayFabGameSave.dll', 'wine-launcher'];
+const compatibilityNames = ['PlayFabGameSave.dll', 'wine-launcher', 'gaming-services-version.exe'];
 if (!manifest.runtimeCompatibility || Object.keys(manifest.runtimeCompatibility).sort().join() !== compatibilityNames.sort().join())
   throw new Error('Missing or unknown runtime compatibility component');
 for (const name of compatibilityNames) {
@@ -98,6 +98,7 @@ if (baseWineSha256 !== await shaFile(path.join(options.output, 'files/bin/wine')
 // remains unchanged. The runtime shim execs it for every ordinary Wine command.
 await safeParent('files/share/xodus-nexus/compat/PlayFabGameSave.dll');
 await fs.copyFile(path.join(options.components, 'PlayFabGameSave.dll'), path.join(options.output, 'files/share/xodus-nexus/compat/PlayFabGameSave.dll'), fs.constants.COPYFILE_EXCL);
+await fs.copyFile(path.join(options.components, 'gaming-services-version.exe'), path.join(options.output, 'files/share/xodus-nexus/compat/gaming-services-version.exe'), fs.constants.COPYFILE_EXCL);
 const originalLoader = path.join(options.output, 'files/bin/wine.nexus-original');
 try { await fs.lstat(originalLoader); throw new Error('Base already contains a runtime Wine shim'); }
 catch (e) { if (e.code !== 'ENOENT') throw e; }

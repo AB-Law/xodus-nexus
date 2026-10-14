@@ -50,7 +50,8 @@ for (const patch of lock.patches) {
   if (await shaFile(path.join(project, patch.file)) !== patch.sha256) throw new Error(`Patch checksum mismatch: ${patch.file}`);
 }
 const compatibilitySources = ['scripts/runtime-compat/build.mjs', 'scripts/runtime-compat/playfab-save-folder.c',
-  'scripts/runtime-compat/playfab-save-folder.def', 'scripts/runtime-compat/wine-launcher.c'];
+  'scripts/runtime-compat/playfab-save-folder.def', 'scripts/runtime-compat/wine-launcher.c',
+  'scripts/runtime-compat/gaming-services-version.c'];
 if (Object.keys(lock.runtimeCompatibilitySources ?? {}).sort().join() !== compatibilitySources.sort().join())
   throw new Error('Missing or unknown runtime compatibility source lock');
 for (const [file, expected] of Object.entries(lock.runtimeCompatibilitySources)) {

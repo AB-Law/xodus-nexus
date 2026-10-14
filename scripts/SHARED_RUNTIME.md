@@ -20,6 +20,22 @@ default discovery. A failed parse does not publish initialized state, and a
 subsequent valid initialization can retry. Initializations are serialized.
 These fixes do not establish a Gaming Services version or bypass its checks.
 
+### Temporary Gaming Services version override
+
+For isolated experiments, `NEXUS_GAMING_SERVICES_VERSION_OVERRIDE=1` enables
+a runtime-owned bootstrap before any materialized game executable. It writes
+`CurrentVersion` and `AvailableVersion` as REG_QWORD `0x0026007569790000`, decoded
+by the native GDK frontend as **38.117.27001.0**. This is an explicitly hardcoded
+compatibility workaround, NOT a Microsoft Gaming Services installation, API
+implementation, or evidence of equivalent capabilities. No title matching or
+launcher modification is involved. It defaults OFF and requires an explicit
+owner-only-write `WINEPREFIX`; use a disposable test prefix. It overwrites only
+the two version values and logs the override, leaving authentication, ownership,
+cloud and service/provider settings unchanged. Disabling the environment switch
+stops further writes but does not undo registry values already stored in that
+prefix; discard the disposable prefix or restore its pre-test registry backup.
+Do not promote this as a proper Gaming Services implementation.
+
 ### PlayFab Game Saves compatibility
 
 The runtime includes a native SDK forwarding adapter, not a replacement cloud

@@ -18,6 +18,7 @@ before(async () => {
   loader = path.join(files, 'bin/wine');
   await fs.copyFile(path.join(components, 'wine-launcher'), loader);
   await fs.copyFile(path.join(components, 'PlayFabGameSave.dll'), path.join(files, 'share/xodus-nexus/compat/PlayFabGameSave.dll'));
+  await fs.copyFile(path.join(components, 'gaming-services-version.exe'), path.join(files, 'share/xodus-nexus/compat/gaming-services-version.exe'));
   await fs.writeFile(path.join(files, 'bin/wine.nexus-original'),
     '#!/bin/sh\nprintf "%s\\n%s\\n%s\\n" "$WINE_DLL_FILE_MAP" "$WINE_EXE_FILE_MAP" "$WINEDLLOVERRIDES"\nexit 23\n', { mode: 0o755 });
   const definition = await fs.readFile(path.join(source, 'playfab-save-folder.def'), 'utf8');
@@ -96,6 +97,29 @@ test('malformed or different SDKs are left unchanged; existing alias is not over
     assert.equal(f.run().status, 70);
     assert.equal(await fs.readFile(path.join(f.view, 'nexus_pgs_native.dll'), 'utf8'), 'owner collision');
   } finally { await f.close(); }
+});
+test('version override requires explicit prefix and fails closed if bootstrap fails', async () => {
+  const f = await fixture();
+  try {
+    assert.equal(f.run({ NEXUS_GAMING_SERVICES_VERSION_OVERRIDE: '1', WINEPREFIX: '' }).status, 70);
+    const result = f.run({ NEXUS_GAMING_SERVICES_VERSION_OVERRIDE: '1', WINEPREFIX: f.view });
+    assert.equal(result.status, 70, 'failed bootstrap must not start the game');
+    assert.deepEqual(result.stdout.trimEnd().split('\n'), ['', '', 'winhttp=b'], 'bootstrap never inherits game maps');
+    assert.equal((await fs.lstat(path.join(f.view, 'PlayFabGameSave.dll'))).isSymbolicLink(), true);
+    assert.equal(f.run({ NEXUS_GAMING_SERVICES_VERSION_OVERRIDE: '1', WINEPREFIX: '' }, ['--version']).status, 23);
+  } finally { await f.close(); }
+});
+test('successful version bootstrap is independent of SDK adapter and preserves game maps', async () => {
+  const f = await fixture();
+  const original = path.join(path.dirname(loader), 'wine.nexus-original');
+  const bytes = await fs.readFile(original);
+  try {
+    await fs.writeFile(original, '#!/bin/sh\nif [ "$2" = "apply" ]; then\n  test -z "$WINE_DLL_FILE_MAP" && test -z "$WINE_EXE_FILE_MAP" || exit 72\n  printf "bootstrap-ok\\n"\n  exit 0\nfi\nprintf "%s\\n%s\\n" "$WINE_DLL_FILE_MAP" "$WINE_EXE_FILE_MAP"\nexit 23\n');
+    const result = f.run({ NEXUS_GAMING_SERVICES_VERSION_OVERRIDE: '1', WINEPREFIX: f.view, NEXUS_PLAYFAB_ADAPTER: '0' });
+    assert.equal(result.status, 23, result.stderr);
+    assert.deepEqual(result.stdout.trimEnd().split('\n'), ['bootstrap-ok', f.env.WINE_DLL_FILE_MAP, f.env.WINE_EXE_FILE_MAP]);
+    assert.equal((await fs.lstat(path.join(f.view, 'PlayFabGameSave.dll'))).isSymbolicLink(), true);
+  } finally { await fs.writeFile(original, bytes); await f.close(); }
 });
 test('backend default 0755 view is sealed before SDK staging', async () => {
   const f = await fixture();

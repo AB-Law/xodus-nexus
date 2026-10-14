@@ -16,7 +16,7 @@ async function fixture() {
   for (const file of [path.join(base, 'files/bin/wine'), path.join(base, 'proton')]) await fs.writeFile(file, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   await fs.mkdir(components);
   const manifest = { components: {}, runtimeCompatibility: {} };
-  for (const name of ['PlayFabGameSave.dll', 'wine-launcher']) {
+  for (const name of ['PlayFabGameSave.dll', 'wine-launcher', 'gaming-services-version.exe']) {
     const bytes = Buffer.from(`new-${name}`);
     await fs.writeFile(path.join(components, name), bytes);
     manifest.runtimeCompatibility[name] = createHash('sha256').update(bytes).digest('hex');
@@ -42,6 +42,7 @@ test('assembly replaces symlink entries without altering base/old runtime', asyn
     assert.equal(await fs.readFile(path.join(f.output, 'files/bin/wine.nexus-original'), 'utf8'), '#!/bin/sh\nexit 0\n');
     assert.equal(await fs.readFile(path.join(f.output, 'files/bin/wine'), 'utf8'), 'new-wine-launcher');
     assert.equal(await fs.readFile(path.join(f.output, 'files/share/xodus-nexus/compat/PlayFabGameSave.dll'), 'utf8'), 'new-PlayFabGameSave.dll');
+    assert.equal(await fs.readFile(path.join(f.output, 'files/share/xodus-nexus/compat/gaming-services-version.exe'), 'utf8'), 'new-gaming-services-version.exe');
     assert.equal(await fs.readFile(previous, 'utf8'), 'previous runtime');
     assert.equal(await fs.readlink(path.join(f.base, 'files/lib/wine/x86_64-windows/xgameruntime.dll')), previous);
     assert.equal(await fs.readFile(path.join(f.output, 'files/lib/wine/x86_64-windows/xgameruntime.dll'), 'utf8'), 'new-xgameruntime.dll');
