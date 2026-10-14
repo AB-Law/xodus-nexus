@@ -108,6 +108,7 @@ export async function startXodusService(
   backendBinary: string,
   userData: string,
   onStatus: (message: string) => void,
+  signal?: AbortSignal,
 ): Promise<XodusServiceSession> {
   const binary = path.join(path.dirname(backendBinary), 'xodus-service');
   try { await fs.access(binary, constants.X_OK); }
@@ -143,12 +144,17 @@ export async function startXodusService(
       if (exitCode === null) child.kill('SIGTERM');
     }
     await fs.rm(runtimeDir, { recursive: true, force: true });
+    signal?.removeEventListener('abort', aborted);
   };
+
+  const aborted = () => { child.kill('SIGINT'); };
+  signal?.addEventListener('abort', aborted, { once: true });
 
   try {
     onStatus('Connecting the Xodus account service…');
     const deadline = Date.now() + 90_000;
     while (Date.now() < deadline) {
+      if (signal?.aborted) throw new Error('Account service operation cancelled.');
       if (spawnError) throw new Error(`Could not start xodus-service: ${spawnError.message}`);
       if (await socketReady(socketPath)) {
         bridge = await startXodusBridge(socketPath);

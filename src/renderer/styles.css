@@ -78,6 +78,12 @@ code, .mono { font-family: "Cascadia Mono", "SFMono-Regular", monospace; }
 .top-status button { width: 34px; height: 34px; display: grid; place-items: center; border: 0; background: transparent; border-radius: 4px; cursor: pointer; }
 .top-status button:hover { background: #30343a; }
 .top-status svg { width: 18px; }
+.top-status .update-notice { width: auto; display: flex; gap: 6px; padding: 0 9px; color: #83c975; background: #25382a; white-space: nowrap; }
+.queue-summary.active { background: #303d30; border-left: 3px solid var(--green); }
+.game-update-badge { display: inline-block; color: #92d385; font-size: 10px; margin-top: 5px; }
+.game-update-status p { font-size: 11px; padding: 0 16px; }
+.diagnostic-dialog { width: min(1000px, 94vw); }
+.diagnostic-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 65vh; overflow: auto; background: #16191e; padding: 14px; font-size: 11px; user-select: text; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; flex: 0 0 auto; }
 .status-dot.amber { background: #e5b84e; box-shadow: 0 0 7px rgba(229,184,78,.4); }
 .status-dot.red { background: #e56868; box-shadow: none; }

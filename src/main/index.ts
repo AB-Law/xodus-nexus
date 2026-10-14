@@ -5,11 +5,11 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
-import type { AppSnapshot, AuthStatus, DownloadTask, Game, GameLaunchOptions, GameOperation, InstallRequest, LauncherUpdate, Settings } from '../shared/types.js';
-import { downloadFailure, isNewerVersion, progressBytesFromLine, progressFromLine, safeProductId } from '../shared/utils.js';
+import type { AppSnapshot, AuthStatus, DownloadTask, Game, GameLaunchOptions, GameOperation, GameUpdate, InstallRequest, Settings } from '../shared/types.js';
+import { downloadFailure, safeProductId } from '../shared/utils.js';
 import { demoDownloads, demoGames, demoLaunchOptions, demoLocales, demoSnapshot } from '../shared/demo-data.js';
 import { BackendManager } from './backend.js';
-import { run, spawnTracked } from './process.js';
+import { resolveScriptCommand, run, spawnTracked } from './process.js';
 import { inspectGameDirectory, StateStore } from './store.js';
 import { RuntimeManager } from './runtime.js';
 import { prepareProtonRunner, syncPrefixUserLocale, syncUnrealCultureGameIni } from './proton.js';
@@ -22,6 +22,10 @@ import { spawnGameProcess, type GameProcess } from './game-process.js';
 import { gameLocaleEnvironment, manifestLocales, manifestTitleId, supportedGameLocale } from './game-locale.js';
 import { antiCheatEnvironment } from './anti-cheat.js';
 import { gameLaunchArguments } from './game-launch.js';
+import { LauncherUpdater } from './launcher-update.js';
+import { readDiagnosticTail } from './diagnostic-log.js';
+import { queryGameUpdate } from './game-updates.js';
+import { DownloadProgress } from './download-progress.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -44,9 +48,11 @@ let authState: AppSnapshot['auth'] = {
 const catalog = new CatalogService();
 const demoMode = process.env.XODUS_DEMO === '1';
 const demoCoverUrls = new Map<string, string>();
-const RELEASES_API = 'https://api.github.com/repos/domsvoboda/xodus-nexus/releases/latest';
-const RELEASES_PAGE = 'https://github.com/domsvoboda/xodus-nexus/releases/latest';
-let launcherUpdate: LauncherUpdate = { currentVersion: app.getVersion(), checking: false };
+let launcherUpdater: LauncherUpdater;
+const gameUpdates: Record<string, GameUpdate> = {};
+let checkingGameUpdates = false;
+let gameUpdateController: AbortController | undefined;
+let gameUpdateJob: Promise<void> | undefined;
 let snapshotTimer: ReturnType<typeof setTimeout> | undefined;
 
 function snapshot(): AppSnapshot {
@@ -58,30 +64,46 @@ function snapshot(): AppSnapshot {
     downloads: structuredClone(store.downloads),
     settings: structuredClone(store.settings),
     auth: structuredClone(authState),
-    launcherUpdate: structuredClone(launcherUpdate),
+    launcherUpdate: structuredClone(launcherUpdater.state),
+    gameUpdates: structuredClone(gameUpdates),
+    downloadProgressSupported: resolveScriptCommand() !== null,
     gameOperation: gameOperation ? structuredClone(gameOperation) : undefined,
   };
 }
 
-// Checks the public GitHub release list; the launcher never downloads or
-// replaces itself, it only tells the user a newer AppImage exists.
 async function checkLauncherUpdate(): Promise<void> {
-  launcherUpdate = { ...launcherUpdate, checking: true };
-  emitSnapshot();
+  await launcherUpdater.check();
+}
+
+async function checkGameUpdates(id?: string): Promise<void> {
+  ensureIdle();
+  if (authState.stored !== true) throw new Error('Sign in before checking game updates.');
+  const binary = requireBackend('account');
+  const games = id ? store.games.filter(game => game.id === id) : [...store.games];
+  if (id && !games.length) throw new Error('Game not found.');
+  let session: XodusServiceSession | undefined;
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-updates-'));
+  checkingGameUpdates = true;
+  gameUpdateController = new AbortController();
   try {
-    const response = await fetch(RELEASES_API, { headers: { Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(15_000) });
-    const release = response.ok ? await response.json() as { tag_name?: unknown } : undefined;
-    const tag = typeof release?.tag_name === 'string' && release.tag_name.trim() ? release.tag_name.trim() : undefined;
-    const newer = tag ? isNewerVersion(tag, app.getVersion()) : false;
-    launcherUpdate = {
-      currentVersion: app.getVersion(),
-      latestVersion: newer && tag ? tag : undefined,
-      releaseUrl: newer ? RELEASES_PAGE : undefined,
-      checking: false,
-      checkedAt: new Date().toISOString(),
-    };
-  } catch {
-    launcherUpdate = { ...launcherUpdate, checking: false, checkedAt: new Date().toISOString() };
+    for (const game of games) gameUpdates[game.id] = { checking: true };
+    emitSnapshot();
+    session = await startXodusService(binary, temporary, () => {}, gameUpdateController.signal);
+    for (const game of games) {
+      if (gameUpdateController.signal.aborted) throw new Error('Update check cancelled.');
+      try {
+        const inspected = await inspectGameDirectory(game.path);
+        if (!inspected.storeId || !inspected.installedVersion) throw new Error('This manifest has no Store ID or installed package version.');
+        gameUpdates[game.id] = await queryGameUpdate(session.socketPath, inspected.storeId, inspected.installedVersion, gameUpdateController.signal);
+      } catch (error) { gameUpdates[game.id] = { checking: false, checkedAt: new Date().toISOString(), error: (error as Error).message }; }
+      emitSnapshot();
+    }
+  } catch (error) {
+    for (const game of games) if (gameUpdates[game.id]?.checking) gameUpdates[game.id] = { checking: false, error: (error as Error).message };
+    throw error;
+  } finally {
+    await session?.stop().catch(() => {}); await fs.rm(temporary, { recursive: true, force: true }).catch(() => {});
+    checkingGameUpdates = false; gameUpdateController = undefined; emitSnapshot();
   }
 }
 
@@ -109,6 +131,8 @@ function requireBackend(command: keyof typeof backend.current.capabilities): str
 }
 
 function ensureIdle(): void {
+  if (launcherUpdater?.state.updating) throw new Error('The launcher is being updated.');
+  if (checkingGameUpdates) throw new Error('A game update check is in progress.');
   if (gameRemovalInProgress) throw new Error('A game is being removed. Wait for it to finish.');
   if (operations.size > 0 || (gameOperation && ['preparing', 'running', 'stopping'].includes(gameOperation.status))) {
     throw new Error('Another Xodus operation is active. Wait for it to finish or stop it first.');
@@ -230,6 +254,7 @@ async function startInstall(request: InstallRequest, updateGame?: Game): Promise
     startedAt: new Date().toISOString(),
   };
   await store.addDownload(task);
+  if (!resolveScriptCommand()) task.log.push('Progress reporting is unavailable: install util-linux (script). The download will continue without a numeric progress bar.');
   emitSnapshot();
   // Show the game's Store box art in the queue while it downloads.
   void catalog.posters([productId], currentMarket()).then(async (posters) => {
@@ -241,34 +266,24 @@ async function startInstall(request: InstallRequest, updateGame?: Game): Promise
 
   const args = ['streaming', productId, destination, '--parallel', String(store.settings.parallelDownloads)];
   if (store.settings.market) args.push('--market', store.settings.market);
-  let largestTotal = 0;
+  const progressTracker = new DownloadProgress();
   let lastLoggedPercent = -1;
   const tracked = spawnTracked(binary, args, {
     terminal: true,
     onLine: (line) => {
-      const bytes = progressBytesFromLine(line);
+      const progress = progressTracker.update(line);
       // indicatif emits one bar per file and a separate aggregate bar. Do not
       // let a small file's 100% overwrite the whole game's progress.
-      if (bytes) {
-        const aggregate = /^\s*(?:Initializing|Downloading(?: ntfs\.\.\.)?)\s+\d/i.test(line);
-        if (aggregate || (largestTotal === 0 && bytes.total > 0)) {
-          if (aggregate) largestTotal = Math.max(largestTotal, bytes.total);
-          else if (bytes.total < largestTotal) return;
-          largestTotal = bytes.total;
-          task.downloadedBytes = bytes.current;
-          task.totalBytes = bytes.total;
-          task.progress = Math.min(100, (bytes.current / bytes.total) * 100);
-          task.transferRate = line.match(/[\d.]+\s*(?:KiB|MiB|GiB|TiB|B)\/s/i)?.[0];
-          task.phase = 'Downloading and extracting game files';
-          const percent = Math.floor(task.progress);
+      if (progress) {
+          Object.assign(task, progress);
+          const percent = Math.floor(task.progress ?? 0);
           if (percent !== lastLoggedPercent) {
             task.log.push(`${percent}% · ${line.trim().slice(0, 180)}`);
             lastLoggedPercent = percent;
           }
-        }
       } else {
-        const progress = progressFromLine(line);
-        if (progress !== null && largestTotal === 0) task.progress = progress;
+        // Ignore per-file progress after an aggregate counter was established.
+        if (/\d\s*(?:KiB|MiB|GiB|TiB|KB|MB|GB|B)\s*\/|\d%/.test(line)) return;
         task.phase = line.length > 160 ? `${line.slice(0, 157)}…` : line;
         task.log.push(line);
       }
@@ -291,7 +306,10 @@ async function startInstall(request: InstallRequest, updateGame?: Game): Promise
     if (task.status === 'complete') {
       try {
         const inspected = await inspectGameDirectory(destination);
-        if (updateGame) await store.patchGame(updateGame.id, { installState: inspected.installState, installMessage: inspected.installMessage, antiCheat: inspected.antiCheat, vcRedistEncrypted: inspected.vcRedistEncrypted, coverDataUrl: inspected.coverDataUrl, storeId: inspected.storeId ?? updateGame.storeId });
+        if (updateGame) {
+          await store.patchGame(updateGame.id, { installState: inspected.installState, installMessage: inspected.installMessage, antiCheat: inspected.antiCheat, vcRedistEncrypted: inspected.vcRedistEncrypted, coverDataUrl: inspected.coverDataUrl, storeId: inspected.storeId ?? updateGame.storeId, installedVersion: inspected.installedVersion, packageName: inspected.packageName });
+          delete gameUpdates[updateGame.id];
+        }
         else await store.upsertGame(inspected);
       } catch { /* Some packages do not expose metadata yet. */ }
     }
@@ -656,6 +674,11 @@ function registerDemoIpc(catalogMarket: () => string): void {
   ipcMain.handle('runtime-rollback-preview', () => {});
   ipcMain.handle('account-refresh', () => snapshot().auth);
   ipcMain.handle('check-launcher-update', () => snapshot().launcherUpdate);
+  ipcMain.handle('install-launcher-update', () => {});
+  ipcMain.handle('restart-launcher', () => {});
+  ipcMain.handle('rollback-launcher-update', () => {});
+  ipcMain.handle('check-game-updates', () => {});
+  ipcMain.handle('read-diagnostic-log', () => ({ name: 'demo.log', content: 'Demo diagnostic log. No account data.', truncated: false }));
   ipcMain.handle('login', () => {});
   ipcMain.handle('logout', () => {});
   ipcMain.handle('catalog-search', (_event, query: string, cursor?: string) => catalog.search(query, catalogMarket(), cursor));
@@ -719,6 +742,24 @@ function registerIpc(): void {
   });
   ipcMain.handle('account-refresh', () => refreshAccount());
   ipcMain.handle('check-launcher-update', async () => { await checkLauncherUpdate(); emitSnapshot(); return snapshot().launcherUpdate; });
+  ipcMain.handle('install-launcher-update', async () => { ensureIdle(); if (authState.running) throw new Error('Wait for sign-in to finish.'); await launcherUpdater.install(); });
+  ipcMain.handle('rollback-launcher-update', async () => { ensureIdle(); await launcherUpdater.rollback(); });
+  ipcMain.handle('restart-launcher', () => {
+    ensureIdle();
+    if (!launcherUpdater.state.restartRequired || !launcherUpdater.targetPath) throw new Error('No launcher restart is pending.');
+    // AppImage sets these again for the new mount. Do not reuse the old mount.
+    for (const key of ['APPIMAGE', 'APPDIR', 'ARGV0', 'OWD']) delete process.env[key];
+    app.relaunch({ execPath: launcherUpdater.targetPath, args: [] }); app.quit();
+  });
+  ipcMain.handle('check-game-updates', (_event, id?: string) => {
+    if (gameUpdateJob) return gameUpdateJob;
+    gameUpdateJob = checkGameUpdates(id).finally(() => { gameUpdateJob = undefined; });
+    return gameUpdateJob;
+  });
+  ipcMain.handle('read-diagnostic-log', (_event, id: string) => {
+    if (!gameOperation?.logPath || gameOperation.id !== id) throw new Error('This diagnostic log is no longer available.');
+    return readDiagnosticTail(gameOperation.logPath, path.join(path.dirname(store.settings.runtimeRoot), 'logs'));
+  });
   ipcMain.handle('login', () => runAuth('login'));
   ipcMain.handle('logout', () => runAuth('logout'));
   ipcMain.handle('catalog-search', (_event, query: string, cursor?: string) => {
@@ -968,6 +1009,8 @@ async function createWindow(): Promise<void> {
 app.whenReady().then(async () => {
   store = new StateStore(app.getPath('userData'));
   await store.load();
+  launcherUpdater = new LauncherUpdater(app.getVersion(), app.isPackaged ? process.env.APPIMAGE : undefined, app.getPath('userData'), scheduleSnapshot);
+  await launcherUpdater.initialize();
   if (demoMode) {
     // Demo mode: no backend build, no runtime, no account access. Library
     // covers are fetched from the live Store; Store pages are live too.
@@ -990,6 +1033,8 @@ app.whenReady().then(async () => {
         vcRedistEncrypted: inspected.vcRedistEncrypted,
         coverDataUrl: inspected.coverDataUrl,
         storeId: inspected.storeId ?? game.storeId,
+        installedVersion: inspected.installedVersion,
+        packageName: inspected.packageName,
       });
     } catch { /* Keep an unavailable imported entry visible. */ }
   }
@@ -1026,10 +1071,15 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', (event) => {
-  if (shutdownStarted || (operations.size === 0 && serviceSessions.size === 0)) return;
+  if (shutdownStarted || (operations.size === 0 && serviceSessions.size === 0 && !checkingGameUpdates && !launcherUpdater?.state.updating)) return;
   event.preventDefault();
   shutdownStarted = true;
   void (async () => {
+    gameUpdateController?.abort();
+    await gameUpdateJob?.catch(() => {});
+    launcherUpdater?.cancel();
+    // Let the atomic replacement transaction finish or safely fail before exit.
+    while (launcherUpdater?.state.updating) await new Promise(resolve => setTimeout(resolve, 100));
     for (const [id, child] of operations) if (!gameProcesses.has(id)) child.kill('SIGINT');
     const runningGames = [...gameProcesses.values()];
     await Promise.all(runningGames.map((process) => process.stop().catch((error) => console.error('Could not stop game on exit:', error))));

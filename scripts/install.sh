@@ -68,7 +68,7 @@ else
     arch)
       log "Installing prerequisites with pacman (Arch/CachyOS)…"
       install_deps pacman -S --needed --noconfirm \
-        curl tar xz fuse2 \
+        curl tar xz fuse2 util-linux \
         webkit2gtk-4.1 gtk3 nss libxtst desktop-file-utils || warn "Some packages failed to install; continuing."
       ;;
     debian)
@@ -80,18 +80,18 @@ else
       if apt-cache show libgtk-3-0t64 >/dev/null 2>&1; then nexus_gtk=libgtk-3-0t64; fi
       if apt-cache show libasound2t64 >/dev/null 2>&1; then nexus_alsa=libasound2t64; fi
       install_deps apt-get install -y \
-        curl tar xz-utils "$nexus_fuse" libwebkit2gtk-4.1-0 \
+        curl tar xz-utils util-linux bsdutils "$nexus_fuse" libwebkit2gtk-4.1-0 \
         "$nexus_gtk" libnss3 libxtst6 "$nexus_alsa" desktop-file-utils || warn "Some packages failed to install; continuing."
       ;;
     fedora)
       log "Installing prerequisites with dnf (Fedora)…"
       install_deps dnf install -y \
-        curl tar xz fuse \
+        curl tar xz fuse util-linux \
         webkit2gtk4.1 gtk3 nss libXtst alsa-lib desktop-file-utils || warn "Some packages failed to install; continuing."
       ;;
     *)
       warn "Unknown distribution '$distro'; install these before first run:"
-      warn "  curl tar xz fuse2 webkit2gtk-4.1 gtk3 nss libxtst"
+      warn "  curl tar xz fuse2 util-linux webkit2gtk-4.1 gtk3 nss libxtst"
       ;;
   esac
 fi

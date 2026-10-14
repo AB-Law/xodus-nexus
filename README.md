@@ -52,6 +52,11 @@ Settings, and sign in to your Microsoft account. Both components are downloaded
 as verified precompiled packages from Nexus Releases. No local compilation is
 needed; neither component is bundled with the AppImage.
 
+Launcher updates appear in the top-right corner. Install them from Settings and
+restart; the previous AppImage is kept for rollback. Backend and runtime updates
+are versioned independently. In My Library, **Check game updates** marks installed
+games with a newer verified package version without changing their files.
+
 [Downloads](https://github.com/domsvoboda/xodus-nexus/releases) ·
 [Setup & documentation](https://github.com/domsvoboda/xodus-nexus/wiki) ·
 [Report an issue](https://github.com/domsvoboda/xodus-nexus/issues)
