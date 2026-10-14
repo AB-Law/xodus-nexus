@@ -14,7 +14,7 @@ it('keeps backend health and launcher update notices distinct', () => {
 it('offers verified in-app install with independent backend version labels', () => {
   const data = demoSnapshot(); data.launcherUpdate = { currentVersion: '9.0.0', checking: false, latestVersion: '9.0.1', canInstall: true }; data.backend.version = '0.2.1';
   const html = renderToStaticMarkup(<SettingsPage data={data} toast={() => {}} />);
-  expect(html).toContain('Install launcher update'); expect(html).toContain('Nexus backend 0.2.1'); expect(html).toContain('versioned independently');
+  expect(html).toContain('Install launcher update'); expect(html).toContain('Nexus backend 0.2.1'); expect(html).not.toContain('Backend updates are versioned independently');
 });
 it('shows game update badges and a separate version-check action', () => {
   const data = demoSnapshot(); data.gameUpdates = { [data.games[0].id]: { checking: false, available: true, latestVersion: '1.10.0.0' } };

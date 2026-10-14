@@ -1,4 +1,9 @@
-# Nexus runtime — Xbox file saves and async fixes
+# Nexus runtime — sign-in, cloud saves and shutdown fixes
 
-- Add file-based Xbox save support, fixing No Man’s Sky’s loading screen and enabling cloud saves.
-- Fix invalid async scheduling that could crash games or interrupt PlayFab cloud saves.
+- Fix sign-in freezes in Minecraft Dungeons II and Gears of War: E-Day by uploading cloud saves in the background.
+- Fix async cancellation and completion-callback deadlocks that could prevent games, including Palworld, from closing.
+- Add cloud-save device handover and local/cloud conflict dialogs, preserving the selected progress for synchronization.
+- Improve cloud-save shutdown draining and session finalization.
+- Restore Xbox gamer pictures by correcting authenticated profile-image requests.
+
+**We recommend updating Nexus runtime from Settings.** These are shared runtime fixes, not game-specific workarounds, and other games may benefit too.
