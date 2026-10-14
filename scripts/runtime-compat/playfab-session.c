@@ -209,7 +209,7 @@ HRESULT nexus_session_initialized(HMODULE sdk)
         if(FAILED(hr))enabled=FALSE;
     }
     ReleaseSRWLockExclusive(&sessionLock);
-    if(FAILED(hr))note("session setup",hr);
+    note("session setup",hr);
     return hr;
 }
 HRESULT nexus_session_callbacks(HMODULE sdk,SaveCallbacks *callbacks)
@@ -264,6 +264,7 @@ static DWORD WINAPI finish_worker(void *arg)
         if(FAILED(hr)||!cloud)continue; /* Failed/offline AddUser owns no cloud lock. */
         ZeroMemory(&f->upload,sizeof(f->upload));f->upload.queue=f->queue;
         f->upload.context=f->done;f->upload.callback=signal_done;ResetEvent(f->done);
+        note("upload requested",S_OK);
         hr=upload_async(u->handle,1,&f->upload); /* ReleaseDeviceAsActive, official SDK enum. */
         if(SUCCEEDED(hr)) {
             WaitForSingleObject(f->done,INFINITE);
@@ -306,6 +307,7 @@ HRESULT nexus_session_cleanup(HMODULE sdk,NexusAsync *async)
 {
     HRESULT (WINAPI *native)(NexusAsync*)=(void*)GetProcAddress(sdk,"PFGameSaveFilesUninitializeAsync");
     if(!async)return E_INVALIDARG;
+    note("cleanup requested",S_OK);
     AcquireSRWLockExclusive(&sessionLock);
     if(!enabled){ReleaseSRWLockExclusive(&sessionLock);return native?native(async):HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);}
     if(closing){ReleaseSRWLockExclusive(&sessionLock);return E_ABORT;}
