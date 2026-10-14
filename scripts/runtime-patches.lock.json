@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "release",
+  "status": "development",
   "sources": {
     "wine": {
       "url": "https://github.com/xodus-gaming/wine.git",
@@ -105,15 +105,17 @@
     "dlls/xgameruntime/xgamesavefiles.h": "5f21c809107e8c67659899a43f98143a4cbba744be5731cc5c68c177fdc7956a"
   },
   "runtimeCompatibilitySources": {
-    "scripts/runtime-compat/build.mjs": "32e51aa31ac749c150cd5487b8ec67bd30185fc30c0c9f0b5b3c2df065e07a81",
-    "scripts/runtime-compat/playfab-save-folder.c": "e132a7d19add205fe79edbc6dcc47e6ee3f8fb0d3790a420f2d7dcffbcd46269",
-    "scripts/runtime-compat/playfab-save-folder.def": "0c71c093b13000dad48ac9830c9e6b0446fbcade0172357fce85680cb53217b6",
+    "scripts/runtime-compat/build.mjs": "ac150747020a3a29d1d436c2e2af879e66ea2fe9104d4d330534d6128ba3ea19",
+    "scripts/runtime-compat/playfab-save-folder.c": "fa63ceff1c77e2a1cdac5daae134ad46c29a20bf889208b5d73cfa808d53d56f",
+    "scripts/runtime-compat/playfab-save-folder.def": "a6f34058988f103cda4ae4f8774683a3ccbdf146fcc54af750b12335fc08cf8a",
     "scripts/runtime-compat/wine-launcher.c": "b93a9669cc5b8420a79c74ecaee619d699c0105e54d1237770cdfed4ea7fe2a7",
-    "scripts/runtime-compat/gaming-services-version.c": "3410efcc5c862085684323034b41131ce1bc6d44c36fb013ecc4b9dc197dd128"
+    "scripts/runtime-compat/gaming-services-version.c": "3410efcc5c862085684323034b41131ce1bc6d44c36fb013ecc4b9dc197dd128",
+    "scripts/runtime-compat/playfab-session.c": "e086c517e878b76ee0f2a29c783d4911d69b0991d3f85688b89b80fa2cb314b5",
+    "scripts/runtime-compat/playfab-session.h": "a7bf5c391f58314439925e4095c31b6e93776609c0563a5df0198012799b80e3"
   },
   "requiresBackendVersion": "0.2.1",
   "limitations": [
-    "PlayFab folder fallback supports the verified x64 40-export SDK ABI only; default-on temporary hardcoded Gaming Services version override is not a service implementation; full cloud roundtrips remain unverified",
+    "PlayFab in-process fallback supports the verified x64 40-export SDK ABI; missing device/conflict/failure UI and final upload before normal SDK cleanup are provided. Forced process termination is not a successful cloud sync. Default-on Gaming Services version metadata is not a Microsoft service implementation.",
     "Store update queries support the verified current-game no-update case; DLC, mandatory updates and downloads remain unsupported",
     "Incomplete XAsync cancellation/resource reclamation",
     "Partial package/event/privilege APIs are not complete GDK implementations",
