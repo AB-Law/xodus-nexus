@@ -73,6 +73,9 @@ int main(void) {
     IXThreadingImpl_XTaskQueueDispatch(threads,queue,XTaskQueuePort_Work,0);
     CHECK("repeat-status",IXThreadingImpl_XAsyncGetStatus(threads,&block,TRUE)==S_OK);
     CHECK("stable-folder",SUCCEEDED(IXGameSaveImpl3_XGameSaveFilesGetFolderWithUiResult(saves,&block,sizeof(again),again)) && !strcmp(folder,again));
+    /* Completion may wake the caller before the worker drops its last context
+     * reference. Assert eventual cleanup, not a scheduler timing accident. */
+    for(unsigned i=0;i<1000 && user.refs!=1;i++)Sleep(1);
     CHECK("retained-user-released",user.refs==1);
     IXThreadingImpl_XTaskQueueCloseHandle(threads,queue);
     printf("CHECKS %ld FAILURES %ld\n",checks,failures);
