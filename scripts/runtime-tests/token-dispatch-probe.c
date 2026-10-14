@@ -56,7 +56,7 @@ int main(void) {
         FAILED(query(&CLSID_XUserImpl, &IID_IXUserImpl, (void **)&users))) return 2;
     WindowsCreateString(L"https://example.invalid", 23, &relying_party);
     WindowsCreateString(L"JWT", 3, &token_type);
-    for (test = 0; test < 4; ++test) {
+    for (test = 0; test < 6; ++test) {
         struct XUser user = {0};
         XTaskQueueHandle queue;
         XAsyncBlock block = {0};
@@ -68,7 +68,8 @@ int main(void) {
         callbacks = 0;
         CHECK("manual-queue", IXThreadingImpl_XTaskQueueCreate(threads, XTaskQueueDispatchMode_Manual, XTaskQueueDispatchMode_Manual, &queue) == S_OK);
         block.queue = queue; block.callback = complete;
-        hr = test & 1 ? IXUserImpl_XUserGetTokenAndSignatureUtf16Async(users, &user, 0, L"GET", L"https://example.invalid", 0, NULL, 0, NULL, &block) :
+        hr = test >= 4 ? IXUserImpl_XUserGetGamerPictureAsync(users, &user, XUserGamerPictureSize_Medium, &block) :
+            test & 1 ? IXUserImpl_XUserGetTokenAndSignatureUtf16Async(users, &user, 0, L"GET", L"https://example.invalid", 0, NULL, 0, NULL, &block) :
             IXUserImpl_XUserGetTokenAndSignatureAsync(users, &user, 0, "GET", "https://example.invalid", 0, NULL, 0, NULL, &block);
         CHECK("begin", hr == S_OK);
         start = GetTickCount64();
@@ -79,7 +80,7 @@ int main(void) {
         CHECK("worker-started", WaitForSingleObject(user.started, 1500) == WAIT_OBJECT_0);
         CHECK("authorization-not-on-dispatch-thread", user.request_thread != GetCurrentThreadId());
         CHECK("pending-before-auth-returns", IXThreadingImpl_XAsyncGetStatus(threads, &block, FALSE) == E_PENDING);
-        if (test >= 2) {
+        if (test == 2 || test == 3 || test == 5) {
             IXThreadingImpl_XAsyncCancel(threads, &block);
             /* Existing runtime cancellation is best-effort/no-op. Force a
              * terminal abort to exercise Cleanup while authorization runs. */
@@ -94,7 +95,7 @@ int main(void) {
             IXThreadingImpl_XTaskQueueDispatch(threads, queue, XTaskQueuePort_Completion, 0); Sleep(1);
         }
         CHECK("completion-once", callbacks == 1);
-        CHECK("real-failure-or-cancel", IXThreadingImpl_XAsyncGetStatus(threads, &block, FALSE) == (test >= 2 ? E_ABORT : E_FAIL));
+        CHECK("real-failure-or-cancel", IXThreadingImpl_XAsyncGetStatus(threads, &block, FALSE) == (test == 2 || test == 3 || test == 5 ? E_ABORT : E_FAIL));
         CHECK("user-reference-released", user.refs == 1);
         IXThreadingImpl_XTaskQueueCloseHandle(threads, queue);
         CloseHandle(user.started); CloseHandle(user.gate);

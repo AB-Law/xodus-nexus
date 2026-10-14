@@ -21,7 +21,8 @@ export async function buildCompatibility(output) {
   const run = (command, args) => execFileSync(command, args, { env, stdio: 'inherit' });
   run('x86_64-w64-mingw32-gcc', ['-shared', '-O2', '-Wall', '-Wextra', '-Werror',
     '-Wl,--no-insert-timestamp', '-o', path.join(output, 'PlayFabGameSave.dll'),
-    path.join(source, 'playfab-save-folder.c'), path.join(source, 'playfab-save-folder.def')]);
+    path.join(source, 'playfab-save-folder.c'), path.join(source, 'playfab-session.c'),
+    path.join(source, 'playfab-save-folder.def')]);
   run('gcc', ['-O2', '-Wall', '-Wextra', '-Werror', '-I', output,
     '-o', path.join(output, 'wine-launcher'), path.join(source, 'wine-launcher.c')]);
   run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-Wextra', '-Werror', '-Wl,--no-insert-timestamp',

@@ -80,6 +80,7 @@ verified and may encounter compatibility issues.
 | No Man's Sky | Yes | Playable online. |
 | Valor Mortis | Yes | Fully playable. |
 | Forza Horizon 6 | Yes | Playable online. |
+| Palworld | Yes | Playable online. |
 
 [Full compatibility list](https://github.com/domsvoboda/xodus-nexus/wiki/Compatibility)
 

@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <wchar.h>
+#include "playfab-session.h"
 typedef struct { void *queue; uint64_t options; const char *saveFolder; } InitArgs;
 _Static_assert(sizeof(InitArgs) == 24 && offsetof(InitArgs, saveFolder) == 16, "Unsupported SDK ABI");
 typedef struct Storage Storage;
@@ -24,6 +25,11 @@ static HRESULT (WINAPI *nativeInitialize)(const InitArgs *);
 static HRESULT sdkResult = E_FAIL;
 static SRWLOCK folderLock = SRWLOCK_INIT;
 static char *defaultFolder;
+HRESULT nexus_session_initialized(HMODULE);
+HRESULT nexus_session_callbacks(HMODULE,SaveCallbacks *);
+HRESULT nexus_session_add_user(HMODULE,void *,unsigned,NexusAsync *);
+HRESULT nexus_session_cleanup(HMODULE,NexusAsync *);
+static HMODULE nativeSdk;
 
 static HRESULT select_local_provider(void)
 {
@@ -61,6 +67,7 @@ static BOOL CALLBACK load_sdk(INIT_ONCE *once, void *parameter, void **context)
     /* Keep SDK loaded for async operations throughout this module's lifetime. */
     sdk = LoadLibraryExW(path, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
     if (!sdk) { sdkResult = HRESULT_FROM_WIN32(GetLastError()); return TRUE; }
+    nativeSdk = sdk;
     nativeInitialize = (void *)GetProcAddress(sdk, "PFGameSaveFilesInitialize");
     sdkResult = nativeInitialize ? S_OK : HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
     return TRUE;
@@ -121,7 +128,11 @@ HRESULT WINAPI PFGameSaveFilesInitialize(const InitArgs *args)
     HRESULT hr;
     InitOnceExecuteOnce(&sdkOnce, load_sdk, NULL, NULL);
     if (FAILED(sdkResult)) return sdkResult;
-    if (!args || (args->saveFolder && args->saveFolder[0])) return nativeInitialize(args);
+    if (!args || (args->saveFolder && args->saveFolder[0])) {
+        hr = nativeInitialize(args);
+        if (SUCCEEDED(hr)) hr = nexus_session_initialized(nativeSdk);
+        return hr;
+    }
     /* Failed discovery is retryable: runtime/package setup can happen later. */
     AcquireSRWLockExclusive(&folderLock);
     hr = select_local_provider();
@@ -129,5 +140,22 @@ HRESULT WINAPI PFGameSaveFilesInitialize(const InitArgs *args)
     ReleaseSRWLockExclusive(&folderLock);
     if (FAILED(hr)) return hr;
     adjusted = *args; adjusted.saveFolder = defaultFolder;
-    return nativeInitialize(&adjusted);
+    hr = nativeInitialize(&adjusted);
+    if (SUCCEEDED(hr)) hr = nexus_session_initialized(nativeSdk);
+    return hr;
+}
+HRESULT WINAPI PFGameSaveFilesSetUiCallbacks(SaveCallbacks *callbacks)
+{
+    InitOnceExecuteOnce(&sdkOnce,load_sdk,NULL,NULL);
+    return FAILED(sdkResult)?sdkResult:nexus_session_callbacks(nativeSdk,callbacks);
+}
+HRESULT WINAPI PFGameSaveFilesAddUserWithUiAsync(void *user,unsigned options,NexusAsync *async)
+{
+    InitOnceExecuteOnce(&sdkOnce,load_sdk,NULL,NULL);
+    return FAILED(sdkResult)?sdkResult:nexus_session_add_user(nativeSdk,user,options,async);
+}
+HRESULT WINAPI PFGameSaveFilesUninitializeAsync(NexusAsync *async)
+{
+    InitOnceExecuteOnce(&sdkOnce,load_sdk,NULL,NULL);
+    return FAILED(sdkResult)?sdkResult:nexus_session_cleanup(nativeSdk,async);
 }

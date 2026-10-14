@@ -70,6 +70,13 @@ try {
   const summary = pgs.output.split(/\r?\n/).filter(line => /^(FAIL |CHECKS )/.test(line));
   results.push({ name: 'playfab-folder', code: pgs.code, timedOut: pgs.timedOut, summary });
   console.log(`playfab-folder: exit=${pgs.code} timeout=${pgs.timedOut}\n${summary.join('\n')}`);
+  const session=await run(wine,[path.join(tests,'playfab-session/playfab-session-probe.exe')],60000,
+    {WINEDLLOVERRIDES:`${env.WINEDLLOVERRIDES};playfabcore=n;playfabgamesave=n;nexus_pgs_native=n`});
+  await fs.writeFile(path.join(root,'playfab-session.log'),session.output,{mode:0o600});
+  const sessionSummary=session.output.split('\n').filter(line=>/^(CHECKS|FAIL|Nexus cloud saves:)/.test(line));
+  results.push({name:'playfab-session',code:session.code,timedOut:session.timedOut,summary:sessionSummary});
+  console.log(`playfab-session: exit=${session.code} timeout=${session.timedOut}\n${sessionSummary.join('\n')}`);
+  if(session.code!==0||session.timedOut)throw new Error(`PlayFab session contract probe failed; see ${root}`);
   if (pgs.code !== 0 || pgs.timedOut) throw new Error(`PlayFab adapter contract probe failed; see ${root}`);
   for (const kind of ['inline', 'retry', 'default']) {
     const result = await run(wine, [path.join(tests, 'runtime-init/runtime-init-probe.exe'), kind]);
