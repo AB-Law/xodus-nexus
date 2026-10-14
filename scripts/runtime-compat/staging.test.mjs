@@ -68,10 +68,10 @@ test('ordinary Wine arguments and opt-out do not change any files or maps', asyn
     await assert.rejects(fs.access(path.join(f.view, 'nexus_pgs_native.dll')));
   } finally { await f.close(); }
 });
-test('non-private or symlinked views are never modified', async () => {
+test('other-user-writable or symlinked views are never modified', async () => {
   const f = await fixture();
   try {
-    await fs.chmod(f.view, 0o755);
+    await fs.chmod(f.view, 0o775);
     assert.equal(f.run().status, 23);
     await fs.chmod(f.view, 0o700);
     const alias = path.join(root, '.xodus-chain-alias');
@@ -95,5 +95,16 @@ test('malformed or different SDKs are left unchanged; existing alias is not over
     await fs.writeFile(path.join(f.view, 'nexus_pgs_native.dll'), 'owner collision');
     assert.equal(f.run().status, 70);
     assert.equal(await fs.readFile(path.join(f.view, 'nexus_pgs_native.dll'), 'utf8'), 'owner collision');
+  } finally { await f.close(); }
+});
+test('backend default 0755 view is sealed before SDK staging', async () => {
+  const f = await fixture();
+  try {
+    await fs.chmod(f.view, 0o755);
+    const result = f.run({ NEXUS_BOOTSTRAP_DIAGNOSTICS: '1' });
+    assert.equal(result.status, 23, result.stderr);
+    assert.match(result.stderr, /NEXUS_BOOTSTRAP sdk=1 appLocal=0/);
+    assert.equal((await fs.stat(f.view)).mode & 0o777, 0o700);
+    assert.equal((await fs.lstat(path.join(f.view, 'PlayFabGameSave.dll'))).isSymbolicLink(), false);
   } finally { await f.close(); }
 });

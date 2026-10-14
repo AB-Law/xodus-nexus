@@ -64,6 +64,14 @@ try {
   results.push({ name: 'playfab-folder', code: pgs.code, timedOut: pgs.timedOut, summary });
   console.log(`playfab-folder: exit=${pgs.code} timeout=${pgs.timedOut}\n${summary.join('\n')}`);
   if (pgs.code !== 0 || pgs.timedOut) throw new Error(`PlayFab adapter contract probe failed; see ${root}`);
+  for (const kind of ['inline', 'retry', 'default']) {
+    const result = await run(wine, [path.join(tests, 'runtime-init/runtime-init-probe.exe'), kind]);
+    await fs.writeFile(path.join(root, `runtime-init-${kind}.log`), result.output, { mode: 0o600 });
+    const summary = result.output.split(/\r?\n/).filter(line => /^(FAIL |CHECKS )/.test(line));
+    results.push({ name: `runtime-init-${kind}`, code: result.code, timedOut: result.timedOut, summary });
+    console.log(`runtime-init-${kind}: exit=${result.code} timeout=${result.timedOut}\n${summary.join('\n')}`);
+    if (result.code !== 0 || result.timedOut) throw new Error(`Runtime initialization contract failed: ${kind}; see ${root}`);
+  }
 } finally {
   try { execFileSync(server, ['-k'], { env, timeout: 5000, stdio: 'ignore' }); } catch { /* never stop another prefix */ }
   await fs.writeFile(path.join(root, 'results.json'), JSON.stringify({ root, results }, null, 2) + '\n', { mode: 0o600 });

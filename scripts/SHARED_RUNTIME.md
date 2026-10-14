@@ -15,6 +15,10 @@ GDK WinHTTP options, installed-package metadata, verified Store update queries
 and background token/signature authorization. Store queries require Nexus
 backend 0.2.1 or newer and currently support the verified current-game no-update
 case, not DLC or update installation.
+Configuration bootstrap also distinguishes inline XML, explicit files and
+default discovery. A failed parse does not publish initialized state, and a
+subsequent valid initialization can retry. Initializations are serialized.
+These fixes do not establish a Gaming Services version or bypass its checks.
 
 ### PlayFab Game Saves compatibility
 
@@ -29,6 +33,10 @@ through Unicode Windows APIs. All other exports forward unchanged.
 For an omitted folder, the adapter defaults the upstream SDK's recognized
 `ForceUseInprocGameSaves` policy to 1 only if absent. An explicit existing policy
 is preserved; no `CurrentVersion`/`AvailableVersion` claims are provisioned.
+
+Owner-created temporary views with umask-derived read permissions (such as
+0755) are sealed to 0700 before staging; other-user-writable or symlinked views
+remain untouched. NEXUS_BOOTSTRAP_DIAGNOSTICS=1 reports only staging counts.
 
 No game names/product IDs, original-file edits, import hooks, diagnostic version
 QWORDs or proprietary SDK binaries are included. Unsupported SDK exports are

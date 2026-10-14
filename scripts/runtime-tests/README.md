@@ -161,3 +161,12 @@ forwarded SDK errors, retry after storage discovery failure, Unicode folders,
 the real in-process provider policy (without Windows version claims), and
 preservation of explicit provider settings. These fixtures are tests only and
 are never bundled as a runtime or used for real games/cloud authentication.
+
+## Configuration initialization contract
+
+`runtime-init-probe.c` checks inline XML, default-options file discovery and
+retry after malformed configuration against the actual runtime DLL. It also
+checks the resulting package-local storage identity, so a misleading success
+without loading the configuration cannot pass. Three fresh processes use
+synthetic configuration and no account/network/cloud. This does not prove a
+game's version gate or the cause of an early game exit.

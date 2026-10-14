@@ -64,11 +64,15 @@
     {
       "file": "assets/xgameruntime-token-worker.patch",
       "sha256": "295e03ffbcbb6884e34d53cf7240d7a66cba57c88986fb96cff4fb177861f78e"
+    },
+    {
+      "file": "assets/xgameruntime-init-config-contract.patch",
+      "sha256": "12c261ae35b0619e25a762abcad0df696f5b0cec4ec550ccc04783b8c239f541"
     }
   ],
   "expectedXgameruntimeSources": {
     "dlls/xgameruntime/Makefile.in": "703a51c5f2a25deb15543b43cf4136260c06118f20e921db617f183c76a2ea6f",
-    "dlls/xgameruntime/main.c": "4a8e82963075d60eecb5a1a7b6d96e310b0c13fef48ebcfbacf54ef1d7d23957",
+    "dlls/xgameruntime/main.c": "8bbd23c6fbb4af41b98fbde3b40810f0eb37fc133274a3384caaaededf48fa6a",
     "dlls/xgameruntime/private.h": "e18838cc06ccb00f98b8e64f736c2e69770706b4677e33f4b4b744f64eb51f22",
     "dlls/xgameruntime/xerror.c": "f0dc4b456af5c4cfdcc1036f1dd422848a1ce97abd6cd1722bf654c51927b694",
     "dlls/xgameruntime/xgame.c": "7d7edff91a839cac522f910c54d4625d8efa61121c7a32f4bd3665cca184abae",
@@ -95,7 +99,7 @@
     "scripts/runtime-compat/build.mjs": "f4639bd4b044981444143f1e4d975402ec5a80b0f5a7770fe4cf62ff6f993636",
     "scripts/runtime-compat/playfab-save-folder.c": "e132a7d19add205fe79edbc6dcc47e6ee3f8fb0d3790a420f2d7dcffbcd46269",
     "scripts/runtime-compat/playfab-save-folder.def": "0c71c093b13000dad48ac9830c9e6b0446fbcade0172357fce85680cb53217b6",
-    "scripts/runtime-compat/wine-launcher.c": "c94bac7a1d787341affa50319a5311a8eb6b6b1ce999ad99f5a5a8a55bc1cf66"
+    "scripts/runtime-compat/wine-launcher.c": "96af66e44a21e728c6ce4ccb915a82115a6cb3e5029f9f05c0b123b18b4766a4"
   },
   "requiresBackendVersion": "0.2.1",
   "limitations": [

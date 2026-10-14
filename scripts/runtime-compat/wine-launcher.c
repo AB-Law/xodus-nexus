@@ -224,7 +224,10 @@ int main(int argc, char **argv)
                 }
                 free(components);
                 struct stat st;
-                if (dir >= 0 && !fstat(dir, &st) && st.st_uid == geteuid() && !(st.st_mode & 0077)) {
+                if (dir >= 0 && !fstat(dir, &st) && st.st_uid == geteuid() && !(st.st_mode & 0022)) {
+                    /* Backend TempDir inherits umask (often 0755). Seal the
+                     * owner-only-write temporary view before staging. */
+                    if (fchmod(dir, 0700)) { perror("Nexus runtime private view"); return 70; }
                     int lock = openat(dir, ".nexus-pgs-lock", O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC, 0600);
                     int proxy = open(proxyPath, O_RDONLY | O_CLOEXEC);
                     if (lock < 0 || proxy < 0 || flock(lock, LOCK_EX) || visit(dir, view, proxy, 0)) {
@@ -246,6 +249,8 @@ int main(int argc, char **argv)
             setenv("WINEDLLOVERRIDES", overrides, 1)) return 70;
         free(overrides);
     }
+    if (getenv("NEXUS_BOOTSTRAP_DIAGNOSTICS"))
+        fprintf(stderr, "NEXUS_BOOTSTRAP sdk=%u appLocal=0\n", staged);
     argv[0] = loader;
     execv(loader, argv);
     perror("Nexus runtime Wine loader"); return 70;
