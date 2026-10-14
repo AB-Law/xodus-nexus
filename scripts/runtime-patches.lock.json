@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "development",
+  "status": "release",
   "sources": {
     "wine": {
       "url": "https://github.com/xodus-gaming/wine.git",
