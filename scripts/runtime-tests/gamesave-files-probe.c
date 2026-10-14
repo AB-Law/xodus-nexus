@@ -57,15 +57,15 @@ int main(void) {
     WCHAR wide[2048], child[2048];
     CHECK("UTF8",MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,folder,-1,wide,2048)>0);
     CHECK("directory",GetFileAttributesW(wide)!=INVALID_FILE_ATTRIBUTES);
-    swprintf(child,2048,L"%s\\Save1",wide); CHECK("container",CreateDirectoryW(child,NULL));
-    swprintf(child,2048,L"%s\\Save1\\Nested",wide); CHECK("nested-container",CreateDirectoryW(child,NULL));
-    swprintf(child,2048,L"%s\\Save1\\Nested\\stav-\x010d.dat",wide);
+    swprintf(child,2048,L"%ls\\Save1",wide); CHECK("container",CreateDirectoryW(child,NULL));
+    swprintf(child,2048,L"%ls\\Save1\\Nested",wide); CHECK("nested-container",CreateDirectoryW(child,NULL));
+    swprintf(child,2048,L"%ls\\Save1\\Nested\\stav-\x010d.dat",wide);
     HANDLE file=CreateFileW(child,GENERIC_WRITE,0,NULL,CREATE_NEW,0,NULL); DWORD written=0;
     CHECK("unicode-file",file!=INVALID_HANDLE_VALUE && WriteFile(file,"test",4,&written,NULL) && written==4);
     if(file!=INVALID_HANDLE_VALUE)CloseHandle(file);
     INT64 quota=0;
     CHECK("actual-quota",SUCCEEDED(IXGameSaveImpl3_XGameSaveFilesGetRemainingQuota(saves,(XUserHandle)&user,scid,&quota)) && quota==256LL*1024*1024-4);
-    swprintf(child,2048,L"%s\\ignored.txt",wide); file=CreateFileW(child,GENERIC_WRITE,0,NULL,CREATE_NEW,0,NULL);
+    swprintf(child,2048,L"%ls\\ignored.txt",wide); file=CreateFileW(child,GENERIC_WRITE,0,NULL,CREATE_NEW,0,NULL);
     if(file!=INVALID_HANDLE_VALUE) { WriteFile(file,"ignore",6,&written,NULL); CloseHandle(file); }
     CHECK("root-files-ignored",SUCCEEDED(IXGameSaveImpl3_XGameSaveFilesGetRemainingQuota(saves,(XUserHandle)&user,scid,&quota)) && quota==256LL*1024*1024-4);
     ZeroMemory(&block,sizeof(block)); block.queue=queue; char again[2048];
