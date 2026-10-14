@@ -16,6 +16,31 @@ and background token/signature authorization. Store queries require Nexus
 backend 0.2.1 or newer and currently support the verified current-game no-update
 case, not DLC or update installation.
 
+### PlayFab Game Saves compatibility
+
+The runtime includes a native SDK forwarding adapter, not a replacement cloud
+service. In an owner-private Xodus materialized launch view, its Wine entry point
+detects the supported x64 `PlayFabGameSave.dll` export contract and retains the
+game's original SDK as `nexus_pgs_native.dll`. The adapter supplies a missing
+`saveFolder` from the current package's `XPersistentLocalStorage` root, with a
+`PlayFabGameSaves` child. Caller-specified folders, queue/options, authentication,
+cloud operations and genuine SDK errors are preserved. UTF-8 paths are created
+through Unicode Windows APIs. All other exports forward unchanged.
+For an omitted folder, the adapter defaults the upstream SDK's recognized
+`ForceUseInprocGameSaves` policy to 1 only if absent. An explicit existing policy
+is preserved; no `CurrentVersion`/`AvailableVersion` claims are provisioned.
+
+No game names/product IDs, original-file edits, import hooks, diagnostic version
+QWORDs or proprietary SDK binaries are included. Unsupported SDK exports are
+left unchanged with a diagnostic; staging failures abort rather than partially
+launch. `NEXUS_PLAYFAB_ADAPTER=0` disables staging for diagnosis. Ordinary Wine
+commands and launches outside private Xodus views go to the unchanged loader.
+This does **not** implement Microsoft Gaming Services or its version gate, nor
+claim all PlayFab SDK versions, cloud-save roundtrips or all-title compatibility.
+The successful diagnostic game run also used copied Windows version metadata;
+those version claims are not shipped. This provider/folder change does not
+resolve a game's separate pre-initialization Gaming Services version check.
+
 ## Build
 
 Requirements: Linux x86-64, Node 22+, Git, GCC/Make, MinGW-w64 x86-64,

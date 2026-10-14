@@ -11,6 +11,6 @@ export function runtimeRecipeMetadataOnly(before, after) {
 export function runtimeInputsChanged(files, metadataOnly = false) {
   files = files.filter(file => !promotionOnly.has(file) && !(metadataOnly && file === 'scripts/runtime-patches.lock.json'));
   return files.some(file => /^assets\/.*\.patch$/s.test(file) ||
-    /^scripts\/(?:ci\/|runtime-tests\/|runtime-.*\.lock\.json$|(?:build-shared-runtime|build-runtime-media|assemble-shared-runtime|verify-runtime-base)\.mjs$)/.test(file) ||
+    /^scripts\/(?:ci\/|runtime-tests\/|runtime-compat\/|runtime-.*\.lock\.json$|(?:build-shared-runtime|build-runtime-media|assemble-shared-runtime|verify-runtime-base)\.mjs$)/.test(file) ||
     file === '.github/workflows/runtime.yml' || /^src\/main\/proton\./.test(file));
 }

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "release",
+  "status": "development",
   "sources": {
     "wine": {
       "url": "https://github.com/xodus-gaming/wine.git",
@@ -91,8 +91,15 @@
     "dlls/xgameruntime/util.h": "b739dba8a69a36103e72afc8dcaeaf324470d9ed47a5a7dd81b18e4e511ae69a",
     "dlls/xgameruntime/userprovider.idl": "66fb09670b7dabfc55257475094239018ea9a19ec2be348e56cf2b17ef615d7a"
   },
+  "runtimeCompatibilitySources": {
+    "scripts/runtime-compat/build.mjs": "f4639bd4b044981444143f1e4d975402ec5a80b0f5a7770fe4cf62ff6f993636",
+    "scripts/runtime-compat/playfab-save-folder.c": "e132a7d19add205fe79edbc6dcc47e6ee3f8fb0d3790a420f2d7dcffbcd46269",
+    "scripts/runtime-compat/playfab-save-folder.def": "0c71c093b13000dad48ac9830c9e6b0446fbcade0172357fce85680cb53217b6",
+    "scripts/runtime-compat/wine-launcher.c": "c94bac7a1d787341affa50319a5311a8eb6b6b1ce999ad99f5a5a8a55bc1cf66"
+  },
   "requiresBackendVersion": "0.2.1",
   "limitations": [
+    "PlayFab folder fallback supports the verified x64 40-export SDK ABI only; Gaming Services/version discovery and full cloud roundtrips remain unimplemented or unverified",
     "Store update queries support the verified current-game no-update case; DLC, mandatory updates and downloads remain unsupported",
     "Incomplete XAsync cancellation/resource reclamation",
     "Partial package/event/privilege APIs are not complete GDK implementations",

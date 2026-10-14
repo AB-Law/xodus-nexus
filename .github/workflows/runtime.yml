@@ -173,8 +173,8 @@ jobs:
           tar --exclude=.git -cJf "shared-build/$nexus_name-source.tar.xz" \
             shared-build/wine-src shared-build/nghttp2-src \
             shared-build/media/ffmpeg-4.4.8.tar.xz shared-build/media/media-manifest.json \
-            assets scripts/runtime-patches.lock.json scripts/runtime-media.lock.json \
-            scripts/runtime-base.lock.json scripts/verify-runtime-base.mjs scripts/runtime-tests \
+            LICENSE assets scripts/runtime-patches.lock.json scripts/runtime-media.lock.json \
+            scripts/runtime-base.lock.json scripts/verify-runtime-base.mjs scripts/runtime-tests scripts/runtime-compat \
             scripts/build-shared-runtime.mjs scripts/build-runtime-media.mjs \
             scripts/assemble-shared-runtime.mjs scripts/SHARED_RUNTIME.md
           echo "nexus_version=$nexus_version" >> "$GITHUB_ENV"

@@ -1,0 +1,99 @@
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { buildCompatibility } from './build.mjs';
+import { fileURLToPath } from 'node:url';
+let root, components, loader, sdk;
+const source = path.dirname(fileURLToPath(import.meta.url));
+before(async () => {
+  root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-pgs-test-'));
+  components = path.join(root, 'components');
+  await buildCompatibility(components);
+  const files = path.join(root, 'files');
+  await fs.mkdir(path.join(files, 'bin'), { recursive: true });
+  await fs.mkdir(path.join(files, 'share/xodus-nexus/compat'), { recursive: true });
+  loader = path.join(files, 'bin/wine');
+  await fs.copyFile(path.join(components, 'wine-launcher'), loader);
+  await fs.copyFile(path.join(components, 'PlayFabGameSave.dll'), path.join(files, 'share/xodus-nexus/compat/PlayFabGameSave.dll'));
+  await fs.writeFile(path.join(files, 'bin/wine.nexus-original'),
+    '#!/bin/sh\nprintf "%s\\n%s\\n%s\\n" "$WINE_DLL_FILE_MAP" "$WINE_EXE_FILE_MAP" "$WINEDLLOVERRIDES"\nexit 23\n', { mode: 0o755 });
+  const definition = await fs.readFile(path.join(source, 'playfab-save-folder.def'), 'utf8');
+  const fakeDef = definition.replace(/^(PF\w+)(?:=\S+)? @(\d+)$/gm,
+    (_, name, ordinal) => `${name}${name === 'PFGameSaveFilesInitialize' ? '' : '=probe_stub'} @${ordinal}`);
+  await fs.writeFile(path.join(root, 'fixture.def'), fakeDef);
+  sdk = path.join(root, 'owner-sdk.dll');
+  execFileSync('x86_64-w64-mingw32-gcc', ['-shared', '-O2', '-DPROBE_SDK',
+    path.join(source, '../runtime-tests/playfab-folder-probe.c'), path.join(root, 'fixture.def'), '-o', sdk],
+    { env: { ...process.env, LD_LIBRARY_PATH: '', LD_PRELOAD: '' }, stdio: 'pipe' });
+});
+after(async () => { if (root) await fs.rm(root, { recursive: true, force: true }); });
+async function fixture() {
+  const view = await fs.mkdtemp(path.join(root, '.xodus-chain-'));
+  const exe = path.join(view, 'Entry.exe');
+  await fs.writeFile(exe, 'materialized test executable');
+  await fs.symlink(sdk, path.join(view, 'PlayFabGameSave.dll'));
+  const nt = file => `\\??\\Z:${file.replaceAll('/', '\\')}`;
+  const other = '42:unrelated.dll';
+  const env = { ...process.env, LD_LIBRARY_PATH: '', LD_PRELOAD: '',
+    WINE_DLL_FILE_MAP: `${other}|3:${nt(path.join(view, 'PlayFabGameSave.dll'))}`,
+    WINE_EXE_FILE_MAP: `42:unrelated.exe|3:${path.join(view, 'PlayFabGameSave.dll')}`,
+    WINEDLLOVERRIDES: 'winhttp=b' };
+  const run = (changes = {}, args = [exe]) => spawnSync(loader, args,
+    { env: { ...env, ...changes }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe', awaitFd.fd] });
+  const awaitFd = await fs.open(sdk, 'r');
+  return { view, exe, env, run, close: () => awaitFd.close() };
+}
+test('stages exact SDK, preserves owner bytes, filters only replaced FD, preserves exit code', async () => {
+  const f = await fixture();
+  try {
+    const beforeBytes = await fs.readFile(sdk);
+    const result = f.run();
+    assert.equal(result.status, 23, result.stderr);
+    assert.deepEqual(result.stdout.trimEnd().split('\n'), ['42:unrelated.dll', '42:unrelated.exe', 'winhttp=b;playfabgamesave=n;nexus_pgs_native=n']);
+    assert.deepEqual(await fs.readFile(sdk), beforeBytes);
+    assert.deepEqual(await fs.readFile(path.join(f.view, 'nexus_pgs_native.dll')), beforeBytes);
+    assert.equal((await fs.lstat(path.join(f.view, 'PlayFabGameSave.dll'))).isSymbolicLink(), false);
+    assert.equal(f.run().status, 23, 'repeated staging is idempotent');
+  } finally { await f.close(); }
+});
+test('ordinary Wine arguments and opt-out do not change any files or maps', async () => {
+  const f = await fixture();
+  try {
+    assert.equal(f.run({}, ['--version']).status, 23);
+    assert.equal(f.run({ NEXUS_PLAYFAB_ADAPTER: '0' }).status, 23);
+    assert.equal((await fs.lstat(path.join(f.view, 'PlayFabGameSave.dll'))).isSymbolicLink(), true);
+    await assert.rejects(fs.access(path.join(f.view, 'nexus_pgs_native.dll')));
+  } finally { await f.close(); }
+});
+test('non-private or symlinked views are never modified', async () => {
+  const f = await fixture();
+  try {
+    await fs.chmod(f.view, 0o755);
+    assert.equal(f.run().status, 23);
+    await fs.chmod(f.view, 0o700);
+    const alias = path.join(root, '.xodus-chain-alias');
+    await fs.symlink(f.view, alias);
+    assert.equal(f.run({}, [path.join(alias, 'Entry.exe')]).status, 23);
+    assert.equal((await fs.lstat(path.join(f.view, 'PlayFabGameSave.dll'))).isSymbolicLink(), true);
+  } finally { await f.close(); }
+});
+test('malformed or different SDKs are left unchanged; existing alias is not overwritten', async () => {
+  const f = await fixture();
+  try {
+    const unknown = path.join(root, 'unknown.dll');
+    await fs.writeFile(unknown, 'not an SDK');
+    const fd = await fs.open(unknown, 'r');
+    try {
+      const result = spawnSync(loader, [f.exe], { env: f.env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe', fd.fd] });
+      assert.equal(result.status, 23);
+      assert.match(result.stderr, /unsupported PlayFab/);
+      assert.equal((await fs.lstat(path.join(f.view, 'PlayFabGameSave.dll'))).isSymbolicLink(), true);
+    } finally { await fd.close(); }
+    await fs.writeFile(path.join(f.view, 'nexus_pgs_native.dll'), 'owner collision');
+    assert.equal(f.run().status, 70);
+    assert.equal(await fs.readFile(path.join(f.view, 'nexus_pgs_native.dll'), 'utf8'), 'owner collision');
+  } finally { await f.close(); }
+});

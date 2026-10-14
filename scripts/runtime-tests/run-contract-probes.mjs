@@ -23,9 +23,9 @@ const env = { ...process.env, WINEPREFIX: prefix, WINEARCH: 'win64', WINEDEBUG: 
 for (const key of Object.keys(env)) if (/^(XODUS_|XUSER_|STEAM_COMPAT_|SteamAppId$|SteamGameId$)/.test(key)) delete env[key];
 const wine = path.join(files, 'bin/wine');
 const server = path.join(files, 'bin/wineserver');
-async function run(executable, args, timeout = 60000) {
+async function run(executable, args, timeout = 60000, overrides = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(executable, args, { env: { ...env, ...overrides }, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '', timedOut = false;
     const collect = bytes => { if (output.length < 512000) output += bytes.toString().slice(0, 512000 - output.length); };
     child.stdout.on('data', collect); child.stderr.on('data', collect);
@@ -57,6 +57,13 @@ try {
     results.push({ name, code: result.code, timedOut: result.timedOut, summary });
     if (result.code !== 0 || result.timedOut) throw new Error(`Contract probe failed: ${name}; see ${root}`);
   }
+  const pgs = await run(wine, [path.join(tests, 'playfab-folder/playfab-folder-probe.exe')], 60000,
+    { WINEDLLOVERRIDES: `${env.WINEDLLOVERRIDES};xgameruntime=n;playfabgamesave=n;nexus_pgs_native=n` });
+  await fs.writeFile(path.join(root, 'playfab-folder.log'), pgs.output, { mode: 0o600 });
+  const summary = pgs.output.split(/\r?\n/).filter(line => /^(FAIL |CHECKS )/.test(line));
+  results.push({ name: 'playfab-folder', code: pgs.code, timedOut: pgs.timedOut, summary });
+  console.log(`playfab-folder: exit=${pgs.code} timeout=${pgs.timedOut}\n${summary.join('\n')}`);
+  if (pgs.code !== 0 || pgs.timedOut) throw new Error(`PlayFab adapter contract probe failed; see ${root}`);
 } finally {
   try { execFileSync(server, ['-k'], { env, timeout: 5000, stdio: 'ignore' }); } catch { /* never stop another prefix */ }
   await fs.writeFile(path.join(root, 'results.json'), JSON.stringify({ root, results }, null, 2) + '\n', { mode: 0o600 });
