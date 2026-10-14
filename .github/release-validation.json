@@ -81,6 +81,15 @@
       "approved": true,
       "approvedBy": "domsvoboda",
       "evidence": "Explicit owner authorization 2026-10-14: publish after successful main CI and exact package verification, without another game run. Downloaded binary/checksum/candidate manifests and corresponding source where applicable passed SHA-256/SHA-512 verification. All main launcher/backend/runtime CI builds succeeded; runtime 4284 native checks plus HTTP/2 and H.264/AAC checks passed. Owner confirmed local sign-in/Online and authorized no additional real-game test of these exact CI bytes. Owner explicitly approved post-validation metadata-only recipe approval with unchanged source/base/media/build inputs and unchanged candidate bytes."
+    },
+    {
+      "kind": "runtime",
+      "runId": "38544781096",
+      "commit": "43ad2dea88379d2aa462c8875ca0b9175d89c726",
+      "manifestSha256": "dcb046872bf87e294406573ee47c31105f887b281896f132e0f2a2f4e3c023d8",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit owner authorization 2026-10-14: publish this successful main CI runtime after checksum checks, without another real-game test and without rebuilding. Exact binary, corresponding-source archive and checksum files passed candidate identity, SHA-256 and SHA-512 verification; source archive recipe matches the candidate source lock. Main run 38544781096 completed clean build, native, HTTP/2, media and runtime-gate jobs successfully. Owner previously confirmed local diagnostic Forza passes Gaming Services and account-enabled startup looks good; No Mans Sky remains nonworking. These exact CI bytes were not real-game tested; no new cloud-save roundtrip or multiplayer claim. Approved development-to-release metadata-only transition with unchanged source/base/media/compatibility inputs and unchanged candidate bytes. Temporary Gaming Services version override is default-on by explicit owner request, not a complete Microsoft service implementation."
     }
   ]
 }
