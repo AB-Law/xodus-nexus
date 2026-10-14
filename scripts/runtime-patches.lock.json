@@ -76,18 +76,26 @@
     {
       "file": "assets/xgameruntime-gamesave-files.patch",
       "sha256": "10181b31b0f67f2b00dbf34ed0eaf085da820b26f2d2fc703c59a9dcedf9ea48"
+    },
+    {
+      "file": "assets/xgameruntime-shutdown-drain.patch",
+      "sha256": "bc4605b0ce6a6025cd633bd4375ad2b073cffe938f72e93c4e70b6eafde97445"
+    },
+    {
+      "file": "assets/xgameruntime-profile-request.patch",
+      "sha256": "c2dd47e259a9f06e4c3acf5022e95db55394ca97ec69c37479d8e0067f7c5e86"
     }
   ],
   "expectedXgameruntimeSources": {
     "dlls/xgameruntime/Makefile.in": "703a51c5f2a25deb15543b43cf4136260c06118f20e921db617f183c76a2ea6f",
-    "dlls/xgameruntime/main.c": "8bbd23c6fbb4af41b98fbde3b40810f0eb37fc133274a3384caaaededf48fa6a",
+    "dlls/xgameruntime/main.c": "f87307dd50ead60d8aa50bb7a8d18e25247efc4aa419a815c73b9056beef389c",
     "dlls/xgameruntime/private.h": "e18838cc06ccb00f98b8e64f736c2e69770706b4677e33f4b4b744f64eb51f22",
     "dlls/xgameruntime/xerror.c": "f0dc4b456af5c4cfdcc1036f1dd422848a1ce97abd6cd1722bf654c51927b694",
     "dlls/xgameruntime/xgame.c": "7d7edff91a839cac522f910c54d4625d8efa61121c7a32f4bd3665cca184abae",
     "dlls/xgameruntime/xgameactivation.c": "48a729040d7be7aac3e28b27aa06f8285bcef3f27767fa79ddfbe33c7b629dbc",
     "dlls/xgameruntime/xgameinvite.c": "43c3459101f7da3a4bc6569d361f2d5f63f6a0e70006a0472c4ccb6f9bece41f",
     "dlls/xgameruntime/xgameprotocol.c": "6936d5e24532832ee2e6928ea3a9a5217f8df830588b2e6e92920dd2cf1532d3",
-    "dlls/xgameruntime/xgameruntime.spec": "fbf033283fe56e7d852b9f8c37b825f82abf0580fd45f9a5d841f571c57057d7",
+    "dlls/xgameruntime/xgameruntime.spec": "8e77261cdc459d2fe688c210c8024ee8eeb09057e679c3a38de941fde1a00d73",
     "dlls/xgameruntime/xgamesave.c": "b608d6110ede208343a3d22d354c7ba81c6e376a944f1a2a459f3306a5a99576",
     "dlls/xgameruntime/xgamesave.idl": "544319e88951f65b21c74f785fb9376c10cac8b1d57e98c7aa3079348162ccab",
     "dlls/xgameruntime/xnetworking.c": "cfd8d0110b7ebd622f62317d3134dd866e6538e4a697b06912fa752517fe7caa",
@@ -98,7 +106,7 @@
     "dlls/xgameruntime/xsystem.c": "974c83fe2e1b97e6b2c86e95a558b31d2effe6b9d2b3166c2c4d1882a4341058",
     "dlls/xgameruntime/xsystemanalytics.c": "189e99c83273b429325ecefa2b9246c45863c22f0c4006a791ec57b8f7b9d384",
     "dlls/xgameruntime/xthreading.c": "52d6d6b921727c45759b0540edec61624fbf9cb44760ff339b5175d4c5b4bb71",
-    "dlls/xgameruntime/xuser.c": "020bde95bf039a2523303c967b2bf7ae937bc6cfb0df07d2f9ece0efbcc956a2",
+    "dlls/xgameruntime/xuser.c": "0134a9653d05c5061824992ff91ec7307b70f1a717c93aa65f7a01987158a85f",
     "dlls/xgameruntime/util.c": "aebf1a7ebef0dff89d3a1683bc40e16c821eaeb5cc1160ce474b905d14d7cb5c",
     "dlls/xgameruntime/util.h": "b739dba8a69a36103e72afc8dcaeaf324470d9ed47a5a7dd81b18e4e511ae69a",
     "dlls/xgameruntime/userprovider.idl": "66fb09670b7dabfc55257475094239018ea9a19ec2be348e56cf2b17ef615d7a",
@@ -110,7 +118,7 @@
     "scripts/runtime-compat/playfab-save-folder.def": "a6f34058988f103cda4ae4f8774683a3ccbdf146fcc54af750b12335fc08cf8a",
     "scripts/runtime-compat/wine-launcher.c": "b93a9669cc5b8420a79c74ecaee619d699c0105e54d1237770cdfed4ea7fe2a7",
     "scripts/runtime-compat/gaming-services-version.c": "3410efcc5c862085684323034b41131ce1bc6d44c36fb013ecc4b9dc197dd128",
-    "scripts/runtime-compat/playfab-session.c": "23eb39bc471c86060431a1ecee63dac093b1ccf5149babff9347018106273da7",
+    "scripts/runtime-compat/playfab-session.c": "b52994538c05e98e758d82dd7d69d29aca8093303e2c503c72f016158621f4ec",
     "scripts/runtime-compat/playfab-session.h": "a7bf5c391f58314439925e4095c31b6e93776609c0563a5df0198012799b80e3"
   },
   "requiresBackendVersion": "0.2.1",

@@ -16,6 +16,10 @@ static SRWLOCK sessionLock=SRWLOCK_INIT, uiLock=SRWLOCK_INIT;
 static SaveCallbacks titleCallbacks;
 static BOOL enabled, closing;
 static LONG generation;
+static HANDLE sessionDone;
+static HRESULT sessionResult;
+static SRWLOCK drainLock=SRWLOCK_INIT;
+static HRESULT WINAPI drain_session(void *context);
 static HRESULT (WINAPI *duplicate_user)(void *,void **);
 static void (WINAPI *close_user)(void *);
 static int32_t (WINAPI *compare_user)(void *,void *);
@@ -204,9 +208,21 @@ HRESULT nexus_session_initialized(HMODULE sdk)
     if(!force && (!available || FAILED(available(&grts)) || grts)) return S_OK;
     AcquireSRWLockExclusive(&sessionLock);
     HRESULT hr=bind_session(sdk);
+    if(SUCCEEDED(hr)&&!sessionDone) {
+        sessionDone=CreateEventW(NULL,TRUE,TRUE,NULL);
+        if(!sessionDone)hr=HRESULT_FROM_WIN32(GetLastError());
+    }
     if(SUCCEEDED(hr)) {
         InterlockedIncrement(&generation);closing=FALSE;enabled=TRUE;
         hr=install_callbacks();
+        if(SUCCEEDED(hr)) {
+            HMODULE runtime=GetModuleHandleW(L"xgameruntime.dll");
+            HRESULT(WINAPI *register_drain)(HRESULT(WINAPI *)(void*),void*)=
+                runtime?(void*)GetProcAddress(runtime,"NexusRegisterCloudShutdown"):NULL;
+            if(register_drain)hr=register_drain(drain_session,NULL);
+            else note("runtime drain unavailable",HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND));
+        }
+        if(SUCCEEDED(hr)){sessionResult=S_OK;ResetEvent(sessionDone);}
         if(FAILED(hr))enabled=FALSE;
     }
     ReleaseSRWLockExclusive(&sessionLock);
@@ -283,6 +299,7 @@ static DWORD WINAPI finish_worker(void *arg)
     if(SUCCEEDED(hr)){WaitForSingleObject(f->done,INFINITE);hr=cleanup_result(&f->cleanup);}
     if(FAILED(hr)&&SUCCEEDED(result))result=hr;
     AcquireSRWLockExclusive(&sessionLock);enabled=FALSE;closing=FALSE;
+    sessionResult=result;SetEvent(sessionDone);
     ZeroMemory(&titleCallbacks,sizeof(titleCallbacks));InterlockedIncrement(&generation);
     ReleaseSRWLockExclusive(&sessionLock);
     note("session closed",result);
@@ -329,5 +346,43 @@ HRESULT nexus_session_cleanup(HMODULE sdk,NexusAsync *async)
         AcquireSRWLockExclusive(&sessionLock);users=f->users;f->users=NULL;closing=FALSE;
         ReleaseSRWLockExclusive(&sessionLock);finish_release(f);
     }
+    return hr;
+}
+/* Runtime Uninitialize is synchronous and outside the loader lock. SDK cleanup
+ * stays asynchronous; this final barrier waits for acknowledged SDK work, not
+ * the title's Manual completion callback. It cannot cover ExitProcess/kill. */
+static HRESULT WINAPI drain_session(void *context)
+{
+    NexusAsync async={0};HANDLE complete=NULL;void *queue=NULL;
+    HRESULT hr=S_OK;BOOL active,inFlight;
+    (void)context;
+    AcquireSRWLockExclusive(&drainLock);
+    AcquireSRWLockShared(&sessionLock);active=enabled;inFlight=closing;
+    ReleaseSRWLockShared(&sessionLock);
+    note("runtime drain requested",S_OK);
+    if(active&&!inFlight) {
+        complete=CreateEventW(NULL,TRUE,FALSE,NULL);
+        hr=complete?threads->vtable->create_queue(threads,1,1,&queue):HRESULT_FROM_WIN32(GetLastError());
+        if(SUCCEEDED(hr)) {
+            async.queue=queue;async.context=complete;async.callback=signal_done;
+            hr=nexus_session_cleanup(sdkModule,&async);
+            if(SUCCEEDED(hr)) {
+                /* Our stack async cannot outlive its completion callback. */
+                WaitForSingleObject(complete,INFINITE);
+                hr=threads->vtable->status(threads,&async,FALSE);
+            } else if(hr==E_ABORT) {
+                AcquireSRWLockShared(&sessionLock);inFlight=closing;
+                ReleaseSRWLockShared(&sessionLock);
+                if(inFlight){WaitForSingleObject(sessionDone,INFINITE);hr=sessionResult;}
+            }
+        }
+    } else {
+        if(inFlight)WaitForSingleObject(sessionDone,INFINITE);
+        hr=sessionResult;
+    }
+    if(queue)threads->vtable->close_queue(threads,queue);
+    if(complete)CloseHandle(complete);
+    note("runtime drain complete",hr);
+    ReleaseSRWLockExclusive(&drainLock);
     return hr;
 }

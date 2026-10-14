@@ -41,11 +41,13 @@ Never copy a candidate DLL into an active or production prefix.
 - `token-dispatch-probe.c`: synthetic delayed authorization failure through
   the real ANSI/UTF-16 token provider; manual Work dispatch must return without
   waiting for authorization. Checks completion and retained user lifetime when
-  a terminal abort happens while work is running (44 checks, no network/account).
+  a terminal abort happens while work is running; includes the gamer-picture
+  provider (66 checks, no network/account).
 - `playfab-session-probe.c`: pinned threading ABI checks, asynchronous test-only
   dialog choices, preserved title callbacks, retained synthetic users, caller
   Manual completion queue, genuine upload failure and acknowledged upload before
-  SDK cleanup, and explicit cloud opt-out (113 checks). Test-only UI choices and synthetic SDK/Core DLLs are
+  SDK cleanup, explicit cloud opt-out and synchronous runtime drain while the
+  title's Manual completion port is unpumped (132 checks). Test-only UI choices and synthetic SDK/Core DLLs are
   confined to the probe directory and never staged in the production runtime.
   Does not establish real cloud upload, game shutdown timing or forced-exit sync.
 

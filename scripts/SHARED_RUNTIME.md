@@ -79,10 +79,26 @@ are uploaded through the original SDK with `ReleaseDeviceAsActive`. Cleanup runs
 after the real asynchronous upload returns; the caller retains its original
 completion queue and receives genuine upload/cleanup failures. Failed/offline
 AddUser operations and explicit `XODUS_SAVE_SYNC=none` do not trigger the extra
-final upload. This does not cover abrupt process termination
+final upload.
+
+The synchronous runtime `UninitializeApiImpl` additionally drains this SDK
+session outside the loader lock before returning, including a cleanup already
+started asynchronously by the title. SDK cleanup itself remains asynchronous;
+no caller Manual completion callback is required for the in-flight drain.
+Games that terminate without calling runtime uninitialization are not covered.
+This is not a `DllMain` network wait or an `ExitProcess` hook.
+This does not cover abrupt process termination
 or games that omit SDK cleanup: local files remain, and a later session may need
 the device-contention/conflict dialog. Never interpret forced termination as an
 acknowledged cloud upload, nor silently resolve a conflict or discard progress.
+
+`XUserGetGamerPictureAsync` resolves the profile using contract version 2 and
+the endpoint's genuine proof-of-possession signature, then downloads the image
+without forwarding Xbox credentials to the CDN. Authorization, HTTP and image
+download work runs off the caller's Work dispatcher, with retained user/context
+lifetime and completion on the requested queue. Network/auth failures remain
+real failures, not replacement images or fabricated success. Contract reference:
+[Microsoft Profile API](https://learn.microsoft.com/en-us/gaming/gdk/docs/reference/live/rest/uri/profilev2/uri-usersbatchprofilesettingspost).
 
 The runtime includes a native SDK forwarding adapter, not a replacement cloud
 service. In an owner-private Xodus materialized launch view, its Wine entry point

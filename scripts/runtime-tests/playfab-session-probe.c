@@ -163,6 +163,25 @@ int main(void)
         CHECK(refs(1)==1&&refs(2)==1);
         if(mode<3)CHECK(init(&args)==S_OK);
     }
+    HRESULT(WINAPI *runtime_exit)(void)=(void*)GetProcAddress(runtime,"UninitializeApiImpl");
+    CHECK(runtime_exit!=NULL);
+    if(runtime_exit)for(unsigned mode=0;mode<3;++mode) {
+        CHECK(init(&args)==S_OK);SetEnvironmentVariableA("XODUS_SAVE_SYNC","auto");
+        reset(mode==1?E_ACCESSDENIED:S_OK,S_OK);
+        NexusAsync dummy={0};CHECK(add((void*)1,0,&dummy)==S_OK);
+        NexusAsync pending={0};pending.queue=queue;pending.context=(void*)0x5678;pending.callback=completion;
+        /* A title can leave its Manual callback unpumped during shutdown. */
+        if(mode==2)CHECK(cleanup(&pending)==S_OK);
+        CHECK(runtime_exit()==(mode==1?E_ACCESSDENIED:S_OK));
+        CHECK(count(0)==1&&count(1)==1&&count(2)==1&&count(3)==0);
+        CHECK(refs(1)==1);
+        if(mode==2) {
+            ULONGLONG start=GetTickCount64();
+            while(completions<5&&GetTickCount64()-start<3000)
+                IXThreadingImpl_XTaskQueueDispatch(threads,queue,XTaskQueuePort_Completion,50);
+            CHECK(completions==5);
+        }
+    }
     IXThreadingImpl_XTaskQueueCloseHandle(threads,queue);IXThreadingImpl_Release(threads);
     printf("CHECKS %u FAILURES %u\n",checks,failures);return failures?1:0;
 }
