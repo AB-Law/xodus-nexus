@@ -20,6 +20,11 @@ default discovery. A failed parse does not publish initialized state, and a
 subsequent valid initialization can retry. Initializations are serialized.
 These fixes do not establish a Gaming Services version or bypass its checks.
 
+Async scheduling also rejects uninitialized/detached and completed blocks
+instead of dereferencing absent state. A completed failure retains its original
+HRESULT; scheduling never manufactures successful cloud/auth results. A queue
+reference protects submission against immediate completion/queue release.
+
 ### Temporary Gaming Services version override
 
 A runtime-owned bootstrap is enabled by default before materialized game

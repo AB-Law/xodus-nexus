@@ -26,6 +26,10 @@ Never copy a candidate DLL into an active or production prefix.
 - `async-completion-lifetime-probe.c`: 400 completions with block deletion,
   result consumption and block reuse (2,805 checks). Callback changes for a
   reused block are made **before** Begin, matching the native snapshot contract.
+- `async-schedule-probe.c`: uninitialized/null/detached scheduling, valid provider
+  work, terminal-state rejection and original failure preservation (16 checks).
+  A vectored fault handler records the released DLL's read-0x20 crash without
+  opening a debugger. No real game, account, cloud or successful-save claim.
 - `winrt-json-probe.c`: real WinRT JSON activation, Parse, GetObject and
   nested array/object access (9 checks). Required by XUser endpoint parsing;
   HTTP 200 alone does not establish successful account initialization.

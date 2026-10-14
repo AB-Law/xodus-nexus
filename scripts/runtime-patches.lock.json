@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "release",
+  "status": "development",
   "sources": {
     "wine": {
       "url": "https://github.com/xodus-gaming/wine.git",
@@ -68,6 +68,10 @@
     {
       "file": "assets/xgameruntime-init-config-contract.patch",
       "sha256": "12c261ae35b0619e25a762abcad0df696f5b0cec4ec550ccc04783b8c239f541"
+    },
+    {
+      "file": "assets/xgameruntime-async-schedule-validation.patch",
+      "sha256": "56a0d773adfa306d04596ba838c88ce391efadd35d88c960aaae355cd5aec774"
     }
   ],
   "expectedXgameruntimeSources": {
@@ -89,7 +93,7 @@
     "dlls/xgameruntime/xstore.c": "25d4c481d017cf31d74f5a9cbe3e545197b1f70423a56df24bf93f639e5527c3",
     "dlls/xgameruntime/xsystem.c": "974c83fe2e1b97e6b2c86e95a558b31d2effe6b9d2b3166c2c4d1882a4341058",
     "dlls/xgameruntime/xsystemanalytics.c": "189e99c83273b429325ecefa2b9246c45863c22f0c4006a791ec57b8f7b9d384",
-    "dlls/xgameruntime/xthreading.c": "9541d2d6907ef06b403cf1dd041f10228b8858660ce9aab3b2bd0b8b2a22baa8",
+    "dlls/xgameruntime/xthreading.c": "52d6d6b921727c45759b0540edec61624fbf9cb44760ff339b5175d4c5b4bb71",
     "dlls/xgameruntime/xuser.c": "020bde95bf039a2523303c967b2bf7ae937bc6cfb0df07d2f9ece0efbcc956a2",
     "dlls/xgameruntime/util.c": "aebf1a7ebef0dff89d3a1683bc40e16c821eaeb5cc1160ce474b905d14d7cb5c",
     "dlls/xgameruntime/util.h": "b739dba8a69a36103e72afc8dcaeaf324470d9ed47a5a7dd81b18e4e511ae69a",
