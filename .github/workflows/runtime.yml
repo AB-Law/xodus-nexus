@@ -32,8 +32,30 @@ jobs:
           HEAD_SHA: ${{ github.sha }}
           FORCE_RUNTIME: ${{ github.event_name == 'workflow_dispatch' }}
         run: node scripts/ci/runtime-needed.mjs
-  build:
+  media:
     needs: changes
+    if: needs.changes.outputs.needed == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build portable pinned LGPL FFmpeg libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential curl xz-utils
+          node scripts/build-runtime-media.mjs --work "$PWD/media-build" --jobs 4
+          node scripts/ci/check-media-glibc.mjs media-build/media-manifest.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexus-runtime-media
+          path: media-build/media-bundle.tar.xz
+          if-no-files-found: error
+          retention-days: 3
+  build:
+    needs: [changes, media]
     if: needs.changes.outputs.needed == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
@@ -48,9 +70,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential gcc-mingw-w64-x86-64 flex bison autoconf cmake \
-            pkg-config python3 perl rsync file gh tar xz-utils openssl xvfb xauth ripgrep \
+            pkg-config python3 perl rsync file gh curl tar xz-utils openssl xvfb xauth ripgrep \
             libfreetype-dev libgnutls28-dev libvulkan1 libx11-6 \
-            libgstreamer1.0-0 libgstreamer-plugins-base1.0-0
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-0
 
       - name: Build all shared components from pinned clean checkouts
         run: node scripts/build-shared-runtime.mjs --work "$PWD/shared-build" --jobs 4
@@ -66,6 +88,18 @@ jobs:
             scripts/runtime-base.lock.json
             scripts/SHARED_RUNTIME.md
           retention-days: 3
+
+      - name: Unpack portable media build
+        uses: actions/download-artifact@v4
+        with:
+          name: nexus-runtime-media
+          path: shared-build
+
+      - name: Verify media build provenance
+        run: |
+          mkdir shared-build/media
+          tar -xJf shared-build/media-bundle.tar.xz -C shared-build/media
+          node scripts/ci/check-media-glibc.mjs shared-build/media/media-manifest.json
 
       - name: Resolve exact official Proton snapshot
         env:
@@ -105,6 +139,7 @@ jobs:
         run: |
           node scripts/assemble-shared-runtime.mjs \
             --base "$PWD/snapshot/$base_name" --components "$PWD/shared-build/components" \
+            --media "$PWD/shared-build/media" \
             --output "$PWD/shared-build/runtime"
 
       - name: Verify native queue, async, WinRT JSON and HTTP/2 contracts
@@ -113,6 +148,8 @@ jobs:
             shared-build/runtime shared-build/tests shared-build
           xvfb-run -a node scripts/runtime-tests/run-http2-suite.mjs \
             shared-build/runtime shared-build
+          node scripts/runtime-tests/run-media-suite.mjs \
+            shared-build/runtime shared-build/media-tests
 
       - name: Package verified runtime and corresponding source
         env:
@@ -134,9 +171,12 @@ jobs:
           (cd shared-build && tar -cJf "$nexus_name-x86_64.tar.xz" "$nexus_name")
           (cd shared-build && sha512sum "$nexus_name-x86_64.tar.xz" > "$nexus_name-x86_64.sha512sum")
           tar --exclude=.git -cJf "shared-build/$nexus_name-source.tar.xz" \
-            shared-build/wine-src shared-build/nghttp2-src assets scripts/runtime-patches.lock.json \
-            scripts/runtime-base.lock.json scripts/verify-runtime-base.mjs scripts/runtime-tests \
-            scripts/build-shared-runtime.mjs scripts/assemble-shared-runtime.mjs scripts/SHARED_RUNTIME.md
+            shared-build/wine-src shared-build/nghttp2-src \
+            shared-build/media/ffmpeg-4.4.8.tar.xz shared-build/media/media-manifest.json \
+            LICENSE assets scripts/runtime-patches.lock.json scripts/runtime-media.lock.json \
+            scripts/runtime-base.lock.json scripts/verify-runtime-base.mjs scripts/runtime-tests scripts/runtime-compat \
+            scripts/build-shared-runtime.mjs scripts/build-runtime-media.mjs \
+            scripts/assemble-shared-runtime.mjs scripts/SHARED_RUNTIME.md
           echo "nexus_version=$nexus_version" >> "$GITHUB_ENV"
           echo "nexus_name=$nexus_name" >> "$GITHUB_ENV"
 
@@ -147,6 +187,7 @@ jobs:
           path: |
             shared-build/runtime-contract-*/results.json
             shared-build/runtime-http2-*/results.json
+            shared-build/media-tests/results.json
           if-no-files-found: error
           retention-days: 7
 
@@ -168,13 +209,17 @@ jobs:
 
   runtime-gate:
     runs-on: ubuntu-24.04
-    needs: [changes, build]
+    needs: [changes, media, build]
     if: always()
     steps:
       - env:
           CHANGES_RESULT: ${{ needs.changes.result }}
           BUILD_NEEDED: ${{ needs.changes.outputs.needed }}
+          MEDIA_RESULT: ${{ needs.media.result }}
           BUILD_RESULT: ${{ needs.build.result }}
         run: |
           test "$CHANGES_RESULT" = success
-          if [ "$BUILD_NEEDED" = true ]; then test "$BUILD_RESULT" = success; fi
+          if [ "$BUILD_NEEDED" = true ]; then
+            test "$MEDIA_RESULT" = success
+            test "$BUILD_RESULT" = success
+          fi

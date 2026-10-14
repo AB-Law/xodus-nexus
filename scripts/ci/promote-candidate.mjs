@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
 import { verifyManifest } from './artifact-manifest.mjs';
+import { assertRuntimePromotion } from './runtime-promotion-policy.mjs';
 const kind = process.env.CANDIDATE_KIND, runId = process.env.CANDIDATE_RUN;
 const repo = process.env.GITHUB_REPOSITORY;
 if (process.env.GITHUB_REF !== 'refs/heads/main' || process.env.APPROVE_RELEASE !== 'true') throw Error('Explicit main-branch release authorization required');
@@ -29,7 +30,14 @@ try {
   let tag;
   if (kind === 'runtime') {
     const lock = JSON.parse(command('git', ['show', `${run.head_sha}:scripts/runtime-patches.lock.json`]));
-    if (lock.status !== 'release') throw Error('Candidate runtime source lock is still development');
+    const at = (commit, file) => JSON.parse(command('git', ['show', `${commit}:${file}`]));
+    assertRuntimePromotion(lock, at('HEAD', 'scripts/runtime-patches.lock.json'),
+      at(run.head_sha, 'scripts/runtime-base.lock.json'), at('HEAD', 'scripts/runtime-base.lock.json'),
+      at(run.head_sha, 'scripts/runtime-media.lock.json'), at('HEAD', 'scripts/runtime-media.lock.json'));
+    const changed = command('git', ['diff', '--name-only', run.head_sha, 'HEAD', '--', 'assets/*.patch',
+      'scripts/build-shared-runtime.mjs', 'scripts/assemble-shared-runtime.mjs', 'scripts/build-runtime-media.mjs',
+      'scripts/runtime-tests', '.github/workflows/runtime.yml']).trim();
+    if (changed) throw Error('Runtime build inputs changed after candidate validation');
     const archive = manifest.files.find(file => /-x86_64\.tar\.xz$/.test(file.name));
     tag = archive.name.replace(/^xodus-nexus-runtime-/, 'runtime-').replace(/-x86_64\.tar\.xz$/, '');
   } else if (kind === 'backend') {
@@ -53,6 +61,8 @@ try {
   command('gh', ['release', 'create', tag, '--repo', repo, '--target', run.head_sha,
     ...manifest.files.map(file => path.join(directory, file.name)), path.join(directory, 'candidate.json'),
     ...(kind === 'launcher' ? [] : ['--latest=false']),
-    '--title', `Xodus Nexus ${kind} ${tag}`, '--notes', `Promoted unchanged from verified workflow run ${runId}. Human validation and exact artifact checksums are recorded in the repository.`]);
+    '--title', `Xodus Nexus ${kind} ${tag}`, '--notes',
+    command('git', ['show', `${run.head_sha}:.github/release-notes/${kind === 'runtime' ? 'runtime-signin-updates.md' : `${kind}-${kind === 'launcher' ? tag.slice(1) : tag.slice('backend-v'.length)}.md`}`]) +
+    `\nPromoted unchanged from verified workflow [run ${runId}](https://github.com/${repo}/actions/runs/${runId}). Exact artifact checksums and validation are recorded in the repository.`]);
   console.log(`Promoted tested ${kind} candidate ${runId} as ${tag}; no rebuild performed.`);
 } finally { await fs.rm(directory, { recursive: true, force: true }); }

@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildCompatibility } from './runtime-compat/build.mjs';
 
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const lockBytes = await fs.readFile(path.join(project, 'scripts/runtime-patches.lock.json'));
@@ -14,12 +15,12 @@ const options = {};
 for (let i = 2; i < process.argv.length; i++) {
   const key = process.argv[i];
   if (key === '--prepare-only') options.prepareOnly = true;
-  else if (['--work', '--jobs', '--wine-mirror', '--xgameruntime-mirror', '--nghttp2-mirror', '--base-runtime'].includes(key)) {
+  else if (['--work', '--jobs', '--wine-mirror', '--xgameruntime-mirror', '--nghttp2-mirror', '--base-runtime', '--media-archive'].includes(key)) {
     if (!process.argv[i + 1] || process.argv[i + 1].startsWith('--')) throw new Error(`Missing value for ${key}`);
     options[key.slice(2)] = process.argv[++i];
   } else throw new Error(`Unknown argument ${key}`);
 }
-if (!options.work) throw new Error('Usage: node scripts/build-shared-runtime.mjs --work NEW_DIRECTORY [--jobs 4] [--base-runtime PROTON_DIRECTORY] [--prepare-only] [--wine-mirror GIT_REPO] [--xgameruntime-mirror GIT_REPO] [--nghttp2-mirror GIT_REPO]');
+if (!options.work) throw new Error('Usage: node scripts/build-shared-runtime.mjs --work NEW_DIRECTORY [--jobs 4] [--base-runtime PROTON_DIRECTORY] [--media-archive PINNED_FFMPEG_TARBALL] [--prepare-only] [--wine-mirror GIT_REPO] [--xgameruntime-mirror GIT_REPO] [--nghttp2-mirror GIT_REPO]');
 const work = path.resolve(options.work);
 const jobs = options.jobs ?? '4';
 if (!/^[1-9][0-9]?$/.test(jobs)) throw new Error('jobs must be 1..99');
@@ -48,6 +49,14 @@ if (await exists(work)) throw new Error(`Refusing to overwrite an existing work 
 for (const patch of lock.patches) {
   if (await shaFile(path.join(project, patch.file)) !== patch.sha256) throw new Error(`Patch checksum mismatch: ${patch.file}`);
 }
+const compatibilitySources = ['scripts/runtime-compat/build.mjs', 'scripts/runtime-compat/playfab-save-folder.c',
+  'scripts/runtime-compat/playfab-save-folder.def', 'scripts/runtime-compat/wine-launcher.c',
+  'scripts/runtime-compat/gaming-services-version.c'];
+if (Object.keys(lock.runtimeCompatibilitySources ?? {}).sort().join() !== compatibilitySources.sort().join())
+  throw new Error('Missing or unknown runtime compatibility source lock');
+for (const [file, expected] of Object.entries(lock.runtimeCompatibilitySources)) {
+  if (await shaFile(path.join(project, file)) !== expected) throw new Error(`Runtime compatibility source checksum mismatch: ${file}`);
+}
 await fs.mkdir(work, { recursive: true });
 const source = path.join(work, 'wine-src');
 const ngSource = path.join(work, 'nghttp2-src');
@@ -67,7 +76,9 @@ for (const [relative, expected] of Object.entries(lock.expectedXgameruntimeSourc
 const provenance = {
   schema: 1, status: lock.status, sourceLockSha256: sha(lockBytes), sources: lock.sources,
   patches: lock.patches, verifiedXgameruntimeSources: lock.expectedXgameruntimeSources,
+  requiresBackendVersion: lock.requiresBackendVersion,
   limitations: lock.limitations, components: {},
+  runtimeCompatibilitySources: lock.runtimeCompatibilitySources,
   configure: ['--enable-win64', '--without-x', '--without-wayland', '--disable-tests'],
   toolchain: Object.fromEntries(['gcc', 'x86_64-w64-mingw32-gcc', 'cmake', 'make', 'autoconf', 'bison', 'flex'].map(tool => [tool, run(tool, ['--version'], work, true).split('\n')[0]])),
 };
@@ -104,11 +115,30 @@ for (const [name, file] of Object.entries(outputs)) {
   provenance.components[name] = await shaFile(file);
 }
 const tests = path.join(work, 'tests');
+provenance.runtimeCompatibility = await buildCompatibility(components);
 await fs.mkdir(tests);
+// Account-free SDK fixture lives only in tests, never in the shipped runtime.
+const pgsTests = path.join(tests, 'playfab-folder');
+await fs.mkdir(pgsTests);
+const pgsDefinition = await fs.readFile(path.join(project, 'scripts/runtime-compat/playfab-save-folder.def'), 'utf8');
+await fs.writeFile(path.join(pgsTests, 'fixture.def'), pgsDefinition.replace(/^(PF\w+)(?:=\S+)? @(\d+)$/gm,
+  (_, name, ordinal) => `${name}${name === 'PFGameSaveFilesInitialize' ? '' : '=probe_stub'} @${ordinal}`));
+const pgsProbeSource = path.join(project, 'scripts/runtime-tests/playfab-folder-probe.c');
+for (const [define, name, extra] of [
+  ['PROBE_SDK', 'nexus_pgs_native.dll', [path.join(pgsTests, 'fixture.def')]],
+  ['PROBE_RUNTIME', 'xgameruntime.dll', []],
+]) run('x86_64-w64-mingw32-gcc', ['-shared', '-O2', '-Wall', '-Wextra', '-Werror', `-D${define}`, pgsProbeSource, ...extra, '-o', path.join(pgsTests, name)], work);
+run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-Wextra', '-Werror', pgsProbeSource, '-o', path.join(pgsTests, 'playfab-folder-probe.exe')], work);
+await fs.copyFile(path.join(components, 'PlayFabGameSave.dll'), path.join(pgsTests, 'PlayFabGameSave.dll'));
+const initTests = path.join(tests, 'runtime-init');
+await fs.mkdir(initTests);
+run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-Wextra', '-Werror', path.join(project, 'scripts/runtime-tests/runtime-init-probe.c'), '-o', path.join(initTests, 'runtime-init-probe.exe')], work);
+await fs.writeFile(path.join(initTests, 'MicrosoftGame.config'), '<Game><Identity Name="Nexus.Init.Inline" Publisher="CN=NexusProbe"/><TitleId>1234</TitleId></Game>');
 for (const test of ['taskqueue-teardown', 'taskqueue-contract', 'async-provider-contract', 'async-completion-lifetime']) {
   run('x86_64-w64-mingw32-gcc', ['-D__WINESRC__', '-O2', '-Wall', '-I', path.join(build, 'dlls/xgameruntime'), '-I', path.join(source, 'dlls/xgameruntime'), path.join(project, `scripts/runtime-tests/${test}-probe.c`), '-o', path.join(tests, `${test}-probe.exe`)], work);
 }
 // windows.web generated these WinRT headers from the pinned IDL sources.
+run('x86_64-w64-mingw32-gcc', ['-D__WINESRC__', '-O2', '-Wall', '-I', path.join(build, 'dlls/xgameruntime'), '-I', path.join(source, 'dlls/xgameruntime'), '-I', path.join(build, 'include'), '-I', path.join(source, 'include'), path.join(project, 'scripts/runtime-tests/token-dispatch-probe.c'), '-o', path.join(tests, 'token-dispatch-probe.exe'), '-lruntimeobject'], work);
 // Ubuntu's older MinGW SDK need not contain windows.data.json.h at all.
 run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-I', path.join(build, 'include'), '-I', path.join(source, 'include'), path.join(project, 'scripts/runtime-tests/winrt-json-probe.c'), '-o', path.join(tests, 'winrt-json-probe.exe'), '-lruntimeobject'], work);
 await fs.copyFile(path.join(ngSource, 'COPYING'), path.join(components, 'nghttp2-LICENSE'));
@@ -119,6 +149,9 @@ await fs.copyFile(path.join(source, 'dlls/xgameruntime/COPYING.LIB'), path.join(
 });
 await fs.writeFile(path.join(components, 'source-manifest.json'), JSON.stringify(provenance, null, 2) + '\n', { flag: 'wx' });
 if (options['base-runtime']) {
-  run('node', [path.join(project, 'scripts/assemble-shared-runtime.mjs'), '--base', path.resolve(options['base-runtime']), '--components', components, '--output', path.join(work, 'runtime')], project);
+  const media = path.join(work, 'media');
+  run('node', [path.join(project, 'scripts/build-runtime-media.mjs'), '--work', media,
+    '--jobs', String(Math.min(Number(jobs), 32)), ...(options['media-archive'] ? ['--archive', path.resolve(options['media-archive'])] : [])], project);
+  run('node', [path.join(project, 'scripts/assemble-shared-runtime.mjs'), '--base', path.resolve(options['base-runtime']), '--components', components, '--media', media, '--output', path.join(work, 'runtime')], project);
 }
 console.log(`Built shared runtime components and ABI probes: ${components}`);

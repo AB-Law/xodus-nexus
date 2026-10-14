@@ -27,6 +27,60 @@
       "approved": true,
       "approvedBy": "domsvoboda",
       "evidence": "Owner-authorized release 2026-10-12: exact CI artifact downloaded and manifest-verified (SHA-512/SHA-256, commit c276ecb, run 38274332546); CI native suite (4194 checks) and HTTP/2 suite (14 checks) passed with zero failures. The same locked DLL recipe line was previously validated by the owner in a real Gears of War: E-Day session (sign-in, cloud saves, online lobby) on 2026-10-12, but these exact CI bytes were not real-game tested; the owner accepted rebuilding a new release if the artifact misbehaves."
+    },
+    {
+      "kind": "launcher",
+      "runId": "38278762224",
+      "commit": "cd248560b6c5f9ce01599bf30dda36b8a263e462",
+      "manifestSha256": "406403988515bfaf28d0b3e153546d6c0d872b2e54c66cec85fe2c83548a6fb8",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Owner-authorized release 2026-10-12: exact CI artifact downloaded and manifest-verified (SHA-512/SHA-256, commit cd24856, run 38278762224); the exact AppImage passed an isolated XODUS_DEMO=1 boot with the normal Electron sandbox. This release decouples backend discovery from the launcher's baked recipe version, so backend updates no longer require a launcher release. No real game, account or cloud test was performed on these exact bytes; the owner accepted rebuilding a new release if the artifact misbehaves."
+    },
+    {
+      "kind": "backend",
+      "runId": "38278151085",
+      "commit": "e368aa550c5868b6abadc1aacbd112804e0f7fcc",
+      "manifestSha256": "4500a310f0856023f5568e69ae61d33659fd2bf1871bc7a4c77d5fdf3033f21f",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Owner-authorized release 2026-10-12: exact CI artifact downloaded and manifest-verified (SHA-512/SHA-256, provenance matches the linux-run-v9 recipe lock, commit e368aa5, run 38278151085); the packaged xodus-service binary contains the store_license receipt module (verified on the exact bytes). This is the fix for the elias-gutpuncher identity failure: XStoreQueryLicenseTokenAsync receipts via licensing.mp.microsoft.com. The same implementation was real-game validated in the 2026-10-11 diagnostic sessions (store-license S_OK in game); these exact CI bytes were not yet real-game tested; the owner accepted rebuilding a new release if the artifact misbehaves."
+    },
+    {
+      "kind": "launcher",
+      "runId": "38364013579",
+      "commit": "695468989f5090d9059bfd7e0f3ed44678979133",
+      "manifestSha256": "68d53a6a8ee32684431c1c998ffca549c7fcb9d5c251d6e4de796f01401da6f3",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Owner-authorized release 2026-10-13: exact CI artifact Xodus-Nexus-0.2.1-x86_64.AppImage (run 38364013579, commit 6954689) downloaded, SHA-512 verified, and passed a clean first-run install test on Fedora 43: fresh profile showed the setup wizard, the prebuilt backend installed automatically during setup, and sign-in unlocked in the wizard without the Settings detour."
+    },
+    {
+      "kind": "launcher",
+      "runId": "38482805812",
+      "commit": "79103ec8919938f603913c1be095c739a58957e7",
+      "manifestSha256": "2038cbbb9fa53ce27b75b3ade916e376bcc5e655699431391fc7bf3ca3405e45",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit owner authorization 2026-10-14: publish after successful main CI and exact package verification, without another game run. Downloaded binary/checksum/candidate manifests and corresponding source where applicable passed SHA-256/SHA-512 verification. All main launcher/backend/runtime CI builds succeeded; runtime 4284 native checks plus HTTP/2 and H.264/AAC checks passed. Owner confirmed local sign-in/Online and authorized no additional real-game test of these exact CI bytes. Owner explicitly approved post-validation metadata-only recipe approval with unchanged source/base/media/build inputs and unchanged candidate bytes."
+    },
+    {
+      "kind": "backend",
+      "runId": "38482805951",
+      "commit": "79103ec8919938f603913c1be095c739a58957e7",
+      "manifestSha256": "99af02bbd224ba72e2d60e087dbcd327117fd8c4a4f73a2ce0468f989895843b",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit owner authorization 2026-10-14: publish after successful main CI and exact package verification, without another game run. Downloaded binary/checksum/candidate manifests and corresponding source where applicable passed SHA-256/SHA-512 verification. All main launcher/backend/runtime CI builds succeeded; runtime 4284 native checks plus HTTP/2 and H.264/AAC checks passed. Owner confirmed local sign-in/Online and authorized no additional real-game test of these exact CI bytes. Owner explicitly approved post-validation metadata-only recipe approval with unchanged source/base/media/build inputs and unchanged candidate bytes."
+    },
+    {
+      "kind": "runtime",
+      "runId": "38482805798",
+      "commit": "79103ec8919938f603913c1be095c739a58957e7",
+      "manifestSha256": "54b0526977ad7a77912e7f0fb8389d877d48665cb03f4b7438511928b22a3951",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit owner authorization 2026-10-14: publish after successful main CI and exact package verification, without another game run. Downloaded binary/checksum/candidate manifests and corresponding source where applicable passed SHA-256/SHA-512 verification. All main launcher/backend/runtime CI builds succeeded; runtime 4284 native checks plus HTTP/2 and H.264/AAC checks passed. Owner confirmed local sign-in/Online and authorized no additional real-game test of these exact CI bytes. Owner explicitly approved post-validation metadata-only recipe approval with unchanged source/base/media/build inputs and unchanged candidate bytes."
     }
   ]
 }

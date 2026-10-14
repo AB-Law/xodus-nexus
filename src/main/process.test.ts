@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { spawnTracked } from './process.js';
+import { resolveScriptCommand, spawnTracked, wrapForTerminal } from './process.js';
 
 describe('tracked terminal output', () => {
   it('emits carriage-return updates from a pseudo-terminal', async () => {
@@ -19,5 +19,25 @@ describe('tracked terminal output', () => {
     const result = await tracked.result;
     expect(result.code).toBe(0);
     expect(result.output).toContain("a'b; echo UNSAFE");
+  });
+});
+
+describe('wrapForTerminal', () => {
+  it('wraps the command for script(1) with quoted arguments', () => {
+    const wrapped = wrapForTerminal('printf', ["a'b; echo UNSAFE"], '/usr/bin/script');
+    expect(wrapped.command).toBe('/usr/bin/script');
+    expect(wrapped.args).toEqual(['-q', '-f', '-e', '-c', "'printf' 'a'\\''b; echo UNSAFE'", '/dev/null']);
+  });
+
+  it('passes the command through unchanged when script(1) is unavailable', () => {
+    const passthrough = wrapForTerminal('xodus-cli', ['streaming', 'a b'], null);
+    expect(passthrough).toEqual({ command: 'xodus-cli', args: ['streaming', 'a b'] });
+  });
+});
+
+describe('resolveScriptCommand', () => {
+  it('returns an executable path or null, never a bare name', () => {
+    const script = resolveScriptCommand();
+    if (script !== null) expect(script).toContain('/');
   });
 });

@@ -23,9 +23,9 @@ const env = { ...process.env, WINEPREFIX: prefix, WINEARCH: 'win64', WINEDEBUG: 
 for (const key of Object.keys(env)) if (/^(XODUS_|XUSER_|STEAM_COMPAT_|SteamAppId$|SteamGameId$)/.test(key)) delete env[key];
 const wine = path.join(files, 'bin/wine');
 const server = path.join(files, 'bin/wineserver');
-async function run(executable, args, timeout = 60000) {
+async function run(executable, args, timeout = 60000, overrides = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(executable, args, { env: { ...env, ...overrides }, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '', timedOut = false;
     const collect = bytes => { if (output.length < 512000) output += bytes.toString().slice(0, 512000 - output.length); };
     child.stdout.on('data', collect); child.stderr.on('data', collect);
@@ -49,13 +49,28 @@ try {
     await fs.copyFile(path.join(files, 'lib/wine/x86_64-windows', name), temporary, fs.constants.COPYFILE_EXCL);
     await fs.rename(temporary, dest);
   }
-  for (const name of ['taskqueue-teardown', 'taskqueue-contract', 'async-provider-contract', 'async-completion-lifetime', 'winrt-json']) {
+  for (const name of ['taskqueue-teardown', 'taskqueue-contract', 'async-provider-contract', 'async-completion-lifetime', 'winrt-json', 'token-dispatch']) {
     const result = await run(wine, [path.join(tests, `${name}-probe.exe`)]);
     await fs.writeFile(path.join(root, `${name}.log`), result.output, { mode: 0o600 });
     const summary = result.output.split(/\r?\n/).filter(line => /^(FAIL |CHECKS |QUEUE |ASYNC )/.test(line));
     console.log(`${name}: exit=${result.code} timeout=${result.timedOut}\n${summary.join('\n')}`);
     results.push({ name, code: result.code, timedOut: result.timedOut, summary });
     if (result.code !== 0 || result.timedOut) throw new Error(`Contract probe failed: ${name}; see ${root}`);
+  }
+  const pgs = await run(wine, [path.join(tests, 'playfab-folder/playfab-folder-probe.exe')], 60000,
+    { WINEDLLOVERRIDES: `${env.WINEDLLOVERRIDES};xgameruntime=n;playfabgamesave=n;nexus_pgs_native=n` });
+  await fs.writeFile(path.join(root, 'playfab-folder.log'), pgs.output, { mode: 0o600 });
+  const summary = pgs.output.split(/\r?\n/).filter(line => /^(FAIL |CHECKS )/.test(line));
+  results.push({ name: 'playfab-folder', code: pgs.code, timedOut: pgs.timedOut, summary });
+  console.log(`playfab-folder: exit=${pgs.code} timeout=${pgs.timedOut}\n${summary.join('\n')}`);
+  if (pgs.code !== 0 || pgs.timedOut) throw new Error(`PlayFab adapter contract probe failed; see ${root}`);
+  for (const kind of ['inline', 'retry', 'default']) {
+    const result = await run(wine, [path.join(tests, 'runtime-init/runtime-init-probe.exe'), kind]);
+    await fs.writeFile(path.join(root, `runtime-init-${kind}.log`), result.output, { mode: 0o600 });
+    const summary = result.output.split(/\r?\n/).filter(line => /^(FAIL |CHECKS )/.test(line));
+    results.push({ name: `runtime-init-${kind}`, code: result.code, timedOut: result.timedOut, summary });
+    console.log(`runtime-init-${kind}: exit=${result.code} timeout=${result.timedOut}\n${summary.join('\n')}`);
+    if (result.code !== 0 || result.timedOut) throw new Error(`Runtime initialization contract failed: ${kind}; see ${root}`);
   }
 } finally {
   try { execFileSync(server, ['-k'], { env, timeout: 5000, stdio: 'ignore' }); } catch { /* never stop another prefix */ }

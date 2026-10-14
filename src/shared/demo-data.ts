@@ -28,8 +28,8 @@ export function demoSnapshot(coverUrls: ReadonlyMap<string, string> = new Map())
       available: true, source: 'managed', binaryPath: '/home/demo/.config/xodus-nexus/xodus-backends/current', commit: '53ea781dcd073e31d7ea68e894134e9c959bff04', upstreamCommit: '53ea781dcd073e31d7ea68e894134e9c959bff04', updateAvailable: false, checking: false, updating: false, externalRoot: '',
       capabilities: { commands: ['login', 'logout', 'download', 'streaming', 'run', 'license', 'extract'], account: true, login: true, logout: true, download: true, streaming: true, run: true, version: '0.5.0' },
       prerequisites: { git: true, cargo: true, rustc: true, protoc: true },
-      linuxRunPatch: 'linux-run-v8',
-      version: '0.1.0', delivery: 'release', releaseAvailable: true, releaseVersion: '0.1.0',
+      linuxRunPatch: 'linux-run-v10',
+      version: '0.2.1', delivery: 'release', releaseAvailable: true, releaseVersion: '0.2.1',
     },
     runtime: {
       installed: true, checking: false, updating: false, runtimeRoot: '/home/demo/.local/share/xodus-nexus/runtimes', name: 'xodus-nexus-runtime-11.0-20261011-g3fd4ae10', winePath: '/home/demo/.local/share/xodus-nexus/runtimes/releases/xodus-nexus-runtime-11.0-20261011-g3fd4ae10/files/bin/wine', commit: 'af521bf321581c78072a147a74bb9527750a109a', nexusAvailable: true, nexusName: 'xodus-nexus-runtime-11.0-20261011-g3fd4ae10-x86_64.tar.xz', nexusVersion: 'runtime-11.0-20261011-g3fd4ae10', artifactAvailable: false,
@@ -39,7 +39,7 @@ export function demoSnapshot(coverUrls: ReadonlyMap<string, string> = new Map())
     downloads: structuredClone(demoDownloads).map((task) => ({ ...task, coverUrl: task.productId ? coverUrls.get(task.productId) : undefined })),
     settings: { installRoot: '/home/demo/Games/Xodus Nexus', market: 'US', parallelDownloads: 4, winePath: '', externalXodusRoot: '', runtimeRoot: '', verboseLogs: false, firstRunCompleted: true },
     auth: { running: false, stored: true, username: 'DemoPlayer', lastResult: 'success', note: 'Demo mode: sample data only. Store pages show the live Microsoft Store catalog.' },
-    launcherUpdate: { currentVersion: '0.1.0', checking: false, checkedAt: new Date().toISOString() },
+    launcherUpdate: { currentVersion: '0.2.2', checking: false, checkedAt: new Date().toISOString() },
   };
 }
 

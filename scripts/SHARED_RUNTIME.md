@@ -10,12 +10,67 @@ pinned Git checkouts. It includes the PR #28/cloud-save line, subsequent
 XUser/Store/license/receipt work, Mistral's package/network/event/system API
 additions, the queue and XAsync fixes, HTTP/2 WinHTTP, nghttp2, WinRT JSON,
 and the Mono path-bounds fix. No game-specific runtime selection is introduced.
+It also includes initial connectivity notifications, HTTPS/WSS security queries,
+GDK WinHTTP options, installed-package metadata, verified Store update queries
+and background token/signature authorization. Store queries require Nexus
+backend 0.2.1 or newer and currently support the verified current-game no-update
+case, not DLC or update installation.
+Configuration bootstrap also distinguishes inline XML, explicit files and
+default discovery. A failed parse does not publish initialized state, and a
+subsequent valid initialization can retry. Initializations are serialized.
+These fixes do not establish a Gaming Services version or bypass its checks.
+
+### Temporary Gaming Services version override
+
+A runtime-owned bootstrap is enabled by default before materialized game
+executables. `NEXUS_GAMING_SERVICES_VERSION_OVERRIDE=0` disables it. It writes
+`CurrentVersion` and `AvailableVersion` as REG_QWORD `0x0026007569790000`, decoded
+by the native GDK frontend as **38.117.27001.0**. This is an explicitly hardcoded
+compatibility workaround, NOT a Microsoft Gaming Services installation, API
+implementation, or evidence of equivalent capabilities. No title matching or
+launcher modification is involved. It requires an explicit owner-only-write
+`WINEPREFIX`. For diagnostics use a disposable test prefix. It overwrites only
+the two version values and logs the override, leaving authentication, ownership,
+cloud and service/provider settings unchanged. Setting the environment switch to 0
+stops further writes but does not undo registry values already stored in that
+prefix; discard the disposable prefix or restore its pre-test registry backup.
+Do not promote this as a proper Gaming Services implementation.
+
+### PlayFab Game Saves compatibility
+
+The runtime includes a native SDK forwarding adapter, not a replacement cloud
+service. In an owner-private Xodus materialized launch view, its Wine entry point
+detects the supported x64 `PlayFabGameSave.dll` export contract and retains the
+game's original SDK as `nexus_pgs_native.dll`. The adapter supplies a missing
+`saveFolder` from the current package's `XPersistentLocalStorage` root, with a
+`PlayFabGameSaves` child. Caller-specified folders, queue/options, authentication,
+cloud operations and genuine SDK errors are preserved. UTF-8 paths are created
+through Unicode Windows APIs. All other exports forward unchanged.
+For an omitted folder, the adapter defaults the upstream SDK's recognized
+`ForceUseInprocGameSaves` policy to 1 only if absent. An explicit existing policy
+is preserved; no `CurrentVersion`/`AvailableVersion` claims are provisioned.
+
+Owner-created temporary views with umask-derived read permissions (such as
+0755) are sealed to 0700 before staging; other-user-writable or symlinked views
+remain untouched. NEXUS_BOOTSTRAP_DIAGNOSTICS=1 reports only staging counts.
+
+No game names/product IDs, original-file edits, import hooks, diagnostic version
+QWORDs or proprietary SDK binaries are included. Unsupported SDK exports are
+left unchanged with a diagnostic; staging failures abort rather than partially
+launch. `NEXUS_PLAYFAB_ADAPTER=0` disables staging for diagnosis. Ordinary Wine
+commands and launches outside private Xodus views go to the unchanged loader.
+This does **not** implement Microsoft Gaming Services or its version gate, nor
+claim all PlayFab SDK versions, cloud-save roundtrips or all-title compatibility.
+The successful diagnostic game run also used copied Windows version metadata;
+those version claims are not shipped. This provider/folder change does not
+resolve a game's separate pre-initialization Gaming Services version check.
 
 ## Build
 
 Requirements: Linux x86-64, Node 22+, Git, GCC/Make, MinGW-w64 x86-64,
-CMake, autoconf, flex, bison, Perl, Python 3, file, and Wine build prerequisites
-(including freetype/GnuTLS development packages). See the workflow's apt list.
+CMake, autoconf, flex, bison, Perl, Python 3, file, curl, GStreamer development
+headers, and Wine build prerequisites (including freetype/GnuTLS development
+packages). See the workflow's apt list.
 Native tests additionally require pgrep, OpenSSL, a working Proton loader and
 its host libraries. CI uses Xvfb; desktop tests can use the current display.
 
@@ -28,8 +83,11 @@ node scripts/build-shared-runtime.mjs \
 The work directory **must not already exist**. Without `--base-runtime`, the
 script builds components and probes only. A base is an extracted official
 Proton distribution containing `proton`, `files/bin/wine` and its default
-prefix, not a game prefix. The script does not download or install games,
-authenticate, switch the active runtime, or edit the base distribution.
+prefix, not a game prefix. A complete build downloads the exact FFmpeg source
+archive locked in [`runtime-media.lock.json`](runtime-media.lock.json), verifies
+its SHA-256, and builds LGPL shared decoder libraries. `--media-archive` accepts
+the same verified tarball for offline builds. The script does not download or
+install games, authenticate, switch the active runtime, or edit the base.
 
 The source lock is [`runtime-patches.lock.json`](runtime-patches.lock.json).
 It pins Wine b1dd3273, xgameruntime 64aebcab, and nghttp2 85e300c7/v1.70.0,
@@ -60,12 +118,26 @@ Output:
 
 - `components/`: newly built xgameruntime, winhttp, mscoree, libnghttp2, windows.web,
   licenses and a source/patch/toolchain/component checksum manifest.
+- `media/`: pinned FFmpeg 4.4.8 source archive, LGPL build, six shared
+  libraries, configure options and checksums. The archive accompanies the
+  distributed runtime source package.
 - `tests/`: four newly compiled native ABI probes and a WinRT JSON dependency probe.
 - `runtime/`: a **new copy** of the supplied Proton base with the five DLLs
   installed in both runtime and default-prefix locations, plus provenance.
 
 The base Wine/Unix loader and other Proton components are supplied by that
-distribution, not rebuilt here. Pin/checksum the base archive as well when
+distribution, not rebuilt here. Its GStreamer `libgstlibav.so` requires FFmpeg
+4.x ABI libraries missing from the base snapshot. Nexus now builds and bundles
+matching LGPL `libavcodec.so.58`, `libavformat.so.58`, `libavfilter.so.7`,
+`libavutil.so.56`, `libswresample.so.3` and `libswscale.so.5` in the one shared
+runtime. This introduces no per-game rule or dependency on host FFmpeg. The
+FFmpeg build disables GPL/nonfree components and installs its license in the
+runtime. CI builds these media libraries on Ubuntu 22.04 and rejects a
+glibc requirement above 2.35; a local build on a newer distribution is only
+diagnostic and must not be released as the portable artifact. Other optional
+Proton plugins may still lack unrelated dependencies;
+this work verifies H.264/AAC decoding, not universal media support.
+Pin/checksum the base archive as well when
 distributing a complete runtime. Reproducible source reconstruction does not
 claim byte-identical DLLs across paths or toolchain versions; DWARF paths,
 toolchains, and PE timestamps/build IDs can differ. Tool versions and output
@@ -109,20 +181,29 @@ node scripts/runtime-tests/run-contract-probes.mjs \
   /absolute/build/runtime /absolute/build/tests /absolute/build
 node scripts/runtime-tests/run-http2-suite.mjs \
   /absolute/build/runtime /absolute/build
+node scripts/runtime-tests/run-media-suite.mjs \
+  /absolute/build/runtime /absolute/build/media-tests
 npm run typecheck
 npm test
 npm run test:runtime-tools
 ```
 
 Expected contract checks: queue teardown 20, queue stress 1,302, XAsync
-provider 58, completion lifetime 2,805 (4,185 total), plus 9 WinRT JSON checks
+provider 104, completion lifetime 2,805, token dispatch/lifetime 44,
+and 9 WinRT JSON checks (4,284 total), plus
 and 14 HTTP/2 checks. The JSON probe exercises real activation, parsing,
 object access and nested array/object access without account data or network.
-ABI/transport tests are not a substitute for a game test: test the clean-build
+The token-dispatch probe uses a synthetic delayed failure, not a real identity
+or token. ABI/transport tests are not a substitute for a game test: test the clean-build
 candidate in a separate prefix before promotion, without overwriting the
 known-working runtime. The previous development candidate reached the Gears
 online lobby; that user confirmation must not be misattributed to a newly
 built DLL before testing it in-game.
+
+The media suite checks that GStreamer's libav plugin resolves FFmpeg only from
+the bundled runtime and registers H.264/AAC decoders. An isolated local
+candidate also decoded Minecraft Dungeons II's H.264/AAC intro MP4 to fake
+sinks. This is media evidence, not a sign-in or game-compatibility claim.
 
 The corrected five-component clean build has now passed the isolated Gears
 game test according to the user, after restoring the WinRT JSON dependency.
