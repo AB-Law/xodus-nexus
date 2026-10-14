@@ -47,11 +47,7 @@ Never copy a candidate DLL into an active or production prefix.
   dialog choices, preserved title callbacks, retained synthetic users, caller
   Manual completion queue, genuine upload failure and acknowledged upload before
   SDK cleanup, explicit cloud opt-out and synchronous runtime drain while the
-  title's Manual completion port is unpumped. Separate synthetic child processes
-  opt into the experimental normal-exit barrier: imported/dynamically resolved
-  ExitProcess, pending Manual completion and upload failure must all finish SDK
-  cleanup before exit, while preserving the child's original exit code.
-  Test-only UI choices and synthetic SDK/Core DLLs are
+  title's Manual completion port is unpumped (132 checks). Test-only UI choices and synthetic SDK/Core DLLs are
   confined to the probe directory and never staged in the production runtime.
   Does not establish real cloud upload, game shutdown timing or forced-exit sync.
 
