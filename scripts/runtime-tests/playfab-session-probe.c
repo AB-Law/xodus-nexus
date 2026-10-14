@@ -7,6 +7,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "../runtime-compat/playfab-session.h"
 #if defined(PROBE_CORE)
 static LONG references[3]={0,1,1};
@@ -43,6 +45,14 @@ static HRESULT WINAPI provider(unsigned op,const NexusProviderData *data)
     }
     if(op==1) {
         Sleep(40);if(m->upload)InterlockedIncrement(&uploaded);
+        if(!m->upload) {
+            char name[128];
+            if(GetEnvironmentVariableA("NEXUS_TEST_CLOSED_EVENT",name,sizeof(name))&&
+               uploaded==uploadCalls&&!badOrder&&uploadCalls==1&&cleanupCalls==1) {
+                HANDLE event=OpenEventA(EVENT_MODIFY_STATE,FALSE,name);
+                if(event){SetEvent(event);CloseHandle(event);}
+            }
+        }
         api->vtable->complete(api,data->async,m->error,0);return E_PENDING;
     }
     if(op==4)HeapFree(GetProcessHeap(),0,m);
@@ -115,8 +125,11 @@ static HRESULT(WINAPI *response_fn)(void*,unsigned);
 static void WINAPI custom_conflict(void *u,SaveDescriptor *l,SaveDescriptor *r,void *context)
 { (void)l;(void)r;CHECK(context==(void*)0x1234);++customCalls;response_fn(u,0); }
 static void WINAPI completion(NexusAsync *async) {CHECK(async->context==(void*)0x5678);InterlockedIncrement(&completions);}
-int main(void)
+int main(int argc,char **argv)
 {
+    BOOL exitProbe=argc==3&&!strcmp(argv[1],"--exit-probe");
+    if(exitProbe)SetEnvironmentVariableA("NEXUS_PGS_EXIT_BARRIER","1");
+    else SetEnvironmentVariableA("NEXUS_PGS_EXIT_BARRIER",NULL);
     SetEnvironmentVariableA("XODUS_SAVE_SYNC","auto"); /* Synthetic SDK only. */
     HMODULE runtime=LoadLibraryW(L"xgameruntime.dll"),core=LoadLibraryW(L"PlayFabCore.dll"),proxy=LoadLibraryW(L"PlayFabGameSave.dll"),sdk=GetModuleHandleW(L"nexus_pgs_native.dll");
     CHECK(runtime&&core&&proxy);if(!runtime||!core||!proxy)return 2;
@@ -146,6 +159,19 @@ int main(void)
     HRESULT(WINAPI *query)(const GUID*,const GUID*,void**)=(void*)GetProcAddress(runtime,"QueryApiImpl");
     CHECK(query(&CLSID_XThreadingImpl,&IID_IXThreadingImpl,(void**)&threads)==S_OK);
     XTaskQueueHandle queue;CHECK(IXThreadingImpl_XTaskQueueCreate(threads,XTaskQueueDispatchMode_Manual,XTaskQueueDispatchMode_Manual,&queue)==S_OK);
+    if(exitProbe) {
+        unsigned mode=(unsigned)atoi(argv[2]);
+        reset(mode==2?E_ACCESSDENIED:S_OK,S_OK);
+        NexusAsync dummy={0},pending={0};CHECK(add((void*)1,0,&dummy)==S_OK);
+        pending.queue=queue;pending.context=(void*)0x5678;pending.callback=completion;
+        if(mode==1)CHECK(cleanup(&pending)==S_OK); /* Leave Manual completion unpumped. */
+        if(failures)return 1;
+        if(mode==2) {
+            void(WINAPI *exit_fn)(UINT)=(void*)GetProcAddress(GetModuleHandleW(L"kernel32.dll"),"ExitProcess");
+            exit_fn(37); /* Also cover dynamically resolved normal termination. */
+        } else ExitProcess(37);
+        return 2;
+    }
     for(unsigned mode=0;mode<4;++mode) {
         SetEnvironmentVariableA("XODUS_SAVE_SYNC",mode==3?"none":"auto");
         reset(mode==1?E_ACCESSDENIED:S_OK,mode==2?E_ACCESSDENIED:S_OK);
@@ -183,6 +209,26 @@ int main(void)
         }
     }
     IXThreadingImpl_XTaskQueueCloseHandle(threads,queue);IXThreadingImpl_Release(threads);
+    for(unsigned mode=0;mode<3;++mode) {
+        char executable[MAX_PATH],command[2*MAX_PATH],eventName[128];
+        CHECK(GetModuleFileNameA(NULL,executable,sizeof(executable))>0);
+        snprintf(eventName,sizeof(eventName),"Local\\NexusSyntheticExit-%lu-%u",(unsigned long)GetCurrentProcessId(),mode);
+        HANDLE event=CreateEventA(NULL,TRUE,FALSE,eventName);CHECK(event!=NULL);
+        CHECK(SetEnvironmentVariableA("NEXUS_TEST_CLOSED_EVENT",eventName));
+        snprintf(command,sizeof(command),"\"%s\" --exit-probe %u",executable,mode);
+        STARTUPINFOA si={0};PROCESS_INFORMATION pi={0};si.cb=sizeof(si);
+        BOOL started=CreateProcessA(NULL,command,NULL,NULL,FALSE,0,NULL,NULL,&si,&pi);
+        CHECK(started);
+        if(started) {
+            DWORD wait=WaitForSingleObject(pi.hProcess,10000),code=0;CHECK(wait==WAIT_OBJECT_0);
+            if(wait!=WAIT_OBJECT_0)TerminateProcess(pi.hProcess,99); /* Only our synthetic child. */
+            CHECK(GetExitCodeProcess(pi.hProcess,&code));CHECK(code==37);
+            CHECK(WaitForSingleObject(event,0)==WAIT_OBJECT_0);
+            CloseHandle(pi.hThread);CloseHandle(pi.hProcess);
+        }
+        if(event)CloseHandle(event);
+        SetEnvironmentVariableA("NEXUS_TEST_CLOSED_EVENT",NULL);
+    }
     printf("CHECKS %u FAILURES %u\n",checks,failures);return failures?1:0;
 }
 #endif

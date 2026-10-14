@@ -85,10 +85,15 @@ The synchronous runtime `UninitializeApiImpl` additionally drains this SDK
 session outside the loader lock before returning, including a cleanup already
 started asynchronously by the title. SDK cleanup itself remains asynchronous;
 no caller Manual completion callback is required for the in-flight drain.
-Games that terminate without calling runtime uninitialization are not covered.
-This is not a `DllMain` network wait or an `ExitProcess` hook.
-This does not cover abrupt process termination
-or games that omit SDK cleanup: local files remain, and a later session may need
+An isolated experiment, disabled by default, can additionally intercept normal
+Wine `ExitProcess` when `NEXUS_PGS_EXIT_BARRIER=1` is explicitly supplied. It
+redirects the pinned kernel32 import of `RtlExitUserProcess` before loader teardown,
+not game instructions or a replacement core DLL. The SDK remains asynchronous;
+the exit barrier waits at most 60 seconds and reports timeout as unfinished sync,
+not success. It preserves the caller's exit status. This is not a `DllMain` wait.
+Without this opt-in, games omitting runtime uninitialization remain uncovered.
+Neither path covers crashes, forced termination or direct native termination:
+local files remain, and a later session may need
 the device-contention/conflict dialog. Never interpret forced termination as an
 acknowledged cloud upload, nor silently resolve a conflict or discard progress.
 

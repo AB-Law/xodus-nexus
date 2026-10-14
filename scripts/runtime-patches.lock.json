@@ -118,7 +118,7 @@
     "scripts/runtime-compat/playfab-save-folder.def": "a6f34058988f103cda4ae4f8774683a3ccbdf146fcc54af750b12335fc08cf8a",
     "scripts/runtime-compat/wine-launcher.c": "b93a9669cc5b8420a79c74ecaee619d699c0105e54d1237770cdfed4ea7fe2a7",
     "scripts/runtime-compat/gaming-services-version.c": "3410efcc5c862085684323034b41131ce1bc6d44c36fb013ecc4b9dc197dd128",
-    "scripts/runtime-compat/playfab-session.c": "b52994538c05e98e758d82dd7d69d29aca8093303e2c503c72f016158621f4ec",
+    "scripts/runtime-compat/playfab-session.c": "8d1ddba92ad5e21d1cbf8d75e6b035fddf9fd9313f14813c10c6f37c5c99263a",
     "scripts/runtime-compat/playfab-session.h": "a7bf5c391f58314439925e4095c31b6e93776609c0563a5df0198012799b80e3"
   },
   "requiresBackendVersion": "0.2.1",

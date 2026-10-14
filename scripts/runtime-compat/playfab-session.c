@@ -20,6 +20,7 @@ static HANDLE sessionDone;
 static HRESULT sessionResult;
 static SRWLOCK drainLock=SRWLOCK_INIT;
 static HRESULT WINAPI drain_session(void *context);
+static HRESULT install_process_exit_barrier(void);
 static HRESULT (WINAPI *duplicate_user)(void *,void **);
 static void (WINAPI *close_user)(void *);
 static int32_t (WINAPI *compare_user)(void *,void *);
@@ -216,6 +217,10 @@ HRESULT nexus_session_initialized(HMODULE sdk)
         InterlockedIncrement(&generation);closing=FALSE;enabled=TRUE;
         hr=install_callbacks();
         if(SUCCEEDED(hr)) {
+            /* Experimental, explicit opt-in. Install from an ordinary SDK
+             * call, never DllMain or a loader notification. */
+            HRESULT exitHr=install_process_exit_barrier();
+            if(exitHr!=S_FALSE)note("process exit barrier",exitHr);
             HMODULE runtime=GetModuleHandleW(L"xgameruntime.dll");
             HRESULT(WINAPI *register_drain)(HRESULT(WINAPI *)(void*),void*)=
                 runtime?(void*)GetProcAddress(runtime,"NexusRegisterCloudShutdown"):NULL;
@@ -350,7 +355,8 @@ HRESULT nexus_session_cleanup(HMODULE sdk,NexusAsync *async)
 }
 /* Runtime Uninitialize is synchronous and outside the loader lock. SDK cleanup
  * stays asynchronous; this final barrier waits for acknowledged SDK work, not
- * the title's Manual completion callback. It cannot cover ExitProcess/kill. */
+ * the title's Manual completion callback. The opt-in normal-exit barrier below
+ * also uses this drain before loader teardown. Crashes/forced kills are excluded. */
 static HRESULT WINAPI drain_session(void *context)
 {
     NexusAsync async={0};HANDLE complete=NULL;void *queue=NULL;
@@ -385,4 +391,94 @@ static HRESULT WINAPI drain_session(void *context)
     note("runtime drain complete",hr);
     ReleaseSRWLockExclusive(&drainLock);
     return hr;
+}
+
+/* Isolated experiment: the pinned Wine kernel32 ExitProcess imports
+ * RtlExitUserProcess. Redirect only that runtime-owned import in memory, not
+ * game code or ntdll instructions/exports. Never swap a core DLL across Proton
+ * Unix/PE ABIs. Direct NtTerminateProcess and external kills aren't covered.
+ * Pin this adapter for the lifetime of the process-wide IAT pointer.
+ */
+static void (WINAPI *native_process_exit)(DWORD);
+static HANDLE exitDone;
+static LONG exitOwner;
+static HRESULT exitResult;
+static DWORD WINAPI exit_drain_worker(void *unused)
+{
+    (void)unused;
+    exitResult=drain_session(NULL);return 0;
+}
+static void WINAPI synchronized_process_exit(DWORD status)
+{
+    LONG tid=(LONG)GetCurrentThreadId();
+    LONG owner=InterlockedCompareExchange(&exitOwner,tid,0);
+    if(!owner) {
+        note("process exit requested",S_OK);
+        /* A broken SDK cannot indefinitely trap ExitProcess. A timeout is an
+         * unfinished session, never synthesized upload success. Local saves
+         * are not removed; the original exit status remains unchanged. */
+        HANDLE worker=CreateThread(NULL,0,exit_drain_worker,NULL,0,NULL);
+        HRESULT hr=worker?S_OK:HRESULT_FROM_WIN32(GetLastError());
+        if(worker) {
+            DWORD wait=WaitForSingleObject(worker,60000);
+            hr=wait==WAIT_OBJECT_0?exitResult:wait==WAIT_TIMEOUT?
+                HRESULT_FROM_WIN32(ERROR_TIMEOUT):HRESULT_FROM_WIN32(GetLastError());
+            CloseHandle(worker);
+        }
+        note("process exit synchronized",hr);
+        SetEvent(exitDone);
+    } else if(owner!=tid) {
+        /* Concurrent ExitProcess must not tear down the first caller's worker. */
+        WaitForSingleObject(exitDone,65000);
+    } else note("process exit reentered",E_UNEXPECTED);
+    native_process_exit(status);
+}
+static HRESULT install_process_exit_barrier(void)
+{
+    char optIn[8]={0};
+    GetEnvironmentVariableA("NEXUS_PGS_EXIT_BARRIER",optIn,sizeof(optIn));
+    if(strcmp(optIn,"1"))return S_FALSE;
+    if(native_process_exit)return S_OK; /* sessionLock serializes installation. */
+    HMODULE kernel=GetModuleHandleW(L"kernel32.dll"),ntdll=GetModuleHandleW(L"ntdll.dll"),self;
+    void *target=ntdll?(void*)GetProcAddress(ntdll,"RtlExitUserProcess"):NULL;
+    if(!kernel||!target)return HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
+    BYTE *base=(BYTE*)kernel;
+    IMAGE_DOS_HEADER *dos=(void*)base;
+    if(dos->e_magic!=IMAGE_DOS_SIGNATURE||dos->e_lfanew<0||
+       (unsigned)dos->e_lfanew>4096-sizeof(IMAGE_NT_HEADERS64))return E_NOTIMPL;
+    IMAGE_NT_HEADERS64 *nt=(void*)(base+dos->e_lfanew);
+    if(nt->Signature!=IMAGE_NT_SIGNATURE||nt->OptionalHeader.Magic!=IMAGE_NT_OPTIONAL_HDR64_MAGIC||
+       nt->OptionalHeader.NumberOfRvaAndSizes<=IMAGE_DIRECTORY_ENTRY_IMPORT)return E_NOTIMPL;
+    DWORD size=nt->OptionalHeader.SizeOfImage;
+    IMAGE_DATA_DIRECTORY dir=nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    if(!dir.VirtualAddress||dir.VirtualAddress>=size||dir.Size>size-dir.VirtualAddress)return E_NOTIMPL;
+    IMAGE_IMPORT_DESCRIPTOR *imports=(void*)(base+dir.VirtualAddress);
+    void **slot=NULL;
+    for(unsigned i=0;i<dir.Size/sizeof(*imports)&&imports[i].FirstThunk;++i) {
+        DWORD rva=imports[i].FirstThunk;
+        if(rva>=size||rva%sizeof(void*))return E_NOTIMPL;
+        void **thunks=(void*)(base+rva);
+        for(unsigned j=0;j<(size-rva)/sizeof(void*)&&thunks[j];++j)
+            if(thunks[j]==target){slot=&thunks[j];break;}
+        if(slot)break;
+    }
+    if(!slot)return HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
+    if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
+                         (LPCWSTR)&synchronized_process_exit,&self))
+        return HRESULT_FROM_WIN32(GetLastError());
+    exitDone=CreateEventW(NULL,TRUE,FALSE,NULL);
+    if(!exitDone)return HRESULT_FROM_WIN32(GetLastError());
+    DWORD previous,ignored;
+    if(!VirtualProtect(slot,sizeof(*slot),PAGE_READWRITE,&previous)) {
+        HRESULT hr=HRESULT_FROM_WIN32(GetLastError());CloseHandle(exitDone);exitDone=NULL;return hr;
+    }
+    native_process_exit=(void*)target;
+    void *old=InterlockedCompareExchangePointer(slot,(void*)&synchronized_process_exit,target);
+    BOOL restored=VirtualProtect(slot,sizeof(*slot),previous,&ignored);
+    if(old!=target) {
+        native_process_exit=NULL;CloseHandle(exitDone);exitDone=NULL;
+        return HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS); /* Don't displace another hook. */
+    }
+    /* Keep the installed callback alive even if protection restoration fails. */
+    return restored?S_OK:HRESULT_FROM_WIN32(GetLastError());
 }
