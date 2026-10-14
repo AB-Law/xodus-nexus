@@ -39,6 +39,7 @@ async function fixture() {
   const nt = file => `\\??\\Z:${file.replaceAll('/', '\\')}`;
   const other = '42:unrelated.dll';
   const env = { ...process.env, LD_LIBRARY_PATH: '', LD_PRELOAD: '',
+    NEXUS_GAMING_SERVICES_VERSION_OVERRIDE: '0',
     WINE_DLL_FILE_MAP: `${other}|3:${nt(path.join(view, 'PlayFabGameSave.dll'))}`,
     WINE_EXE_FILE_MAP: `42:unrelated.exe|3:${path.join(view, 'PlayFabGameSave.dll')}`,
     WINEDLLOVERRIDES: 'winhttp=b' };
@@ -109,16 +110,19 @@ test('version override requires explicit prefix and fails closed if bootstrap fa
     assert.equal(f.run({ NEXUS_GAMING_SERVICES_VERSION_OVERRIDE: '1', WINEPREFIX: '' }, ['--version']).status, 23);
   } finally { await f.close(); }
 });
-test('successful version bootstrap is independent of SDK adapter and preserves game maps', async () => {
+test('version bootstrap is on by default, independent of SDK adapter, and preserves game maps', async () => {
   const f = await fixture();
   const original = path.join(path.dirname(loader), 'wine.nexus-original');
   const bytes = await fs.readFile(original);
   try {
     await fs.writeFile(original, '#!/bin/sh\nif [ "$2" = "apply" ]; then\n  test -z "$WINE_DLL_FILE_MAP" && test -z "$WINE_EXE_FILE_MAP" || exit 72\n  printf "bootstrap-ok\\n"\n  exit 0\nfi\nprintf "%s\\n%s\\n" "$WINE_DLL_FILE_MAP" "$WINE_EXE_FILE_MAP"\nexit 23\n');
-    const result = f.run({ NEXUS_GAMING_SERVICES_VERSION_OVERRIDE: '1', WINEPREFIX: f.view, NEXUS_PLAYFAB_ADAPTER: '0' });
+    const result = f.run({ NEXUS_GAMING_SERVICES_VERSION_OVERRIDE: undefined, WINEPREFIX: f.view, NEXUS_PLAYFAB_ADAPTER: '0' });
     assert.equal(result.status, 23, result.stderr);
     assert.deepEqual(result.stdout.trimEnd().split('\n'), ['bootstrap-ok', f.env.WINE_DLL_FILE_MAP, f.env.WINE_EXE_FILE_MAP]);
     assert.equal((await fs.lstat(path.join(f.view, 'PlayFabGameSave.dll'))).isSymbolicLink(), true);
+    const disabled = f.run({ NEXUS_GAMING_SERVICES_VERSION_OVERRIDE: '0', WINEPREFIX: '', NEXUS_PLAYFAB_ADAPTER: '0' });
+    assert.equal(disabled.status, 23);
+    assert.deepEqual(disabled.stdout.trimEnd().split('\n'), [f.env.WINE_DLL_FILE_MAP, f.env.WINE_EXE_FILE_MAP]);
   } finally { await fs.writeFile(original, bytes); await f.close(); }
 });
 test('backend default 0755 view is sealed before SDK staging', async () => {

@@ -99,12 +99,12 @@
     "scripts/runtime-compat/build.mjs": "32e51aa31ac749c150cd5487b8ec67bd30185fc30c0c9f0b5b3c2df065e07a81",
     "scripts/runtime-compat/playfab-save-folder.c": "e132a7d19add205fe79edbc6dcc47e6ee3f8fb0d3790a420f2d7dcffbcd46269",
     "scripts/runtime-compat/playfab-save-folder.def": "0c71c093b13000dad48ac9830c9e6b0446fbcade0172357fce85680cb53217b6",
-    "scripts/runtime-compat/wine-launcher.c": "e913c9809abba08d808de337ddfb84f7ed75366191d2f09ae872318621994c0f",
+    "scripts/runtime-compat/wine-launcher.c": "b93a9669cc5b8420a79c74ecaee619d699c0105e54d1237770cdfed4ea7fe2a7",
     "scripts/runtime-compat/gaming-services-version.c": "3410efcc5c862085684323034b41131ce1bc6d44c36fb013ecc4b9dc197dd128"
   },
   "requiresBackendVersion": "0.2.1",
   "limitations": [
-    "PlayFab folder fallback supports the verified x64 40-export SDK ABI only; optional hardcoded Gaming Services version override is not a service implementation; full cloud roundtrips remain unverified",
+    "PlayFab folder fallback supports the verified x64 40-export SDK ABI only; default-on temporary hardcoded Gaming Services version override is not a service implementation; full cloud roundtrips remain unverified",
     "Store update queries support the verified current-game no-update case; DLC, mandatory updates and downloads remain unsupported",
     "Incomplete XAsync cancellation/resource reclamation",
     "Partial package/event/privilege APIs are not complete GDK implementations",

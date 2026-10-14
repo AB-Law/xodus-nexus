@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT
  * Runtime staging in owner-private Xodus launch views. No title selection,
  * original-game writes or import-table hooks. Temporary version metadata
- * is explicitly opt-in through NEXUS_GAMING_SERVICES_VERSION_OVERRIDE.
+ * is enabled by default; NEXUS_GAMING_SERVICES_VERSION_OVERRIDE=0 opts out.
  */
 #define _GNU_SOURCE
 #include <dirent.h>
@@ -203,7 +203,7 @@ static void filter_map(const char *key)
 static int version_override(const char *binary, const char *loader)
 {
     const char *enabled = getenv("NEXUS_GAMING_SERVICES_VERSION_OVERRIDE");
-    if (!enabled || strcmp(enabled, "1")) return 0;
+    if (enabled && strcmp(enabled, "1")) return 0;
     const char *prefix = getenv("WINEPREFIX");
     struct stat st;
     if (!prefix || prefix[0] != '/' || lstat(prefix, &st) || !S_ISDIR(st.st_mode) || st.st_uid != geteuid() || (st.st_mode & 0022)) {
