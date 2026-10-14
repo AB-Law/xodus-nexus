@@ -282,8 +282,9 @@ export class RuntimeManager {
         signal: AbortSignal.timeout(20_000),
       });
       if (!response.ok) throw new Error('The Xodus Nexus release list could not be read.');
-      const releases = await response.json() as Array<{ tag_name?: unknown; draft?: boolean; prerelease?: boolean; assets?: Array<{ name?: unknown; browser_download_url?: unknown }> }>;
+      const releases = await response.json() as Array<{ tag_name?: unknown; published_at?: unknown; draft?: boolean; prerelease?: boolean; assets?: Array<{ name?: unknown; browser_download_url?: unknown }> }>;
       let found: { version: string; archive: { name: string; url: string }; checksum: { name: string; url: string } } | undefined;
+      let newestPublication = -Infinity;
       for (const release of releases) {
         if (release.draft || release.prerelease) continue;
         const version = typeof release.tag_name === 'string' && release.tag_name.trim() ? release.tag_name.trim() : '';
@@ -294,7 +295,17 @@ export class RuntimeManager {
         const archive = assets.find((asset) => /^xodus-nexus-runtime-[A-Za-z0-9._-]+-x86_64\.tar\.xz$/.test(asset.name) &&
           /^https:\/\//.test(asset.url) && assets.some((sum) => sum.name === asset.name.replace(/\.tar\.xz$/, '.sha512sum') && /^https:\/\//.test(sum.url)));
         const checksum = archive && assets.find((asset) => asset.name === archive.name.replace(/\.tar\.xz$/, '.sha512sum'));
-        if (archive && checksum) { found = { version, archive, checksum }; break; }
+        if (archive && checksum) {
+          // GitHub's list order is not necessarily publication order, and the
+          // commit suffix in runtime tags is not a sortable version number.
+          const parsed = typeof release.published_at === 'string' ? Date.parse(release.published_at) : NaN;
+          const publication = Number.isFinite(parsed) ? parsed : -Infinity;
+          // Keep an undated fallback only when no dated candidate is available.
+          if (!found || publication > newestPublication) {
+            found = { version, archive, checksum };
+            newestPublication = publication;
+          }
+        }
       }
       if (!found) throw new Error('No Nexus runtime release has been published yet.');
       this.nexusArtifact = {

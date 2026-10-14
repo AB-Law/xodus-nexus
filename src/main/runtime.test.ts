@@ -35,6 +35,33 @@ describe('previewBaseRelease', () => {
     expect(status.nexusName).toBe('xodus-nexus-runtime-11.0-20261011-g3fd4ae10-x86_64.tar.xz');
   });
 
+  it.each([false, true])('selects the newest publication regardless of list or commit-hash order: reversed=%s', async reversed => {
+    const runtime = (suffix: string, published_at: string) => {
+      const name = `xodus-nexus-runtime-11.0-20261014-${suffix}-x86_64.tar.xz`;
+      return {
+        tag_name: `runtime-11.0-20261014-${suffix}`, published_at,
+        assets: [name, name.replace('.tar.xz', '.sha512sum')].map(name => ({
+          name, browser_download_url: `https://example.com/${name}`,
+        })),
+      };
+    };
+    const older = runtime('g9e1653e1', '2026-10-14T12:18:00Z');
+    const newer = runtime('g606bbea0', '2026-10-14T22:13:42Z');
+    const releases = [
+      { tag_name: 'v0.2.3', published_at: '2026-10-15T00:00:00Z', assets: [] },
+      ...(reversed ? [newer, older] : [older, newer]),
+      { ...runtime('draft', '2026-10-16T00:00:00Z'), draft: true },
+      { ...runtime('preview', '2026-10-16T00:00:00Z'), prerelease: true },
+      { ...runtime('incomplete', '2026-10-16T00:00:00Z'), assets: older.assets.slice(0, 1) },
+      runtime('undated', 'invalid'),
+    ];
+    const fetcher = (async () => new Response(JSON.stringify(releases))) as typeof fetch;
+    const manager = new RuntimeManager('/tmp/unused', () => undefined, () => false, fetcher);
+    const status = await manager.checkNexus();
+    expect(status.nexusVersion).toBe(newer.tag_name);
+    expect(status.nexusName).toBe(newer.assets[0].name);
+  });
+
   it('reports no Nexus runtime when no release carries one', async () => {
     const fetcher = (async () => new Response(JSON.stringify([
       {
