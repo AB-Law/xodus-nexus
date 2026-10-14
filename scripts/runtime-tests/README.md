@@ -151,3 +151,22 @@ cause and user-visible impact remain unresolved. It is not the earlier Play
 access violation. The pair remains labeled experimental because of this
 finding and the incomplete API semantics above. The full clean build integration
 is now available; no production deployment, Git commit or push has occurred.
+
+## PlayFab save-folder adapter contract
+
+`playfab-folder-probe.c` builds a synthetic native SDK and storage COM fixture
+plus a probe executable. `run-contract-probes.mjs` runs it in the same disposable,
+account-free test prefix. It checks caller path/queue/options preservation,
+forwarded SDK errors, retry after storage discovery failure, Unicode folders,
+the real in-process provider policy (without Windows version claims), and
+preservation of explicit provider settings. These fixtures are tests only and
+are never bundled as a runtime or used for real games/cloud authentication.
+
+## Configuration initialization contract
+
+`runtime-init-probe.c` checks inline XML, default-options file discovery and
+retry after malformed configuration against the actual runtime DLL. It also
+checks the resulting package-local storage identity, so a misleading success
+without loading the configuration cannot pass. Three fresh processes use
+synthetic configuration and no account/network/cloud. This does not prove a
+game's version gate or the cause of an early game exit.

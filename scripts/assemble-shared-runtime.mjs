@@ -18,6 +18,14 @@ if (!manifest.components || Object.keys(manifest.components).some(name => !compo
 for (const name of componentNames) {
   if (!/^[a-f0-9]{64}$/.test(manifest.components[name] ?? '') || await shaFile(path.join(options.components, name)) !== manifest.components[name]) throw new Error(`Component checksum mismatch: ${name}`);
 }
+const compatibilityNames = ['PlayFabGameSave.dll', 'wine-launcher', 'gaming-services-version.exe'];
+if (!manifest.runtimeCompatibility || Object.keys(manifest.runtimeCompatibility).sort().join() !== compatibilityNames.sort().join())
+  throw new Error('Missing or unknown runtime compatibility component');
+for (const name of compatibilityNames) {
+  if (!/^[a-f0-9]{64}$/.test(manifest.runtimeCompatibility[name] ?? '') ||
+      await shaFile(path.join(options.components, name)) !== manifest.runtimeCompatibility[name])
+    throw new Error(`Runtime compatibility checksum mismatch: ${name}`);
+}
 await fs.access(path.join(options.base, 'files/bin/wine'), fs.constants.X_OK);
 await fs.access(path.join(options.base, 'proton'), fs.constants.X_OK);
 await fs.access(path.join(options.base, 'files/share/default_pfx'));
@@ -48,6 +56,7 @@ for (const name of componentNames) {
 const licenseDirectory = path.join(options.output, 'files/share/doc/xodus-nexus-runtime');
 await safeParent('files/share/doc/xodus-nexus-runtime/license');
 for (const name of ['nghttp2-LICENSE', 'Wine-LICENSE', 'xgameruntime-LICENSE']) await fs.copyFile(path.join(options.components, name), path.join(licenseDirectory, name));
+await fs.copyFile(path.join(options.components, 'runtime-compat-LICENSE'), path.join(licenseDirectory, 'runtime-compat-LICENSE'));
 let mediaMetadata;
 if (options.media) {
   const mediaLock = JSON.parse(await fs.readFile(new URL('./runtime-media.lock.json', import.meta.url), 'utf8'));
@@ -85,13 +94,27 @@ if (options.media) {
 }
 const baseWineSha256 = await shaFile(path.join(options.base, 'files/bin/wine'));
 if (baseWineSha256 !== await shaFile(path.join(options.output, 'files/bin/wine'))) throw new Error('Base Wine loader unexpectedly changed');
+// Keep the genuine loader in the same bin directory so its Wine library lookup
+// remains unchanged. The runtime shim execs it for every ordinary Wine command.
+await safeParent('files/share/xodus-nexus/compat/PlayFabGameSave.dll');
+await fs.copyFile(path.join(options.components, 'PlayFabGameSave.dll'), path.join(options.output, 'files/share/xodus-nexus/compat/PlayFabGameSave.dll'), fs.constants.COPYFILE_EXCL);
+await fs.copyFile(path.join(options.components, 'gaming-services-version.exe'), path.join(options.output, 'files/share/xodus-nexus/compat/gaming-services-version.exe'), fs.constants.COPYFILE_EXCL);
+const originalLoader = path.join(options.output, 'files/bin/wine.nexus-original');
+try { await fs.lstat(originalLoader); throw new Error('Base already contains a runtime Wine shim'); }
+catch (e) { if (e.code !== 'ENOENT') throw e; }
+await fs.rename(path.join(options.output, 'files/bin/wine'), originalLoader);
+const temporaryLoader = path.join(options.output, `files/bin/.wine-nexus-${process.pid}`);
+await fs.copyFile(path.join(options.components, 'wine-launcher'), temporaryLoader, fs.constants.COPYFILE_EXCL);
+await fs.chmod(temporaryLoader, 0o755);
+await fs.rename(temporaryLoader, path.join(options.output, 'files/bin/wine'));
+if (baseWineSha256 !== await shaFile(originalLoader)) throw new Error('Original Wine loader changed');
 let baseMetadata = {};
 try { baseMetadata = JSON.parse(await fs.readFile(path.join(options.base, 'XODUS_NEXUS_PATCH.json'), 'utf8')); }
 catch (e) { if (e.code !== 'ENOENT') throw e; }
 const metadata = {
   ...manifest, name: 'Nexus runtime',
   description: 'Pinned shared XGameRuntime and HTTP/2 compatibility line. Experimental; see limitations.',
-  features: [...new Set([...(baseMetadata.features ?? []), 'cloud-saves-pr28', 'xodus-tcp-bridge-v1', 'package-locale', 'xuser-contract-v1', 'wine-winhttp-http2-v1', 'nghttp2-v1', 'winrt-json-v1', 'xasync-provider-contract-v1', 'xtaskqueue-lifecycle-v1', ...(mediaMetadata ? ['bundled-ffmpeg-media-v1'] : [])])],
+  features: [...new Set([...(baseMetadata.features ?? []), 'cloud-saves-pr28', 'xodus-tcp-bridge-v1', 'package-locale', 'xuser-contract-v1', 'wine-winhttp-http2-v1', 'nghttp2-v1', 'winrt-json-v1', 'xasync-provider-contract-v1', 'xtaskqueue-lifecycle-v1', 'playfab-package-save-folder-v1', ...(mediaMetadata ? ['bundled-ffmpeg-media-v1'] : [])])],
   baseWineSha256, patchedDllSha256: manifest.components['xgameruntime.dll'],
   ...(mediaMetadata ? { media: mediaMetadata } : {}),
 };

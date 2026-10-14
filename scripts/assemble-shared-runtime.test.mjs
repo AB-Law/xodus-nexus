@@ -15,13 +15,18 @@ async function fixture() {
   await fs.mkdir(path.join(base, 'files/share/default_pfx/drive_c/windows/system32'), { recursive: true });
   for (const file of [path.join(base, 'files/bin/wine'), path.join(base, 'proton')]) await fs.writeFile(file, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   await fs.mkdir(components);
-  const manifest = { components: {} };
+  const manifest = { components: {}, runtimeCompatibility: {} };
+  for (const name of ['PlayFabGameSave.dll', 'wine-launcher', 'gaming-services-version.exe']) {
+    const bytes = Buffer.from(`new-${name}`);
+    await fs.writeFile(path.join(components, name), bytes);
+    manifest.runtimeCompatibility[name] = createHash('sha256').update(bytes).digest('hex');
+  }
   for (const name of ['xgameruntime.dll', 'winhttp.dll', 'mscoree.dll', 'libnghttp2.dll', 'windows.web.dll']) {
     const bytes = Buffer.from(`new-${name}`);
     await fs.writeFile(path.join(components, name), bytes);
     manifest.components[name] = createHash('sha256').update(bytes).digest('hex');
   }
-  for (const name of ['nghttp2-LICENSE', 'Wine-LICENSE', 'xgameruntime-LICENSE']) await fs.writeFile(path.join(components, name), 'test license');
+  for (const name of ['nghttp2-LICENSE', 'Wine-LICENSE', 'xgameruntime-LICENSE', 'runtime-compat-LICENSE']) await fs.writeFile(path.join(components, name), 'test license');
   await fs.writeFile(path.join(components, 'source-manifest.json'), JSON.stringify(manifest));
   const run = () => execFileSync(process.execPath, [script, '--base', base, '--components', components, '--output', output], { stdio: 'pipe' });
   return { root, base, components, output, manifest, run };
@@ -34,6 +39,10 @@ test('assembly replaces symlink entries without altering base/old runtime', asyn
     await fs.symlink(previous, path.join(f.base, 'files/lib/wine/x86_64-windows/xgameruntime.dll'));
     await fs.symlink(previous, path.join(f.base, 'files/share/default_pfx/drive_c/windows/system32/windows.web.dll'));
     f.run();
+    assert.equal(await fs.readFile(path.join(f.output, 'files/bin/wine.nexus-original'), 'utf8'), '#!/bin/sh\nexit 0\n');
+    assert.equal(await fs.readFile(path.join(f.output, 'files/bin/wine'), 'utf8'), 'new-wine-launcher');
+    assert.equal(await fs.readFile(path.join(f.output, 'files/share/xodus-nexus/compat/PlayFabGameSave.dll'), 'utf8'), 'new-PlayFabGameSave.dll');
+    assert.equal(await fs.readFile(path.join(f.output, 'files/share/xodus-nexus/compat/gaming-services-version.exe'), 'utf8'), 'new-gaming-services-version.exe');
     assert.equal(await fs.readFile(previous, 'utf8'), 'previous runtime');
     assert.equal(await fs.readlink(path.join(f.base, 'files/lib/wine/x86_64-windows/xgameruntime.dll')), previous);
     assert.equal(await fs.readFile(path.join(f.output, 'files/lib/wine/x86_64-windows/xgameruntime.dll'), 'utf8'), 'new-xgameruntime.dll');
@@ -63,6 +72,18 @@ test('unknown component paths are rejected before creating output', async () => 
   const f = await fixture();
   try {
     f.manifest.components['../escape.dll'] = 'a'.repeat(64);
+    await fs.writeFile(path.join(f.components, 'source-manifest.json'), JSON.stringify(f.manifest));
+    assert.throws(f.run, /Command failed/);
+    await assert.rejects(fs.lstat(f.output), { code: 'ENOENT' });
+  } finally { await fs.rm(f.root, { recursive: true, force: true }); }
+});
+test('missing or tampered compatibility layer is rejected before creating output', async () => {
+  const f = await fixture();
+  try {
+    await fs.writeFile(path.join(f.components, 'wine-launcher'), 'corrupted helper');
+    assert.throws(f.run, /Command failed/);
+    await assert.rejects(fs.lstat(f.output), { code: 'ENOENT' });
+    delete f.manifest.runtimeCompatibility;
     await fs.writeFile(path.join(f.components, 'source-manifest.json'), JSON.stringify(f.manifest));
     assert.throws(f.run, /Command failed/);
     await assert.rejects(fs.lstat(f.output), { code: 'ENOENT' });

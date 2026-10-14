@@ -15,6 +15,55 @@ GDK WinHTTP options, installed-package metadata, verified Store update queries
 and background token/signature authorization. Store queries require Nexus
 backend 0.2.1 or newer and currently support the verified current-game no-update
 case, not DLC or update installation.
+Configuration bootstrap also distinguishes inline XML, explicit files and
+default discovery. A failed parse does not publish initialized state, and a
+subsequent valid initialization can retry. Initializations are serialized.
+These fixes do not establish a Gaming Services version or bypass its checks.
+
+### Temporary Gaming Services version override
+
+A runtime-owned bootstrap is enabled by default before materialized game
+executables. `NEXUS_GAMING_SERVICES_VERSION_OVERRIDE=0` disables it. It writes
+`CurrentVersion` and `AvailableVersion` as REG_QWORD `0x0026007569790000`, decoded
+by the native GDK frontend as **38.117.27001.0**. This is an explicitly hardcoded
+compatibility workaround, NOT a Microsoft Gaming Services installation, API
+implementation, or evidence of equivalent capabilities. No title matching or
+launcher modification is involved. It requires an explicit owner-only-write
+`WINEPREFIX`. For diagnostics use a disposable test prefix. It overwrites only
+the two version values and logs the override, leaving authentication, ownership,
+cloud and service/provider settings unchanged. Setting the environment switch to 0
+stops further writes but does not undo registry values already stored in that
+prefix; discard the disposable prefix or restore its pre-test registry backup.
+Do not promote this as a proper Gaming Services implementation.
+
+### PlayFab Game Saves compatibility
+
+The runtime includes a native SDK forwarding adapter, not a replacement cloud
+service. In an owner-private Xodus materialized launch view, its Wine entry point
+detects the supported x64 `PlayFabGameSave.dll` export contract and retains the
+game's original SDK as `nexus_pgs_native.dll`. The adapter supplies a missing
+`saveFolder` from the current package's `XPersistentLocalStorage` root, with a
+`PlayFabGameSaves` child. Caller-specified folders, queue/options, authentication,
+cloud operations and genuine SDK errors are preserved. UTF-8 paths are created
+through Unicode Windows APIs. All other exports forward unchanged.
+For an omitted folder, the adapter defaults the upstream SDK's recognized
+`ForceUseInprocGameSaves` policy to 1 only if absent. An explicit existing policy
+is preserved; no `CurrentVersion`/`AvailableVersion` claims are provisioned.
+
+Owner-created temporary views with umask-derived read permissions (such as
+0755) are sealed to 0700 before staging; other-user-writable or symlinked views
+remain untouched. NEXUS_BOOTSTRAP_DIAGNOSTICS=1 reports only staging counts.
+
+No game names/product IDs, original-file edits, import hooks, diagnostic version
+QWORDs or proprietary SDK binaries are included. Unsupported SDK exports are
+left unchanged with a diagnostic; staging failures abort rather than partially
+launch. `NEXUS_PLAYFAB_ADAPTER=0` disables staging for diagnosis. Ordinary Wine
+commands and launches outside private Xodus views go to the unchanged loader.
+This does **not** implement Microsoft Gaming Services or its version gate, nor
+claim all PlayFab SDK versions, cloud-save roundtrips or all-title compatibility.
+The successful diagnostic game run also used copied Windows version metadata;
+those version claims are not shipped. This provider/folder change does not
+resolve a game's separate pre-initialization Gaming Services version check.
 
 ## Build
 

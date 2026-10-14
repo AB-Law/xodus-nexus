@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildCompatibility } from './runtime-compat/build.mjs';
 
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const lockBytes = await fs.readFile(path.join(project, 'scripts/runtime-patches.lock.json'));
@@ -48,6 +49,14 @@ if (await exists(work)) throw new Error(`Refusing to overwrite an existing work 
 for (const patch of lock.patches) {
   if (await shaFile(path.join(project, patch.file)) !== patch.sha256) throw new Error(`Patch checksum mismatch: ${patch.file}`);
 }
+const compatibilitySources = ['scripts/runtime-compat/build.mjs', 'scripts/runtime-compat/playfab-save-folder.c',
+  'scripts/runtime-compat/playfab-save-folder.def', 'scripts/runtime-compat/wine-launcher.c',
+  'scripts/runtime-compat/gaming-services-version.c'];
+if (Object.keys(lock.runtimeCompatibilitySources ?? {}).sort().join() !== compatibilitySources.sort().join())
+  throw new Error('Missing or unknown runtime compatibility source lock');
+for (const [file, expected] of Object.entries(lock.runtimeCompatibilitySources)) {
+  if (await shaFile(path.join(project, file)) !== expected) throw new Error(`Runtime compatibility source checksum mismatch: ${file}`);
+}
 await fs.mkdir(work, { recursive: true });
 const source = path.join(work, 'wine-src');
 const ngSource = path.join(work, 'nghttp2-src');
@@ -69,6 +78,7 @@ const provenance = {
   patches: lock.patches, verifiedXgameruntimeSources: lock.expectedXgameruntimeSources,
   requiresBackendVersion: lock.requiresBackendVersion,
   limitations: lock.limitations, components: {},
+  runtimeCompatibilitySources: lock.runtimeCompatibilitySources,
   configure: ['--enable-win64', '--without-x', '--without-wayland', '--disable-tests'],
   toolchain: Object.fromEntries(['gcc', 'x86_64-w64-mingw32-gcc', 'cmake', 'make', 'autoconf', 'bison', 'flex'].map(tool => [tool, run(tool, ['--version'], work, true).split('\n')[0]])),
 };
@@ -105,7 +115,25 @@ for (const [name, file] of Object.entries(outputs)) {
   provenance.components[name] = await shaFile(file);
 }
 const tests = path.join(work, 'tests');
+provenance.runtimeCompatibility = await buildCompatibility(components);
 await fs.mkdir(tests);
+// Account-free SDK fixture lives only in tests, never in the shipped runtime.
+const pgsTests = path.join(tests, 'playfab-folder');
+await fs.mkdir(pgsTests);
+const pgsDefinition = await fs.readFile(path.join(project, 'scripts/runtime-compat/playfab-save-folder.def'), 'utf8');
+await fs.writeFile(path.join(pgsTests, 'fixture.def'), pgsDefinition.replace(/^(PF\w+)(?:=\S+)? @(\d+)$/gm,
+  (_, name, ordinal) => `${name}${name === 'PFGameSaveFilesInitialize' ? '' : '=probe_stub'} @${ordinal}`));
+const pgsProbeSource = path.join(project, 'scripts/runtime-tests/playfab-folder-probe.c');
+for (const [define, name, extra] of [
+  ['PROBE_SDK', 'nexus_pgs_native.dll', [path.join(pgsTests, 'fixture.def')]],
+  ['PROBE_RUNTIME', 'xgameruntime.dll', []],
+]) run('x86_64-w64-mingw32-gcc', ['-shared', '-O2', '-Wall', '-Wextra', '-Werror', `-D${define}`, pgsProbeSource, ...extra, '-o', path.join(pgsTests, name)], work);
+run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-Wextra', '-Werror', pgsProbeSource, '-o', path.join(pgsTests, 'playfab-folder-probe.exe')], work);
+await fs.copyFile(path.join(components, 'PlayFabGameSave.dll'), path.join(pgsTests, 'PlayFabGameSave.dll'));
+const initTests = path.join(tests, 'runtime-init');
+await fs.mkdir(initTests);
+run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-Wextra', '-Werror', path.join(project, 'scripts/runtime-tests/runtime-init-probe.c'), '-o', path.join(initTests, 'runtime-init-probe.exe')], work);
+await fs.writeFile(path.join(initTests, 'MicrosoftGame.config'), '<Game><Identity Name="Nexus.Init.Inline" Publisher="CN=NexusProbe"/><TitleId>1234</TitleId></Game>');
 for (const test of ['taskqueue-teardown', 'taskqueue-contract', 'async-provider-contract', 'async-completion-lifetime']) {
   run('x86_64-w64-mingw32-gcc', ['-D__WINESRC__', '-O2', '-Wall', '-I', path.join(build, 'dlls/xgameruntime'), '-I', path.join(source, 'dlls/xgameruntime'), path.join(project, `scripts/runtime-tests/${test}-probe.c`), '-o', path.join(tests, `${test}-probe.exe`)], work);
 }
