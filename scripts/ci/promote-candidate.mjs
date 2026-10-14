@@ -64,7 +64,6 @@ try {
     '--title', `Xodus Nexus ${kind} ${tag}`, '--notes',
     // Runtime notes may be finalized in the metadata-only approval commit.
     // Artifact identity/recipe checks above still bind to the original run.
-    command('git', ['show', `${kind === 'runtime' ? 'HEAD' : run.head_sha}:.github/release-notes/${kind === 'runtime' ? 'runtime-signin-updates.md' : `${kind}-${kind === 'launcher' ? tag.slice(1) : tag.slice('backend-v'.length)}.md`}`]) +
-    `\nPromoted unchanged from verified workflow [run ${runId}](https://github.com/${repo}/actions/runs/${runId}). Exact artifact checksums and validation are recorded in the repository.`]);
+    command('git', ['show', `${kind === 'runtime' ? 'HEAD' : run.head_sha}:.github/release-notes/${kind === 'runtime' ? 'runtime-signin-updates.md' : `${kind}-${kind === 'launcher' ? tag.slice(1) : tag.slice('backend-v'.length)}.md`}`])]);
   console.log(`Promoted tested ${kind} candidate ${runId} as ${tag}; no rebuild performed.`);
 } finally { await fs.rm(directory, { recursive: true, force: true }); }
