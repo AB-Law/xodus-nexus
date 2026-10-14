@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildCompatibility } from './runtime-compat/build.mjs';
+import { buildPlayFabSessionProbe } from './runtime-tests/build-playfab-session.mjs';
 
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const lockBytes = await fs.readFile(path.join(project, 'scripts/runtime-patches.lock.json'));
@@ -50,6 +51,7 @@ for (const patch of lock.patches) {
   if (await shaFile(path.join(project, patch.file)) !== patch.sha256) throw new Error(`Patch checksum mismatch: ${patch.file}`);
 }
 const compatibilitySources = ['scripts/runtime-compat/build.mjs', 'scripts/runtime-compat/playfab-save-folder.c',
+  'scripts/runtime-compat/playfab-session.c', 'scripts/runtime-compat/playfab-session.h',
   'scripts/runtime-compat/playfab-save-folder.def', 'scripts/runtime-compat/wine-launcher.c',
   'scripts/runtime-compat/gaming-services-version.c'];
 if (Object.keys(lock.runtimeCompatibilitySources ?? {}).sort().join() !== compatibilitySources.sort().join())
@@ -131,6 +133,9 @@ for (const [define, name, extra] of [
 run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-Wextra', '-Werror', pgsProbeSource, '-o', path.join(pgsTests, 'playfab-folder-probe.exe')], work);
 await fs.copyFile(path.join(components, 'PlayFabGameSave.dll'), path.join(pgsTests, 'PlayFabGameSave.dll'));
 const initTests = path.join(tests, 'runtime-init');
+await buildPlayFabSessionProbe(path.join(tests,'playfab-session'),[
+  '-I',path.join(build,'dlls/xgameruntime'),'-I',path.join(source,'dlls/xgameruntime'),
+  '-I',path.join(build,'include'),'-I',path.join(source,'include')]);
 await fs.mkdir(initTests);
 run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-Wextra', '-Werror', path.join(project, 'scripts/runtime-tests/runtime-init-probe.c'), '-o', path.join(initTests, 'runtime-init-probe.exe')], work);
 await fs.writeFile(path.join(initTests, 'MicrosoftGame.config'), '<Game><Identity Name="Nexus.Init.Inline" Publisher="CN=NexusProbe"/><TitleId>1234</TitleId></Game>');

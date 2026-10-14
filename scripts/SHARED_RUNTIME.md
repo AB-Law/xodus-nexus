@@ -62,6 +62,44 @@ Do not promote this as a proper Gaming Services implementation.
 
 ### PlayFab Game Saves compatibility
 
+The runtime supplies missing stock-UI-equivalent callbacks for the supported
+in-process SDK. Device contention, local/cloud conflicts, sync errors and storage
+errors are shown in runtime-owned dialog windows on separate threads. Cancel is
+the default; save selection and device takeover always require a user choice.
+Callbacks supplied by the title are preserved individually, including context.
+Successful SDK initialization is not evidence of a successful cloud upload.
+Device takeover uses the SDK's `SyncLastSavedData` action: it synchronizes the
+last **completed** cloud save, not another device's pending progress. The dialog
+shows available pending/completed descriptors and warns that local files can be
+replaced. Missing completed-cloud metadata does not establish a usable profile.
+The adapter does not automatically recover a local backup or choose a rollback.
+
+Before normal `PFGameSaveFilesUninitializeAsync` cleanup, retained online users
+are uploaded through the original SDK with `ReleaseDeviceAsActive`. Cleanup runs
+after the real asynchronous upload returns; the caller retains its original
+completion queue and receives genuine upload/cleanup failures. Failed/offline
+AddUser operations and explicit `XODUS_SAVE_SYNC=none` do not trigger the extra
+final upload.
+
+The synchronous runtime `UninitializeApiImpl` additionally drains this SDK
+session outside the loader lock before returning, including a cleanup already
+started asynchronously by the title. SDK cleanup itself remains asynchronous;
+no caller Manual completion callback is required for the in-flight drain.
+Games that terminate without calling runtime uninitialization are not covered.
+This is not a `DllMain` network wait or an `ExitProcess` hook.
+This does not cover abrupt process termination
+or games that omit SDK cleanup: local files remain, and a later session may need
+the device-contention/conflict dialog. Never interpret forced termination as an
+acknowledged cloud upload, nor silently resolve a conflict or discard progress.
+
+`XUserGetGamerPictureAsync` resolves the profile using contract version 2 and
+the endpoint's genuine proof-of-possession signature, then downloads the image
+without forwarding Xbox credentials to the CDN. Authorization, HTTP and image
+download work runs off the caller's Work dispatcher, with retained user/context
+lifetime and completion on the requested queue. Network/auth failures remain
+real failures, not replacement images or fabricated success. Contract reference:
+[Microsoft Profile API](https://learn.microsoft.com/en-us/gaming/gdk/docs/reference/live/rest/uri/profilev2/uri-usersbatchprofilesettingspost).
+
 The runtime includes a native SDK forwarding adapter, not a replacement cloud
 service. In an owner-private Xodus materialized launch view, its Wine entry point
 detects the supported x64 `PlayFabGameSave.dll` export contract and retains the
@@ -69,7 +107,8 @@ game's original SDK as `nexus_pgs_native.dll`. The adapter supplies a missing
 `saveFolder` from the current package's `XPersistentLocalStorage` root, with a
 `PlayFabGameSaves` child. Caller-specified folders, queue/options, authentication,
 cloud operations and genuine SDK errors are preserved. UTF-8 paths are created
-through Unicode Windows APIs. All other exports forward unchanged.
+through Unicode Windows APIs. Exports unrelated to UI/session lifecycle forward
+unchanged.
 For an omitted folder, the adapter defaults the upstream SDK's recognized
 `ForceUseInprocGameSaves` policy to 1 only if absent. An explicit existing policy
 is preserved; no `CurrentVersion`/`AvailableVersion` claims are provisioned.
@@ -85,9 +124,8 @@ launch. `NEXUS_PLAYFAB_ADAPTER=0` disables staging for diagnosis. Ordinary Wine
 commands and launches outside private Xodus views go to the unchanged loader.
 This does **not** implement Microsoft Gaming Services or its version gate, nor
 claim all PlayFab SDK versions, cloud-save roundtrips or all-title compatibility.
-The successful diagnostic game run also used copied Windows version metadata;
-those version claims are not shipped. This provider/folder change does not
-resolve a game's separate pre-initialization Gaming Services version check.
+The separate temporary Gaming Services version metadata workaround is described
+above; it is not an installed Microsoft service or part of the cloud-session UI.
 
 ## Build
 
