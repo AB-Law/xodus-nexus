@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { accessSync, constants as fsConstants } from 'node:fs';
+import { StringDecoder } from 'node:string_decoder';
 import { stripAnsi } from '../shared/utils.js';
 
 export interface RunOptions {
@@ -8,6 +9,10 @@ export interface RunOptions {
   onLine?: (line: string) => void;
   maxOutput?: number;
   terminal?: boolean;
+  /** Give a game its own Linux process group; downloads retain their defaults. */
+  detached?: boolean;
+  /** Optional bounded drain after the child exits but inherited pipes stay open. */
+  outputDrainMs?: number;
 }
 
 export interface RunResult {
@@ -61,32 +66,70 @@ export function spawnTracked(command: string, args: string[], options: RunOption
     cwd: options.cwd,
     env: options.terminal ? { ...(options.env ?? process.env), TERM: 'xterm' } : options.env ?? process.env,
     shell: false,
+    detached: options.detached ?? false,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   const chunks: string[] = [];
   const max = options.maxOutput ?? 2_000_000;
   let chunksLength = 0;
-  let buffered = '';
-  const consume = (chunk: Buffer) => {
-    const clean = stripAnsi(chunk.toString('utf8'));
-    buffered += clean;
-    const lines = buffered.split('\n');
+  const readers: { consume: (chunk: Buffer) => void; finish: () => void }[] = [];
+  const reader = () => {
+    let buffered = '';
+    const decoder = new StringDecoder('utf8');
+    const consume = (chunk: Buffer) => {
+    // Escape sequences and UTF-8 characters can straddle pipe reads. Split
+    // complete terminal frames first, then remove ANSI, not per raw chunk.
+    const text = decoder.write(chunk);
+    buffered += text;
+    const lines = buffered.split(/[\r\n]/);
     buffered = lines.pop() ?? '';
     for (const raw of lines) {
-      const line = raw.trimEnd();
+      const line = stripAnsi(raw).trimEnd();
       if (line) options.onLine?.(line);
     }
+    if (buffered.length > 64_000) buffered = buffered.slice(-64_000);
+    const clean = stripAnsi(text);
     chunks.push(clean);
     chunksLength += clean.length;
     while (chunksLength > max && chunks.length > 1) chunksLength -= chunks.shift()!.length;
+    };
+    const result = { consume, finish: () => {
+      buffered += decoder.end();
+      if (buffered.trim()) options.onLine?.(stripAnsi(buffered).trimEnd());
+      buffered = '';
+    } };
+    readers.push(result); return result;
   };
-  child.stdout.on('data', consume);
-  child.stderr.on('data', consume);
+  child.stdout.on('data', reader().consume);
+  child.stderr.on('data', reader().consume);
   const result = new Promise<RunResult>((resolve, reject) => {
-    child.once('error', reject);
-    child.once('close', (code) => {
-      if (buffered.trim()) options.onLine?.(buffered.trimEnd());
+    let finished = false;
+    let drain: ReturnType<typeof setTimeout> | undefined;
+    const finish = (code: number | null) => {
+      if (finished) return;
+      finished = true;
+      if (drain) clearTimeout(drain);
+      readers.forEach(reader => reader.finish());
       resolve({ code: code ?? -1, output: chunks.join('') });
+    };
+    child.once('error', (error) => {
+      finished = true;
+      if (drain) clearTimeout(drain);
+      reject(error);
+    });
+    child.once('exit', (code) => {
+      if (options.outputDrainMs === undefined || finished) return;
+      drain = setTimeout(() => {
+        // Only selected callers opt in. An inherited pipe is not evidence that
+        // its original process is still alive; retain the real exit status.
+        child.stdout.destroy();
+        child.stderr.destroy();
+        child.stdin.destroy();
+        finish(code);
+      }, options.outputDrainMs);
+    });
+    child.once('close', (code) => {
+      finish(code);
     });
   });
   return { child, result };

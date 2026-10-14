@@ -88,6 +88,10 @@
     {
       "file": "assets/xgameruntime-gamesave-background-upload.patch",
       "sha256": "3c30273f82434a3fff2c99b7516f6c446bfaa2299d458d170f7472cff0f24ac9"
+    },
+    {
+      "file": "assets/xgameruntime-async-cleanup.patch",
+      "sha256": "5d904002da3a23d143fdc716959335c4b32fd1b37ad001c0f2a7b9d034ac946f"
     }
   ],
   "expectedXgameruntimeSources": {
@@ -109,7 +113,7 @@
     "dlls/xgameruntime/xstore.c": "25d4c481d017cf31d74f5a9cbe3e545197b1f70423a56df24bf93f639e5527c3",
     "dlls/xgameruntime/xsystem.c": "974c83fe2e1b97e6b2c86e95a558b31d2effe6b9d2b3166c2c4d1882a4341058",
     "dlls/xgameruntime/xsystemanalytics.c": "189e99c83273b429325ecefa2b9246c45863c22f0c4006a791ec57b8f7b9d384",
-    "dlls/xgameruntime/xthreading.c": "52d6d6b921727c45759b0540edec61624fbf9cb44760ff339b5175d4c5b4bb71",
+    "dlls/xgameruntime/xthreading.c": "e04c3b71b2ff466b761985be83c8770e05258dad2817f2b4bc73af6402195f30",
     "dlls/xgameruntime/xuser.c": "0134a9653d05c5061824992ff91ec7307b70f1a717c93aa65f7a01987158a85f",
     "dlls/xgameruntime/util.c": "aebf1a7ebef0dff89d3a1683bc40e16c821eaeb5cc1160ce474b905d14d7cb5c",
     "dlls/xgameruntime/util.h": "b739dba8a69a36103e72afc8dcaeaf324470d9ed47a5a7dd81b18e4e511ae69a",

@@ -215,6 +215,8 @@ export async function inspectGameDirectory(directory: string): Promise<Game> {
     path: canonical,
     storeId,
     publisher,
+    installedVersion: attr(configXml, 'Identity', 'Version') ?? attr(appxXml, 'Identity', 'Version'),
+    packageName: attr(configXml, 'Identity', 'Name') ?? attr(appxXml, 'Identity', 'Name'),
     executable,
     coverDataUrl,
     installState,

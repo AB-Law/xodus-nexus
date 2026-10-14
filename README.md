@@ -36,8 +36,8 @@ curl -fsSL https://raw.githubusercontent.com/domsvoboda/xodus-nexus/main/scripts
 Download the AppImage from [Releases](https://github.com/domsvoboda/xodus-nexus/releases), then:
 
 ```sh
-chmod +x Xodus-Nexus-0.2.2-x86_64.AppImage
-./Xodus-Nexus-0.2.2-x86_64.AppImage
+chmod +x Xodus-Nexus-0.2.3-x86_64.AppImage
+./Xodus-Nexus-0.2.3-x86_64.AppImage
 ```
 
 No Rust, Cargo or `protoc` is needed for the prebuilt backend. It requires GTK 3,
@@ -51,6 +51,11 @@ On first run, install the prebuilt Nexus backend and Nexus runtime in
 Settings, and sign in to your Microsoft account. Both components are downloaded
 as verified precompiled packages from Nexus Releases. No local compilation is
 needed; neither component is bundled with the AppImage.
+
+Launcher updates appear in the top-right corner. Install them from Settings and
+restart; the previous AppImage is kept for rollback. Backend and runtime updates
+are versioned independently. In My Library, **Check game updates** marks installed
+games with a newer verified package version without changing their files.
 
 [Downloads](https://github.com/domsvoboda/xodus-nexus/releases) ·
 [Setup & documentation](https://github.com/domsvoboda/xodus-nexus/wiki) ·

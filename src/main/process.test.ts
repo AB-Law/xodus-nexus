@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { resolveScriptCommand, spawnTracked, wrapForTerminal } from './process.js';
 
 describe('tracked terminal output', () => {
+  it('assembles split UTF-8 and ANSI independently on stdout and stderr', async () => {
+    const lines: string[] = [];
+    const script = "process.stdout.write(Buffer.from([0xe2])); process.stderr.write('stderr\\n');setTimeout(()=>process.stdout.write(Buffer.from([0x82,0xac,27,91])),10);setTimeout(()=>process.stdout.write('32m Downloading 1 MiB/2 MiB 50%\\r'),20)";
+    const result = await spawnTracked(process.execPath, ['-e', script], { onLine: line => lines.push(line) }).result;
+    expect(result.code).toBe(0); expect(lines).toContain('stderr'); expect(lines).toContain('€ Downloading 1 MiB/2 MiB 50%');
+  });
   it('emits carriage-return updates from a pseudo-terminal', async () => {
     const lines: string[] = [];
     const tracked = spawnTracked('printf', ['Downloading 1 MiB/10 MiB 10%%\rDownloading 5 MiB/10 MiB 50%%\n'], {

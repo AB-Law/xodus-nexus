@@ -39,7 +39,7 @@ export function demoSnapshot(coverUrls: ReadonlyMap<string, string> = new Map())
     downloads: structuredClone(demoDownloads).map((task) => ({ ...task, coverUrl: task.productId ? coverUrls.get(task.productId) : undefined })),
     settings: { installRoot: '/home/demo/Games/Xodus Nexus', market: 'US', parallelDownloads: 4, winePath: '', externalXodusRoot: '', runtimeRoot: '', verboseLogs: false, firstRunCompleted: true },
     auth: { running: false, stored: true, username: 'DemoPlayer', lastResult: 'success', note: 'Demo mode: sample data only. Store pages show the live Microsoft Store catalog.' },
-    launcherUpdate: { currentVersion: '0.2.2', checking: false, checkedAt: new Date().toISOString() },
+    launcherUpdate: { currentVersion: '0.2.3', checking: false, checkedAt: new Date().toISOString() },
   };
 }
 

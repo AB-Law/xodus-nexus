@@ -11,6 +11,7 @@ function shellQuote(value: string): string {
 export interface ProtonRunner {
   command: string;
   compatibilityDataPath: string;
+  stopPrefix: { command: string; args: string[] };
 }
 
 const REQUIRED_PREFIX_FILES = [
@@ -378,6 +379,11 @@ export async function prepareProtonRunner(
       `  export PROTON_EAC_RUNTIME=${shellQuote(eacRuntime)}`,
       'fi',
     ] : []),
+    // Private lifecycle command uses the exact same prefix/library environment
+    // as launch. It is only invoked for explicit Stop/launcher shutdown.
+    'if [ "${1:-}" = "--nexus-stop-prefix" ]; then',
+    `  exec ${shellQuote(path.join(files, 'bin', 'wineserver'))} -k`,
+    'fi',
     // Launchers (including EAC) may finish before the game they spawned.
     // Keep Xodus and its temporary launch view/account service alive until
     // the isolated game prefix has no remaining Wine processes.
@@ -395,5 +401,5 @@ export async function prepareProtonRunner(
   await fs.writeFile(temporary, script, { mode: 0o700 });
   await fs.rename(temporary, runner);
   await fs.chmod(runner, 0o700);
-  return { command: runner, compatibilityDataPath };
+  return { command: runner, compatibilityDataPath, stopPrefix: { command: runner, args: ['--nexus-stop-prefix'] } };
 }

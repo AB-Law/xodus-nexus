@@ -14,15 +14,16 @@ static LONG checks, failures;
 struct test_context {
     XAsyncBlock block;
     HRESULT begin_result, work_result, expected;
-    LONG callbacks, cleanup, work;
+    LONG callbacks, cleanup, work, cancels;
     BOOL schedule, complete_work, complete_pending, provider_copy, check_deferred_cleanup;
     SIZE_T result_capacity;
+    BOOL wait_in_callback, complete_cancel;
 };
 static void WINAPI completed(XAsyncBlock *block)
 {
     struct test_context *test = block->context;
     ++test->callbacks;
-    CHECK("callback-status", IXThreadingImpl_XAsyncGetStatus(threads, block, FALSE) == test->expected);
+    CHECK("callback-status", IXThreadingImpl_XAsyncGetStatus(threads, block, test->wait_in_callback) == test->expected);
 }
 static HRESULT WINAPI provider(XAsyncOp op, const XAsyncProviderData *data)
 {
@@ -45,6 +46,10 @@ static HRESULT WINAPI provider(XAsyncOp op, const XAsyncProviderData *data)
         *(DWORD *)data->buffer = 0x12345678;
         break;
     case XAsyncOp_Cleanup: ++test->cleanup; break;
+    case XAsyncOp_Cancel:
+        ++test->cancels;
+        if (test->complete_cancel) IXThreadingImpl_XAsyncComplete(threads, data->async, E_ABORT, 0);
+        break;
     default: break;
     }
     return S_OK;
@@ -74,6 +79,13 @@ struct connectivity_test {
     BOOL initialized;
     HANDLE event;
 };
+static DWORD WINAPI watchdog(void *event)
+{
+    if (WaitForSingleObject(event, 10000) != WAIT_OBJECT_0) {
+        printf("FAIL async-cleanup-deadlock\n"); fflush(stdout); ExitProcess(77);
+    }
+    return 0;
+}
 static void WINAPI connectivity_changed(void *context, const XNetworkingConnectivityHint *hint)
 {
     struct connectivity_test *test = context;
@@ -81,10 +93,12 @@ static void WINAPI connectivity_changed(void *context, const XNetworkingConnecti
     InterlockedIncrement(&test->callbacks);
     if (test->event) SetEvent(test->event);
 }
-int main(void)
+int main(int argc, char **argv)
 {
+    HANDLE finished = CreateEventW(NULL, TRUE, FALSE, NULL);
+    HANDLE guard = CreateThread(NULL, 0, watchdog, finished, 0, NULL);
     HRESULT (WINAPI *query)(const GUID *, REFIID, void **);
-    HMODULE dll = LoadLibraryA("xgameruntime.dll");
+    HMODULE dll = LoadLibraryA(argc > 1 ? argv[1] : "xgameruntime.dll");
     struct test_context test;
     const HRESULT failures_to_test[] = { E_FAIL, E_NOTIMPL, E_ABORT };
     UINT i;
@@ -111,6 +125,26 @@ int main(void)
     CHECK("pending-begin-not-completed", test.callbacks == 0 && test.cleanup == 0);
     IXThreadingImpl_XAsyncComplete(threads, &test.block, S_OK, 0); drain();
     CHECK("pending-begin-can-complete", test.callbacks == 1 && test.cleanup == 1);
+
+    init(&test); test.expected = S_OK; test.wait_in_callback = TRUE;
+    CHECK("callback-self-wait-begin", IXThreadingImpl_XAsyncBegin(threads, &test.block, &test, NULL, "cleanup-self-wait", provider) == S_OK);
+    IXThreadingImpl_XAsyncComplete(threads, &test.block, S_OK, 0); drain();
+    CHECK("callback-self-wait-finishes", test.callbacks == 1 && test.cleanup == 1);
+
+    init(&test); test.expected = S_OK;
+    CHECK("best-effort-cancel-begin", IXThreadingImpl_XAsyncBegin(threads, &test.block, &test, NULL, "cancel-notification", provider) == S_OK);
+    IXThreadingImpl_XAsyncCancel(threads, &test.block);
+    CHECK("cancel-notifies-provider", test.cancels == 1);
+    CHECK("cancel-does-not-fabricate-completion", IXThreadingImpl_XAsyncGetStatus(threads, &test.block, FALSE) == E_PENDING);
+    IXThreadingImpl_XAsyncComplete(threads, &test.block, S_OK, 0); drain();
+    CHECK("cancel-can-complete-normally", test.callbacks == 1 && test.cleanup == 1);
+
+    init(&test); test.expected = E_ABORT; test.complete_cancel = TRUE; test.wait_in_callback = TRUE;
+    CHECK("cancel-complete-begin", IXThreadingImpl_XAsyncBegin(threads, &test.block, &test, NULL, "cancel-cleanup", provider) == S_OK);
+    IXThreadingImpl_XAsyncCancel(threads, &test.block); drain();
+    CHECK("real-provider-cancel-completes", test.cancels == 1 && test.callbacks == 1 && test.cleanup == 1);
+    IXThreadingImpl_XAsyncCancel(threads, &test.block);
+    CHECK("cleaned-provider-not-canceled-again", test.cancels == 1);
 
     for (i = 0; i < 4; ++i) {
         init(&test); test.schedule = TRUE;
@@ -226,6 +260,10 @@ int main(void)
         IXNetworkingImpl2_Release(network);
     }
     IXThreadingImpl_Release(threads);
+    SetEvent(finished);
+    WaitForSingleObject(guard, INFINITE);
+    CloseHandle(guard);
+    CloseHandle(finished);
     printf("ASYNC PROVIDER CHECKS %ld FAILURES %ld\n", checks, failures);
     return failures ? 1 : 0;
 }
