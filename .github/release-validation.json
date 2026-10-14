@@ -99,6 +99,24 @@
       "approved": true,
       "approvedBy": "domsvoboda",
       "evidence": "Explicit stable-publication request on 2026-10-14 following positive local Forza and No Mans Sky tests. Successful main CI 38560766184 reconstructed the pinned source and passed all native, HTTP/2, media and runtime gates. Exact binary and corresponding-source archives passed SHA-256/SHA-512, candidate identity, recipe, source/base/media and packaged provenance checks. The verified recipe matches the locally game-tested API/scheduling fixes; user-confirmed compatibility includes both titles online. Publication uses the standing approved metadata-only development-to-release policy and unchanged artifact bytes. No further real-game run of the exact CI archive was performed; no second-device cloud restore, full-match or clean-exit claim is added by this approval."
-    }
+    },
+      {
+        "kind": "launcher",
+        "runId": "38643205085",
+        "commit": "606bbea0a12cc5ad5c375354c0616694c5cd6a01",
+        "manifestSha256": "11bf8a439c0e128bedab31839d633c3db9195a815836bb81b354329dccd2fd8a",
+        "approved": true,
+        "approvedBy": "domsvoboda",
+        "evidence": "Explicit stable-publication request 2026-10-14 for launcher 0.2.3 after successful main CI. Exact CI AppImage/checksum/candidate manifest verified; the same bytes booted with the normal Electron sandbox in an isolated sample-data-only profile, captured five pages and exited0. Source tests146/runtime-tools22/CI-tools19 passed. No real account/package-query or external self-update run on these exact bytes; publication is authorized without another game run."
+      },
+      {
+        "kind": "runtime",
+        "runId": "38643205152",
+        "commit": "606bbea0a12cc5ad5c375354c0616694c5cd6a01",
+        "manifestSha256": "36093e0cf75497c449b73fe68db0a47faf81b1521eee58c34d4ab94f853c5c07",
+        "approved": true,
+        "approvedBy": "domsvoboda",
+        "evidence": "Explicit stable-publication request 2026-10-14 after successful clean main CI. Exact binary/source/checksum/candidate manifest verified; packaged recipe, source hashes, patch list and compiled xthreading/xgamesave source match the approved main606bbea inputs. Native4527 checks/0 failures, HTTP2 and portable H264/AAC media checks passed. Matching local generic cleanup/background-save code was validated in Palworld normal quit and Minecraft/Gears sign-in; no new real-game run of these exact CI bytes. Standing authorized metadata-only development-to-release promotion preserves all artifact bytes and source/base/media inputs."
+      }
   ]
 }
