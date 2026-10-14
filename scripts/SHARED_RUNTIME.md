@@ -25,6 +25,25 @@ instead of dereferencing absent state. A completed failure retains its original
 HRESULT; scheduling never manufactures successful cloud/auth results. A queue
 reference protects submission against immediate completion/queue release.
 
+### File-based Xbox game saves
+
+`XGameSaveFilesGetFolderWithUiAsync`, its result and remaining-quota query now
+provide ordinary per-user/SCID folders. Full relative parent paths map to cloud
+containers; Unicode file names map to blobs. Root-level files are ignored.
+The encoded connected-storage cache is separate from the directory games see.
+An asynchronous session monitor authenticates the real account, checks its XUID,
+downloads saves before returning the folder, holds/renews the cloud lock and
+uploads changed/deleted files after the game process exits. Only explicit
+`XODUS_SAVE_SYNC=none` (or an unpackaged context) selects local storage; cloud
+failures are not silently reported as successful synchronization.
+
+Conflicting local/cloud changes return an actual synchronization error rather
+than silently choosing one side. Pre-sync views/cache replacements retain
+recovery backups. Conflict UI and backup retention limits are not implemented.
+No game names, title-specific selection, fake account or cloud receipt is used.
+Cloud roundtrip and exact clean-CI candidate validation remain separate from
+the account-free API probe.
+
 ### Temporary Gaming Services version override
 
 A runtime-owned bootstrap is enabled by default before materialized game
@@ -96,7 +115,7 @@ install games, authenticate, switch the active runtime, or edit the base.
 
 The source lock is [`runtime-patches.lock.json`](runtime-patches.lock.json).
 It pins Wine b1dd3273, xgameruntime 64aebcab, and nghttp2 85e300c7/v1.70.0,
-plus SHA-256 for every applied patch and all 23 modified/added XGameRuntime
+plus SHA-256 for every applied patch and all modified/added XGameRuntime
 source files. After patching, those files must byte-match the online-tested
 development tree. No fuzz or automatic latest-upstream fallback is allowed.
 

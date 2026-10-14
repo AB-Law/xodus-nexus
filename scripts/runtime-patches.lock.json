@@ -72,6 +72,10 @@
     {
       "file": "assets/xgameruntime-async-schedule-validation.patch",
       "sha256": "56a0d773adfa306d04596ba838c88ce391efadd35d88c960aaae355cd5aec774"
+    },
+    {
+      "file": "assets/xgameruntime-gamesave-files.patch",
+      "sha256": "10181b31b0f67f2b00dbf34ed0eaf085da820b26f2d2fc703c59a9dcedf9ea48"
     }
   ],
   "expectedXgameruntimeSources": {
@@ -83,8 +87,8 @@
     "dlls/xgameruntime/xgameactivation.c": "48a729040d7be7aac3e28b27aa06f8285bcef3f27767fa79ddfbe33c7b629dbc",
     "dlls/xgameruntime/xgameinvite.c": "43c3459101f7da3a4bc6569d361f2d5f63f6a0e70006a0472c4ccb6f9bece41f",
     "dlls/xgameruntime/xgameprotocol.c": "6936d5e24532832ee2e6928ea3a9a5217f8df830588b2e6e92920dd2cf1532d3",
-    "dlls/xgameruntime/xgameruntime.spec": "e2418b8dafca476ae2119228e74e5cf23987e3a7b9a5bde3c0cb150f1c2823da",
-    "dlls/xgameruntime/xgamesave.c": "c7c767edd7d38bf4981ee3d8367055f03bd3d337f372a55743f06f40e4cdb4b7",
+    "dlls/xgameruntime/xgameruntime.spec": "fbf033283fe56e7d852b9f8c37b825f82abf0580fd45f9a5d841f571c57057d7",
+    "dlls/xgameruntime/xgamesave.c": "b608d6110ede208343a3d22d354c7ba81c6e376a944f1a2a459f3306a5a99576",
     "dlls/xgameruntime/xgamesave.idl": "544319e88951f65b21c74f785fb9376c10cac8b1d57e98c7aa3079348162ccab",
     "dlls/xgameruntime/xnetworking.c": "cfd8d0110b7ebd622f62317d3134dd866e6538e4a697b06912fa752517fe7caa",
     "dlls/xgameruntime/xpackage.c": "72cc335bc981647fb1a5cd6f01f08c04eff82895f39b56ce7e99e8993639ba24",
@@ -97,7 +101,8 @@
     "dlls/xgameruntime/xuser.c": "020bde95bf039a2523303c967b2bf7ae937bc6cfb0df07d2f9ece0efbcc956a2",
     "dlls/xgameruntime/util.c": "aebf1a7ebef0dff89d3a1683bc40e16c821eaeb5cc1160ce474b905d14d7cb5c",
     "dlls/xgameruntime/util.h": "b739dba8a69a36103e72afc8dcaeaf324470d9ed47a5a7dd81b18e4e511ae69a",
-    "dlls/xgameruntime/userprovider.idl": "66fb09670b7dabfc55257475094239018ea9a19ec2be348e56cf2b17ef615d7a"
+    "dlls/xgameruntime/userprovider.idl": "66fb09670b7dabfc55257475094239018ea9a19ec2be348e56cf2b17ef615d7a",
+    "dlls/xgameruntime/xgamesavefiles.h": "5f21c809107e8c67659899a43f98143a4cbba744be5731cc5c68c177fdc7956a"
   },
   "runtimeCompatibilitySources": {
     "scripts/runtime-compat/build.mjs": "32e51aa31ac749c150cd5487b8ec67bd30185fc30c0c9f0b5b3c2df065e07a81",

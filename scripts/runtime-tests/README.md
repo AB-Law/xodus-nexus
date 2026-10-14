@@ -33,6 +33,11 @@ Never copy a candidate DLL into an active or production prefix.
 - `winrt-json-probe.c`: real WinRT JSON activation, Parse, GetObject and
   nested array/object access (9 checks). Required by XUser endpoint parsing;
   HTTP 200 alone does not establish successful account initialization.
+- `gamesave-files-probe.c`: actual file-provider async completion, retained
+  synthetic user, restricted-handle sync child, stable UTF-8 folder, nested
+  containers and quota computed from real files (21 checks). Explicit offline
+  mode; no real account/network/cloud-success claim. The runner waits for final
+  post-exit synchronization before cleaning its disposable prefix.
 - `token-dispatch-probe.c`: synthetic delayed authorization failure through
   the real ANSI/UTF-16 token provider; manual Work dispatch must return without
   waiting for authorization. Checks completion and retained user lifetime when

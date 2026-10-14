@@ -83,7 +83,7 @@ const provenance = {
   toolchain: Object.fromEntries(['gcc', 'x86_64-w64-mingw32-gcc', 'cmake', 'make', 'autoconf', 'bison', 'flex'].map(tool => [tool, run(tool, ['--version'], work, true).split('\n')[0]])),
 };
 await fs.writeFile(path.join(work, 'source-manifest.json'), JSON.stringify(provenance, null, 2) + '\n', { flag: 'wx' });
-console.log('All 23 modified/added xgameruntime source files match the online-tested development tree.');
+console.log(`All ${Object.keys(lock.expectedXgameruntimeSources).length} modified/added xgameruntime source files match their source locks.`);
 if (options.prepareOnly) process.exit(0);
 
 run('cmake', ['-S', ngSource, '-B', ngBuild, '-DCMAKE_SYSTEM_NAME=Windows', '-DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc', '-DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres', '-DENABLE_LIB_ONLY=ON', '-DBUILD_SHARED_LIBS=ON', '-DBUILD_STATIC_LIBS=OFF', '-DENABLE_DOC=OFF', '-DENABLE_APP=OFF', '-DENABLE_EXAMPLES=OFF', '-DENABLE_FAILMALLOC=OFF', '-DBUILD_TESTING=OFF'], work);
@@ -134,7 +134,7 @@ const initTests = path.join(tests, 'runtime-init');
 await fs.mkdir(initTests);
 run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-Wextra', '-Werror', path.join(project, 'scripts/runtime-tests/runtime-init-probe.c'), '-o', path.join(initTests, 'runtime-init-probe.exe')], work);
 await fs.writeFile(path.join(initTests, 'MicrosoftGame.config'), '<Game><Identity Name="Nexus.Init.Inline" Publisher="CN=NexusProbe"/><TitleId>1234</TitleId></Game>');
-for (const test of ['taskqueue-teardown', 'taskqueue-contract', 'async-provider-contract', 'async-completion-lifetime', 'async-schedule']) {
+for (const test of ['taskqueue-teardown', 'taskqueue-contract', 'async-provider-contract', 'async-completion-lifetime', 'async-schedule', 'gamesave-files']) {
   run('x86_64-w64-mingw32-gcc', ['-D__WINESRC__', '-O2', '-Wall', '-I', path.join(build, 'dlls/xgameruntime'), '-I', path.join(source, 'dlls/xgameruntime'), path.join(project, `scripts/runtime-tests/${test}-probe.c`), '-o', path.join(tests, `${test}-probe.exe`)], work);
 }
 // windows.web generated these WinRT headers from the pinned IDL sources.

@@ -49,13 +49,20 @@ try {
     await fs.copyFile(path.join(files, 'lib/wine/x86_64-windows', name), temporary, fs.constants.COPYFILE_EXCL);
     await fs.rename(temporary, dest);
   }
-  for (const name of ['taskqueue-teardown', 'taskqueue-contract', 'async-provider-contract', 'async-completion-lifetime', 'async-schedule', 'winrt-json', 'token-dispatch']) {
+  for (const name of ['taskqueue-teardown', 'taskqueue-contract', 'async-provider-contract', 'async-completion-lifetime', 'async-schedule', 'gamesave-files', 'winrt-json', 'token-dispatch']) {
     const result = await run(wine, [path.join(tests, `${name}-probe.exe`)]);
     await fs.writeFile(path.join(root, `${name}.log`), result.output, { mode: 0o600 });
     const summary = result.output.split(/\r?\n/).filter(line => /^(FAIL |CHECKS |QUEUE |ASYNC )/.test(line));
     console.log(`${name}: exit=${result.code} timeout=${result.timedOut}\n${summary.join('\n')}`);
     results.push({ name, code: result.code, timedOut: result.timedOut, summary });
     if (result.code !== 0 || result.timedOut) throw new Error(`Contract probe failed: ${name}; see ${root}`);
+    // The file provider intentionally outlives its caller for final sync. Do not
+    // tear its server down or start other probes before the child finishes.
+    if (name === 'gamesave-files') {
+      const finish = await run(server, ['-w']);
+      await fs.appendFile(path.join(root, `${name}.log`), finish.output);
+      if (finish.code || finish.timedOut) throw new Error(`File-provider shutdown failed; see ${root}`);
+    }
   }
   const pgs = await run(wine, [path.join(tests, 'playfab-folder/playfab-folder-probe.exe')], 60000,
     { WINEDLLOVERRIDES: `${env.WINEDLLOVERRIDES};xgameruntime=n;playfabgamesave=n;nexus_pgs_native=n` });
