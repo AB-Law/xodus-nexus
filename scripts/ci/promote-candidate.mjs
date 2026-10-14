@@ -62,7 +62,9 @@ try {
     ...manifest.files.map(file => path.join(directory, file.name)), path.join(directory, 'candidate.json'),
     ...(kind === 'launcher' ? [] : ['--latest=false']),
     '--title', `Xodus Nexus ${kind} ${tag}`, '--notes',
-    command('git', ['show', `${run.head_sha}:.github/release-notes/${kind === 'runtime' ? 'runtime-signin-updates.md' : `${kind}-${kind === 'launcher' ? tag.slice(1) : tag.slice('backend-v'.length)}.md`}`]) +
+    // Runtime notes may be finalized in the metadata-only approval commit.
+    // Artifact identity/recipe checks above still bind to the original run.
+    command('git', ['show', `${kind === 'runtime' ? 'HEAD' : run.head_sha}:.github/release-notes/${kind === 'runtime' ? 'runtime-signin-updates.md' : `${kind}-${kind === 'launcher' ? tag.slice(1) : tag.slice('backend-v'.length)}.md`}`]) +
     `\nPromoted unchanged from verified workflow [run ${runId}](https://github.com/${repo}/actions/runs/${runId}). Exact artifact checksums and validation are recorded in the repository.`]);
   console.log(`Promoted tested ${kind} candidate ${runId} as ${tag}; no rebuild performed.`);
 } finally { await fs.rm(directory, { recursive: true, force: true }); }
