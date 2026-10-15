@@ -117,6 +117,24 @@
         "approved": true,
         "approvedBy": "domsvoboda",
         "evidence": "Explicit stable-publication request 2026-10-14 after successful clean main CI. Exact binary/source/checksum/candidate manifest verified; packaged recipe, source hashes, patch list and compiled xthreading/xgamesave source match the approved main606bbea inputs. Native4527 checks/0 failures, HTTP2 and portable H264/AAC media checks passed. Matching local generic cleanup/background-save code was validated in Palworld normal quit and Minecraft/Gears sign-in; no new real-game run of these exact CI bytes. Standing authorized metadata-only development-to-release promotion preserves all artifact bytes and source/base/media inputs."
-      }
+      },
+    {
+      "kind": "launcher",
+      "runId": "38781431290",
+      "commit": "40ec99372ff91d77ccbdcd7d16a09f01ef2a053e",
+      "manifestSha256": "1a2bd99d73d27a1422b7ef99f9d57c0580ce1929d38d9e02ef348df930d15212",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit 2026-10-15 request to publish launcher 0.3.0, followed by authorization to finish while the user is away after the final library layout fixes. Main CI 38781431290 passed. Exact AppImage, SHA-256/SHA-512 and candidate identity verified against commit 40ec993; the same AppImage booted and exited successfully in an isolated sample-data-only profile with the normal Electron sandbox. Local source tests 187/22/19 passed and the user checked the account library and membership display in the preceding local build. No new real-account, cloud or game run on these exact CI bytes, no production activation and no runtime change. Publish unchanged candidate bytes."
+    },
+    {
+      "kind": "backend",
+      "runId": "38781431880",
+      "commit": "40ec99372ff91d77ccbdcd7d16a09f01ef2a053e",
+      "manifestSha256": "5ebfc26ae5eb5104e171b061d7267c4469f466c994dfa00c54dc674815830ee6",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit 2026-10-15 request to publish pending changes including backend 0.2.2, followed by authorization to finish while the user is away. Main CI 38781431880 passed all pinned-source build, native/parser/cache/streaming checks and packaged binaries plus corresponding source. Exact candidate identity, SHA-256/SHA-512, recipe metadata, archive entries and packaged binary/LICENSE hashes verified against commit 40ec993. Exact CLI library and streaming help confirm account-library and durable progress/control interfaces without account or service startup. Production namespace is preserved; no diagnostic account namespace is present. The source recipe matches the locally checked account library and prior accepted download fixes. No new real-account, cloud or game operation was performed on these exact CI bytes. Publish unchanged candidate bytes."
+    }
   ]
 }
