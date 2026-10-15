@@ -112,7 +112,7 @@ export interface GameLaunchOptions {
 
 export interface DownloadTask {
   id: string;
-  kind?: 'install' | 'update';
+  kind?: 'install' | 'update' | 'content';
   gameId?: string;
   title: string;
   productId: string;
@@ -202,6 +202,22 @@ export interface InstallRequest {
   destination: string;
 }
 
+export interface GameContentItem {
+  productId: string;
+  title: string;
+  access?: 'owned' | 'gamepass';
+  status: 'installed' | 'available' | 'unlicensed' | 'unsupported';
+  downloadBytes?: number;
+  note: string;
+}
+
+export interface GameContentPlan {
+  gameId: string;
+  checkedAt: string;
+  runtimeSupported?: boolean;
+  items: GameContentItem[];
+}
+
 export interface CatalogProduct {
   productId: string;
   installProductId?: string;
@@ -264,6 +280,8 @@ export interface LauncherApi {
   getFeaturedCatalog(): Promise<CatalogSearchResult>;
   getAccountLibrary(kind: AccountLibraryPage['kind'], cursor?: string, refresh?: boolean): Promise<AccountLibraryPage>;
   startInstall(request: InstallRequest): Promise<string>;
+  getGameContent(id: string): Promise<GameContentPlan>;
+  installGameContent(id: string, productId: string): Promise<string>;
   updateInstalledGame(id: string): Promise<string>;
   cancelDownload(id: string): Promise<void>;
   pauseDownload(id: string): Promise<void>;

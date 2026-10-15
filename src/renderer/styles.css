@@ -510,3 +510,10 @@ button.primary, button.secondary { border-radius: 5px; min-height: 40px; font-si
   .spotlight-meta { display: none; }
   .featured-rail { grid-template-columns: repeat(2, minmax(0,1fr)); }
 }
+.content-dialog { width: min(760px, 94vw); max-height: 85vh; overflow: auto; }
+.content-list { display: grid; gap: 12px; margin: 20px 0; }
+.content-list article { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px; border: 1px solid var(--border, #40444a); border-radius: 6px; }
+.content-list article > div { min-width: 0; }
+.content-list strong, .content-list small { display: block; overflow-wrap: anywhere; }
+.content-list small { margin-top: 5px; color: #b6bec8; }
+.content-list button { flex-shrink: 0; }

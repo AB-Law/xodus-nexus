@@ -14,7 +14,7 @@ import { inspectGameDirectory, StateStore } from './store.js';
 import { RuntimeManager } from './runtime.js';
 import { prepareProtonRunner, syncPrefixUserLocale, syncUnrealCultureGameIni } from './proton.js';
 import { CatalogService } from './catalog.js';
-import { cloudSaveRuntime, selectedWinePath, startXodusService, unbridgedCloudSaveRuntime, type XodusServiceSession } from './xodus-service.js';
+import { cloudSaveRuntime, selectedWinePath, startXodusService, storeContentRuntime, unbridgedCloudSaveRuntime, type XodusServiceSession } from './xodus-service.js';
 import { GameLogReducer, gameLoggingEnvironment, gameWindowEnvironment } from './game-log.js';
 import { downloadVerifiedVcRedist, installedVcRuntimeVersion, VC_REDIST_VERSION, versionAtLeast } from './vc-runtime.js';
 import { validateGameTrashTarget } from './game-removal.js';
@@ -31,6 +31,7 @@ import { ShortcutLaunch } from './shortcut-launch.js';
 import { loadShortcutIcon } from './shortcut-icon.js';
 import { AccountProfile } from './account-profile.js';
 import { AccountLibrary } from './account-library.js';
+import { GameContent, type ContentPackage } from './game-content.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -64,6 +65,8 @@ let snapshotTimer: ReturnType<typeof setTimeout> | undefined;
 let shortcuts: GameShortcuts;
 let accountProfile: AccountProfile;
 let preparingLaunch = false;
+let preparingInstall = false;
+let preparingContent = false;
 let finalizingGame = false;
 let shortcutOnly = false;
 let launchReady = false;
@@ -191,6 +194,8 @@ function requireBackend(command: keyof typeof backend.current.capabilities): str
 }
 
 function ensureIdle(): void {
+  if (shutdownStarted) throw Error('The launcher is closing.');
+  if (preparingInstall || preparingContent) throw new Error('An installation is being prepared.');
   if (preparingLaunch) throw new Error('A game launch is already being prepared.');
   if (finalizingGame) throw new Error('The previous game is still finishing cleanup.');
   if (launcherUpdater?.state.updating) throw new Error('The launcher is being updated.');
@@ -290,6 +295,46 @@ async function runAuth(command: 'login' | 'logout'): Promise<void> {
 
 async function startInstall(request: InstallRequest, updateGame?: Game): Promise<string> {
   ensureIdle();
+  preparingInstall = true;
+  try { return await prepareInstall(request, updateGame); }
+  finally { preparingInstall = false; }
+}
+
+function contentManager(): GameContent { return new GameContent(path.dirname(store.settings.runtimeRoot)); }
+async function gameContent(id: string) {
+  const game = store.games.find(entry => entry.id === id);
+  if (!game) throw Error('Game not found.');
+  if (authState.running || authState.stored !== true) throw Error('Sign in before checking game content.');
+  const identity = `${authState.username}:${backend.current.binaryPath}:${currentMarket()}`;
+  accountLibrary.select(authState.username, backend.current.capabilities.library ? backend.current.binaryPath : undefined, currentMarket());
+  const result = await contentManager().plan(game, () => accountLibrary.access(true), currentMarket());
+  const wine = selectedWinePath(store.settings.winePath, store.settings.runtimeRoot, runtime.current.winePath);
+  result.plan.runtimeSupported = Boolean(wine && await storeContentRuntime(wine));
+  if (authState.running || authState.stored !== true || identity !== `${authState.username}:${backend.current.binaryPath}:${currentMarket()}`) throw Error('Account changed. Check content again.');
+  return result;
+}
+async function installGameContent(id: string, productId: string): Promise<string> {
+  ensureIdle();
+  preparingContent = true;
+  try {
+    const manager = contentManager();
+    const { plan, packages } = await gameContent(id);
+    if (shutdownStarted) throw Error('The launcher is closing.');
+    if (!plan.runtimeSupported) throw Error('Update the Nexus runtime in Settings to install and use related content.');
+    const game = store.games.find(entry => entry.id === id);
+    const item = plan.items.find(item => item.productId === productId);
+    const pkg = packages.find(pkg => pkg.productId === productId);
+    if (!game || !item?.access || !pkg || !['available', 'installed'].includes(item.status)) throw Error('No supported licensed content package was verified.');
+    // Downloads use the existing genuine license-checked backend, not catalog URLs.
+    requireBackend('streaming');
+    if (await backend.externalDownloadRunning()) throw Error('Another Xodus download is running.');
+    const destination = await manager.prepare(game, pkg);
+    preparingInstall = true;
+    return await prepareInstall({ productId, title: `${game.title}: ${item.title}`, destination }, undefined, { game, pkg, manager });
+  } finally { preparingContent = false; preparingInstall = false; }
+}
+
+async function prepareInstall(request: InstallRequest, updateGame?: Game, content?: { game: Game; pkg: ContentPackage; manager: GameContent }): Promise<string> {
   const binary = requireBackend('streaming');
   const productId = safeProductId(request.productId);
   const destination = path.resolve(request.destination.trim());
@@ -310,8 +355,8 @@ async function startInstall(request: InstallRequest, updateGame?: Game): Promise
   const id = randomUUID();
   const task: DownloadTask = {
     id,
-    kind: updateGame ? 'update' : 'install',
-    gameId: updateGame?.id,
+    kind: content ? 'content' : updateGame ? 'update' : 'install',
+    gameId: content?.game.id ?? updateGame?.id,
     title: request.title.trim() || productId,
     productId,
     destination,
@@ -334,13 +379,14 @@ async function startInstall(request: InstallRequest, updateGame?: Game): Promise
     emitSnapshot();
   }, () => { /* Covers are optional. */ });
 
-  const args = ['streaming', productId, destination, '--parallel', String(store.settings.parallelDownloads)];
+  const args = ['streaming', content?.pkg.contentId ?? productId, destination, '--parallel', String(store.settings.parallelDownloads)];
   if (store.settings.market) args.push('--market', store.settings.market);
   if (structured) args.push('--progress-json');
   if (controllable) args.push('--control-stdin');
   const progressTracker = new DownloadProgress();
   let lastLoggedPercent = -1;
   let pending: { paused: boolean; resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> } | undefined;
+  if (shutdownStarted) throw Error('The launcher is closing.');
   const tracked = spawnTracked(binary, args, {
     onLine: (line) => {
       const progress = structured ? progressTracker.update(line) : undefined;
@@ -393,7 +439,6 @@ async function startInstall(request: InstallRequest, updateGame?: Game): Promise
   };
   void tracked.result.then(async (result) => {
     finishControls();
-    operations.delete(id);
     const cancelled = cancelledDownloads.delete(id);
     task.exitCode = result.code;
     task.finishedAt = new Date().toISOString();
@@ -406,8 +451,12 @@ async function startInstall(request: InstallRequest, updateGame?: Game): Promise
       task.phase = 'Paused — resume to restore saved download checkpoints';
       task.canPause = true; task.error = undefined; task.finishedAt = undefined;
     }
+    if (task.status === 'complete' && content) {
+      try { await content.manager.complete(content.game, content.pkg); }
+      catch (error) { task.status = 'failed'; task.error = (error as Error).message; task.phase = 'Content metadata validation failed. Files were kept for repair.'; }
+    }
     await store.updateDownload(id, task);
-    if (task.status === 'complete') {
+    if (task.status === 'complete' && !content) {
       try {
         const inspected = await inspectGameDirectory(destination);
         if (updateGame) {
@@ -417,6 +466,7 @@ async function startInstall(request: InstallRequest, updateGame?: Game): Promise
         else await store.upsertGame(inspected);
       } catch { /* Some packages do not expose metadata yet. */ }
     }
+    operations.delete(id);
     emitSnapshot();
   }).catch(async (error) => {
     finishControls();
@@ -570,6 +620,11 @@ async function prepareGameLaunch(id: string): Promise<void> {
     const environment = antiCheatEnvironment(gameLocaleEnvironment(gameWindowEnvironment(gameLoggingEnvironment(protonRunner
       ? { ...process.env }
       : { ...process.env, WINEPREFIX: legacyPrefixRoot, WINEARCH: 'win64' }, verboseLogs)), locale));
+    const contentRoots = await contentManager().roots(game).catch(error => {
+      addGameLog(`Managed content discovery unavailable: ${(error as Error).message}`);
+      return [] as string[];
+    });
+    if (contentRoots.length) environment.XODUS_CONTENT_ROOTS = [environment.XODUS_CONTENT_ROOTS, ...contentRoots.map(root => 'Z:' + root.replaceAll('/', '\\'))].filter(Boolean).join(';');
     if (locale) {
       addGameLog(`Selected package language: ${locale}.`);
       await syncPrefixUserLocale(wineCommand, protonRunner ? path.join(compatibilityDataPath, 'pfx') : legacyPrefixRoot, locale, environment, addGameLog);
@@ -801,6 +856,8 @@ function registerDemoIpc(catalogMarket: () => string): void {
   ipcMain.handle('catalog-featured', () => catalog.featured(catalogMarket()));
   ipcMain.handle('account-library', (_event, kind: 'all' | 'owned' | 'gamepass') => demoAccountLibrary(kind, demoCoverUrls));
   ipcMain.handle('start-install', () => 'demo-download');
+  ipcMain.handle('game-content', (_event, id: string) => ({ gameId: id, checkedAt: new Date().toISOString(), items: [] }));
+  ipcMain.handle('install-game-content', () => { throw Error('Content installation is unavailable in demo mode.'); });
   ipcMain.handle('update-installed-game', (_event, id: string) => id);
   ipcMain.handle('cancel-download', () => {});
   ipcMain.handle('remove-download', () => {});
@@ -890,6 +947,8 @@ function registerIpc(): void {
   });
   ipcMain.handle('catalog-featured', () => catalog.featured(catalogMarket()));
   ipcMain.handle('start-install', (_event, request: InstallRequest) => startInstall(request));
+  ipcMain.handle('game-content', async (_event, id: string) => (await gameContent(id)).plan);
+  ipcMain.handle('install-game-content', (_event, id: string, productId: string) => installGameContent(id, productId));
   ipcMain.handle('update-installed-game', async (_event, id: string) => {
     const game = store.games.find((entry) => entry.id === id);
     if (!game) throw new Error('Game not found.');
@@ -925,7 +984,10 @@ function registerIpc(): void {
         try {
           const game = task.kind === 'update' && task.gameId ? store.games.find(game => game.id === task.gameId) : undefined;
           if (task.kind === 'update' && !game) throw new Error('The installed game for this update is no longer in the library.');
-          await startInstall({ productId: task.productId, title: task.title, destination: task.destination }, game);
+          if (task.kind === 'content') {
+            if (!task.gameId) throw Error('Content download has no parent game.');
+            await installGameContent(task.gameId, task.productId);
+          } else await startInstall({ productId: task.productId, title: task.title, destination: task.destination }, game);
           await store.removeDownload(id);
         } catch (error) { task.status = 'paused'; throw error; }
         finally { emitSnapshot(); }

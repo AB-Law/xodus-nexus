@@ -144,6 +144,18 @@ for (const test of ['taskqueue-teardown', 'taskqueue-contract', 'async-provider-
 }
 // windows.web generated these WinRT headers from the pinned IDL sources.
 run('x86_64-w64-mingw32-gcc', ['-D__WINESRC__', '-O2', '-Wall', '-I', path.join(build, 'dlls/xgameruntime'), '-I', path.join(source, 'dlls/xgameruntime'), '-I', path.join(build, 'include'), '-I', path.join(source, 'include'), path.join(project, 'scripts/runtime-tests/token-dispatch-probe.c'), '-o', path.join(tests, 'token-dispatch-probe.exe'), '-lruntimeobject'], work);
+// Compile the exact entitlement helpers with a test-only failing license bridge.
+// Its synthetic signing key never changes production trust or reaches packaging.
+run('x86_64-w64-mingw32-gcc', ['-D__WINESRC__', '-DLIBXML_STATIC', '-O2', '-Wall',
+  '-I', path.join(build, 'dlls/xgameruntime'), '-I', path.join(source, 'dlls/xgameruntime'),
+  '-I', path.join(build, 'include'), '-I', path.join(source, 'include'), '-I', path.join(source, 'libs/xml2/include'),
+  path.join(project, 'scripts/runtime-tests/store-entitlements-probe.c'), path.join(build, 'libs/xml2/x86_64-windows/libxml2.a'),
+  '-o', path.join(tests, 'store-entitlements-probe.exe'), '-lruntimeobject', '-lole32', '-lcrypt32', '-lbcrypt', '-lwinhttp', '-lucrt'], work);
+run('x86_64-w64-mingw32-gcc', ['-D__WINESRC__', '-DLIBXML_STATIC', '-O2', '-Wall', '-Wextra', '-Werror',
+  '-I', path.join(build, 'dlls/xgameruntime'), '-I', path.join(source, 'dlls/xgameruntime'),
+  '-I', path.join(build, 'include'), '-I', path.join(source, 'include'), '-I', path.join(source, 'libs/xml2/include'),
+  path.join(project, 'scripts/runtime-tests/package-content-probe.c'), path.join(build, 'libs/xml2/x86_64-windows/libxml2.a'),
+  '-o', path.join(tests, 'package-content-probe.exe'), '-lucrt'], work);
 // Ubuntu's older MinGW SDK need not contain windows.data.json.h at all.
 run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-I', path.join(build, 'include'), '-I', path.join(source, 'include'), path.join(project, 'scripts/runtime-tests/winrt-json-probe.c'), '-o', path.join(tests, 'winrt-json-probe.exe'), '-lruntimeobject'], work);
 await fs.copyFile(path.join(ngSource, 'COPYING'), path.join(components, 'nghttp2-LICENSE'));

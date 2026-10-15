@@ -67,6 +67,12 @@ Account listings require an updated backend and a verified supported PC package;
 add-ons and unsupported packages are excluded. Installed games remain available
 when account information is unavailable. Store remains the full catalog.
 
+For an installed game, **Manage content** lists its declared related packages
+separately from the game library. With a compatible Nexus runtime, install or
+repair licensed PC content through the normal Install Queue. Content is stored
+separately from the base game; restart the game after installation. Unverified
+licenses, ambiguous packages and unsupported formats cannot be installed here.
+
 Launcher updates appear in the top-right corner. Install them from Settings and
 restart; the previous AppImage is kept for rollback. Backend and runtime updates
 are versioned independently. In My Library, **Check game updates** marks installed
@@ -114,6 +120,7 @@ verified and may encounter compatibility issues.
 | Valor Mortis | Yes | Fully playable. |
 | Forza Horizon 6 | Yes | Playable online. |
 | Palworld | Yes | Playable online. |
+| DOOM Eternal | Partial | Campaign works; Horde and BATTLEMODE unlock with an unreleased runtime fix and the campaign package installed. Paid DLC and online play unverified ([#10](https://github.com/domsvoboda/xodus-nexus/issues/10)). |
 
 [Full compatibility list](https://github.com/domsvoboda/xodus-nexus/wiki/Compatibility)
 
