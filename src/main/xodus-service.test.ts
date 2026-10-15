@@ -4,7 +4,22 @@ import { createConnection, createServer } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
-import { selectedWinePath, startXodusBridge } from './xodus-service.js';
+import { selectedWinePath, startXodusBridge, storeContentRuntime } from './xodus-service.js';
+
+it('requires all genuine Store/content/bridge runtime capabilities, not just an installed Wine binary', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-content-runtime-'));
+  try {
+    const wine = path.join(root, 'files/bin/wine');
+    expect(await storeContentRuntime(wine)).toBe(false);
+    const features = ['xstore-entitlements-v1', 'xpackage-content-v1', 'xstore-package-license-v1', 'xodus-tcp-bridge-v1', 'cloud-saves-pr28'];
+    for (const missing of features) {
+      await fs.writeFile(path.join(root, 'XODUS_NEXUS_PATCH.json'), JSON.stringify({ features: features.filter(feature => feature !== missing) }));
+      expect(await storeContentRuntime(wine)).toBe(false);
+    }
+    await fs.writeFile(path.join(root, 'XODUS_NEXUS_PATCH.json'), JSON.stringify({ features }));
+    expect(await storeContentRuntime(wine)).toBe(true);
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
 
 describe('selectedWinePath', () => {
   const root = '/data/runtimes';

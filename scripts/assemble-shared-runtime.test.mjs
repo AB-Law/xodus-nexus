@@ -39,6 +39,8 @@ test('assembly replaces symlink entries without altering base/old runtime', asyn
     await fs.symlink(previous, path.join(f.base, 'files/lib/wine/x86_64-windows/xgameruntime.dll'));
     await fs.symlink(previous, path.join(f.base, 'files/share/default_pfx/drive_c/windows/system32/windows.web.dll'));
     f.run();
+    const metadata = JSON.parse(await fs.readFile(path.join(f.output, 'XODUS_NEXUS_PATCH.json'), 'utf8'));
+    for (const capability of ['xstore-entitlements-v1', 'xpackage-content-v1', 'xstore-package-license-v1']) assert.ok(metadata.features.includes(capability));
     assert.equal(await fs.readFile(path.join(f.output, 'files/bin/wine.nexus-original'), 'utf8'), '#!/bin/sh\nexit 0\n');
     assert.equal(await fs.readFile(path.join(f.output, 'files/bin/wine'), 'utf8'), 'new-wine-launcher');
     assert.equal(await fs.readFile(path.join(f.output, 'files/share/xodus-nexus/compat/PlayFabGameSave.dll'), 'utf8'), 'new-PlayFabGameSave.dll');

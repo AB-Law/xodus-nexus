@@ -76,9 +76,7 @@ export class AccountLibrary {
     const next = account && binary ? { account, binary, market: normalized } : undefined;
     if (JSON.stringify(this.identity) !== JSON.stringify(next)) { this.reset(); this.identity = next; }
   }
-  async get(kind: Kind, cursor?: string, refresh = false): Promise<AccountLibraryPage> {
-    if (kind !== 'all' && kind !== 'owned' && kind !== 'gamepass') throw Error('Invalid library filter.');
-    if (typeof refresh !== 'boolean' || (cursor !== undefined && typeof cursor !== 'string')) throw Error('Invalid library request.');
+  private async load(cursor?: string, refresh = false): Promise<NonNullable<AccountLibrary['cached']>> {
     const identity = this.identity;
     if (!identity) throw Error('Sign in and update the Xodus backend to load account games.');
     if (refresh) { this.reset(); cursor = undefined; }
@@ -98,7 +96,28 @@ export class AccountLibrary {
       await this.job;
     }
     current();
-    const cached = this.cached!;
+    return this.cached!;
+  }
+  /** Scoped callers can read access without fetching unrelated library artwork. */
+  async access(refresh = false): Promise<{ checkedAt: string; accessByProductId: AccountLibraryPage['accessByProductId'] }> {
+    const cached = await this.load(undefined, refresh);
+    if (cached !== this.cached || !this.identity) throw Error('Account library changed. Refresh this page.');
+    const accessByProductId: AccountLibraryPage['accessByProductId'] = {};
+    for (const product of cached.entries.keys()) {
+      const access = entitlementKind(product, cached.entries);
+      if (access) accessByProductId[product] = access;
+    }
+    return { checkedAt: cached.checkedAt, accessByProductId };
+  }
+  async get(kind: Kind, cursor?: string, refresh = false): Promise<AccountLibraryPage> {
+    if (kind !== 'all' && kind !== 'owned' && kind !== 'gamepass') throw Error('Invalid library filter.');
+    if (typeof refresh !== 'boolean' || (cursor !== undefined && typeof cursor !== 'string')) throw Error('Invalid library request.');
+    const cached = await this.load(cursor, refresh);
+    if (cached !== this.cached || !this.identity) throw Error('Account library changed. Refresh this page.');
+    if (refresh) cursor = undefined;
+    const identity = this.identity!;
+    const generation = this.generation;
+    const current = () => { if (generation !== this.generation) throw Error('Account library changed. Refresh this page.'); };
     const accessByProductId: AccountLibraryPage['accessByProductId'] = {};
     for (const product of cached.entries.keys()) {
       const access = entitlementKind(product, cached.entries);

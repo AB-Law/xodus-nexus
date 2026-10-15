@@ -15,6 +15,73 @@ GDK WinHTTP options, installed-package metadata, verified Store update queries
 and background token/signature authorization. Store queries require Nexus
 backend 0.2.1 or newer and currently support the verified current-game no-update
 case, not DLC or update installation.
+
+### Licensed Store products
+
+`XStoreQueryEntitledProductsAsync` and its result/enumeration/paging APIs query
+the current game's Store ID plus `RelatedProducts` declared in its game config.
+The runtime reuses the existing backend 0.2.1+ license-token transport, verifies
+Microsoft's RSA signature, certificate, nonce and validity, and exposes only
+specific licensed product/SKU pairs. Public catalog data supplies names, product
+kinds and developer offer tokens, never ownership. No backend update or
+title-specific unlock is involved. Receipt issuance uses the service's signed-in
+Store account, not an inferred license from an Xbox profile or installed files.
+
+Network work runs outside the caller's Work dispatcher. Query handles retain
+their snapshot across paging and must be closed normally. Failed authentication,
+missing metadata and expired receipts remain errors. This implementation requires
+online receipt/catalog access; products absent from the game's declared related
+list, purchase/download APIs and consumable quantities are not implemented here.
+
+### Installed content packages
+
+Content enumeration also discovers extracted PC add-on packages from disk.
+The game config and Appx manifest must agree on identity, publisher, version
+and base-package dependency. Allowed parent Store IDs determine the relationship
+to the caller, not ownership. A valid layout identifier and files matching its
+declared FileGroups must exist. Missing payload, mismatched metadata and DTDs
+are rejected. These presence checks are not a full package-integrity audit.
+
+Discovery is bounded to nearby installation directories and the game's `DLC`
+directory. Additional roots can be supplied through `XODUS_CONTENT_ROOTS`, using
+semicolon-separated absolute Windows paths visible to Wine. Enumeration retains
+its snapshot during callbacks, honors early stop and applies current, related
+and publisher scopes. `XStoreQueryPackageIdentifier` resolves the current game
+or discovered current/related content Store ID to its real package identifier.
+Unknown and ambiguous content return `E_INVALIDARG`, with bounded buffer writes.
+It neither installs add-ons nor grants a Store license.
+The launcher's **Manage content** action handles installation separately. It
+intersects config-declared related products with fresh account entitlements and
+an unambiguous Windows.Desktop x64 MSIXVC package related to the base family.
+The existing backend performs genuine install-time licensing. Completed content
+stays in a managed directory outside the base game and is supplied through
+`XODUS_CONTENT_ROOTS` after config/Appx/dependency/layout presence checks. Partial
+downloads are not supplied. These checks do not claim full payload integrity or
+grant ownership; the runtime still verifies fresh signed Store proof. Installed
+files remain available for discovery offline, but licensing currently needs
+online access. Installation is an explicit per-package user action, not an
+automatic download of every owned add-on. Only config-declared related packages
+are supported; catalog-only bundles without that relationship remain unsupported.
+PublisherContent and content mounting remain unsupported. A real-game test is
+still required before claiming that a particular game's DLC works.
+
+### Package license handles
+
+`XStoreAcquireLicenseForPackageAsync` resolves an actually installed current/related
+content package and fetches fresh signed Store proof off the Work dispatcher.
+Only a matching licensed, downloadable, nontrial Durable SKU produces a handle.
+Result retrieval, validity checks and close retain genuine proof/SKU expiration,
+separately from the short catalog-query cache lifetime. Invalid, unknown, expired
+or unlicensed products remain errors, without inferring ownership from disk.
+
+Package-license lost registrations retain the caller's queue and deliver expiry
+notifications on its Completion port. Unregister supports pending callbacks,
+waiting, and reentrant unregister/close. This is expiry notification only, not
+Microsoft's full account/network/concurrency revocation service. Offline license
+acquisition, other acquisition variants and content mounting are not implemented.
+
+### Configuration bootstrap
+
 Configuration bootstrap also distinguishes inline XML, explicit files and
 default discovery. A failed parse does not publish initialized state, and a
 subsequent valid initialization can retry. Initializations are serialized.
@@ -99,6 +166,11 @@ download work runs off the caller's Work dispatcher, with retained user/context
 lifetime and completion on the requested queue. Network/auth failures remain
 real failures, not replacement images or fabricated success. Contract reference:
 [Microsoft Profile API](https://learn.microsoft.com/en-us/gaming/gdk/docs/reference/live/rest/uri/profilev2/uri-usersbatchprofilesettingspost).
+
+Signed `XUserGetTokenAndSignature` results retain all 104 signature characters
+and include a trailing NUL in the returned buffer and size, for both UTF-8 and
+UTF-16. This avoids reading past the signature while building HTTP headers.
+It does not bypass server-side entitlement or signature verification.
 
 The runtime includes a native SDK forwarding adapter, not a replacement cloud
 service. In an owner-private Xodus materialized launch view, its Wine entry point
@@ -251,9 +323,10 @@ npm run test:runtime-tools
 ```
 
 Expected contract checks: queue teardown 20, queue stress 1,302, XAsync
-provider 104, completion lifetime 2,805, token dispatch/lifetime 44,
-and 9 WinRT JSON checks (4,284 total), plus
-and 14 HTTP/2 checks. The JSON probe exercises real activation, parsing,
+provider 116, completion lifetime 2,805, scheduling 16, file saves 21,
+WinRT JSON 9, token dispatch/lifetime 88, Store entitlements/licenses 181, installed
+content 274, PlayFab folder/session 153 and initialization 19 (5,004 total),
+plus 14 HTTP/2 checks. The JSON probe exercises real activation, parsing,
 object access and nested array/object access without account data or network.
 The token-dispatch probe uses a synthetic delayed failure, not a real identity
 or token. ABI/transport tests are not a substitute for a game test: test the clean-build

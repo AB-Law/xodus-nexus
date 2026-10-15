@@ -7,6 +7,16 @@ const row=(productId=A, extra={})=>({productId,status:'Active',isTrial:false,sha
 const output=(entries=[row()],account='one@example.test',market='US')=>JSON.stringify({schema:1,account,market,checkedAt:new Date().toISOString(),entitlements:entries});
 const product=(productId:string):CatalogProduct=>({productId,title:productId,description:'',categories:[],installability:'supported',supportNote:''});
 
+it('provides fresh access for content planning without loading unrelated catalog products', async () => {
+  const catalog=vi.fn(async (ids:string[])=>ids.map(product));
+  const reader=vi.fn(async()=>output([row(),row(B,{satisfiedByProductId:'CFQ7TTC0KGQ8'})]));
+  const library=new AccountLibrary(catalog,reader); library.select('one@example.test','/backend','US');
+  expect((await library.access(true)).accessByProductId).toEqual({[A]:'owned',[B]:'gamepass'});
+  expect(catalog).not.toHaveBeenCalled(); expect(reader).toHaveBeenCalledTimes(1);
+  await library.access(true); expect(reader).toHaveBeenCalledTimes(2);
+  library.select(undefined,undefined,'US'); await expect(library.access()).rejects.toThrow('Sign in');
+});
+
 it('distinguishes direct/owned bundle access from subscriptions, without guessing missing parents',()=>{
   const {entries}=parseEntitlements(output([row(),row(B,{satisfiedByProductId:A}),row(C,{satisfiedByProductId:'CFQ7TTC0KGQ8'})]),'one@example.test','US');
   expect(entitlementKind(A,entries)).toBe('owned');
