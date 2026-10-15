@@ -69,7 +69,14 @@ Never copy a candidate DLL into an active or production prefix.
   confined to the probe directory and never staged in the production runtime.
   Does not establish real cloud upload, game shutdown timing or forced-exit sync.
 
-Build with MinGW against the matching xgameruntime source/generated headers:
+The Store and package-content probes also compile exact Wine XML helpers.
+`build-shared-runtime.mjs` builds those with the pinned Wine compiler driver,
+Wine CRT headers and UCRT startup/import libraries. Do not link them with plain
+MinGW's default legacy MSVCRT plus `-lucrt`: mixing the two CRTs corrupts FILE
+arguments on older Ubuntu toolchains. The builder checks both PE import tables
+and rejects legacy MSVCRT imports before running the unchanged native tests.
+
+Build the other probes with MinGW against the matching xgameruntime source/generated headers:
 
 ```sh
 x86_64-w64-mingw32-gcc -D__WINESRC__ -O2 -Wall \
