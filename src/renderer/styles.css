@@ -174,13 +174,16 @@ button.primary svg, button.secondary svg { width: 17px; height: 17px; }
 .catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
 .account-games { min-width: 0; }
 .library-pagination { display: flex; justify-content: center; margin-top: 24px; }
+.library-loading, .library-pagination button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.library-loading { color: var(--muted); font-size: 12px; }
+.library-pagination svg { width: 16px; height: 16px; color: var(--green); }
 .library-layout.account-only { grid-template-columns: minmax(0, 1fr); }
 .library-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
 .library-filters label { display: grid; gap: 5px; color: #b8bec6; font-size: 11px; }
 .library-filters select, .library-filters input { min-height: 34px; background: #292e35; color: #f1f3f5; border: 1px solid #4b515b; border-radius: 6px; padding: 7px 10px; }
 .library-filter-search { flex: 1; min-width: 150px; }
 .library-filter-search input { width: 100%; }
-.library-license { display: block; margin-top: 8px; color: #b8bec6; font-size: 11px; }
+.library-license { display: block; margin: 8px 10px 0; color: #b8bec6; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .account-library-note { color: #9da2a8; font-size: 11px; line-height: 1.5; margin-top: 20px; }
 .catalog-card { min-width: 0; position: relative; padding-bottom: 10px; overflow: hidden; border: 1px solid transparent; background: transparent; }
 .catalog-card:hover, .catalog-card.selected { background: #24272b; border-color: #50555b; }

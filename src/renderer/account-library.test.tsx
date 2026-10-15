@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { AccountGames, GameTitle, Sidebar } from './App';
+import { AccountGames, GameTitle, LibraryPagination, Sidebar } from './App';
 import { demoSnapshot } from '../shared/demo-data';
 
 it('keeps one My Library and Store navigation, no separate Game Pass page',()=>{
@@ -22,4 +22,13 @@ it('offers Access and Play state filters without cloud streaming, preserving ins
 it('preserves full edition names in native hover tooltips and escapes special characters',()=>{
   const html=renderToStaticMarkup(<GameTitle title={'A Long Game Name: "Complete" & Deluxe Edition (PC)'} />);
   expect(html).toContain('title="A Long Game Name: &quot;Complete&quot; &amp; Deluxe Edition (PC)"');
+});
+
+it('keeps pagination loading inside the button, without the oversized Store loading panel',()=>{
+  const more=renderToStaticMarkup(<LibraryPagination loading={true} hasMore={true} load={()=>{}} />);
+  expect(more).toContain('disabled'); expect(more).toContain('Loading games');
+  expect(more).not.toContain('catalog-loading'); expect(more).not.toContain('library-loading');
+  const initial=renderToStaticMarkup(<LibraryPagination loading={true} hasMore={false} load={()=>{}} />);
+  expect(initial).toContain('role="status"'); expect(initial).not.toContain('catalog-loading');
+  expect(renderToStaticMarkup(<LibraryPagination loading={false} hasMore={false} load={()=>{}} />)).toBe('');
 });

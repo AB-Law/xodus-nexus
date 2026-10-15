@@ -285,6 +285,15 @@ interface AccountGamesProps {
   select?: (game: Game) => void; menu?: (game: Game, x: number, y: number) => void;
 }
 
+export function LibraryPagination({ loading, hasMore, load }: { loading: boolean; hasMore: boolean; load: () => void }) {
+  if (!loading && !hasMore) return null;
+  return <div className="library-pagination">
+    {hasMore ? <button className="secondary" disabled={loading} onClick={load}>
+      {loading ? <><LoaderCircle className="spin" />Loading games…</> : 'Load more games'}
+    </button> : <span className="library-loading" role="status"><LoaderCircle className="spin" />Loading account games…</span>}
+  </div>;
+}
+
 export function AccountGames({ data, toast, selectedId, select, menu }: AccountGamesProps) {
   const [kind, setKind] = useState<AccountLibraryPage['kind']>('all');
   const [playState, setPlayState] = useState<'all' | 'installed' | 'installable'>('all');
@@ -363,9 +372,8 @@ export function AccountGames({ data, toast, selectedId, select, menu }: AccountG
           <button className="catalog-card-install" disabled={present || downloading || Boolean(installing) || !data.backend.capabilities.streaming} onClick={() => install(product)}>{present ? <Check /> : <Download />}{present ? 'Installed' : downloading ? 'In Install Queue' : installing === product.productId ? 'Preparing…' : 'Install'}</button>
         </article>;
       })}</div>
-      {busy ? <div className="catalog-loading"><LoaderCircle className="spin" /><span>Loading account games…</span></div> : null}
       {!busy && !error && !rows.length ? <p>{visible?.cursor ? 'No games match these filters in the loaded results. Load more to continue.' : 'No games match these filters.'}</p> : null}
-      {visible?.cursor ? <div className="library-pagination"><button className="secondary" disabled={busy} onClick={() => load()}>Load more games</button></div> : null}
+      <LibraryPagination loading={busy} hasMore={Boolean(visible?.cursor)} load={() => { void load(); }} />
       <p className="account-library-note">Only licensed games with a verified, supported PC package are listed. Add-ons and unsupported packages are excluded. Installation checks your license again.</p>
   </section>;
 }
