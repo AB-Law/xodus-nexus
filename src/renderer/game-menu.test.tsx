@@ -11,7 +11,7 @@ describe('VC++ action placement', () => {
   it('offers it in the game menu for any title using a supported runtime', () => {
     for (const game of demoSnapshot().games) {
       const html = renderToStaticMarkup(<GameContextMenu x={0} y={0} game={{ ...game, installState: 'ready' }} options={{ cloudSaves: true, vcInstall: true }} busy={false}
-        onBrowse={() => {}} onSettings={() => {}} onInstallVc={() => {}} onRemove={() => {}} />);
+        onBrowse={() => {}} onSettings={() => {}} onInstallVc={() => {}} onRemove={() => {}} onShortcut={() => {}} />);
       expect(html).toMatch(/<button role="menuitem"[^>]*>[\s\S]*?Install \/ update VC\+\+<\/button>/);
       expect(html).not.toContain('disabled');
     }
@@ -22,4 +22,13 @@ describe('VC++ action placement', () => {
     expect(html).toContain('disabled');
     expect(html).toContain('Select a full Proton runtime.');
   });
+});
+
+it('offers both game shortcut destinations only for ready installations', () => {
+  for (const installState of ['ready', 'imported'] as const) {
+    const html = renderToStaticMarkup(<GameContextMenu x={0} y={0} game={{ ...demoSnapshot().games[0], installState }} busy={false}
+      onBrowse={() => {}} onSettings={() => {}} onInstallVc={() => {}} onRemove={() => {}} onShortcut={() => {}} />);
+    expect(html).toContain('Create desktop shortcut'); expect(html).toContain('Add to applications menu');
+    expect(html).toMatch(installState === 'ready' ? /<button role="menuitem"><svg[^]*?Create desktop shortcut/ : /<button role="menuitem" disabled=""><svg[^]*?Create desktop shortcut/);
+  }
 });

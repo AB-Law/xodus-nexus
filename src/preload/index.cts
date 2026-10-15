@@ -41,6 +41,7 @@ const api: LauncherApi = {
   removeGame: (id: string, mode: 'library' | 'trash-files') => ipcRenderer.invoke('remove-game', id, mode),
   getGameLaunchOptions: (id: string) => ipcRenderer.invoke('game-launch-options', id),
   launchGame: (id: string) => ipcRenderer.invoke('launch-game', id),
+  createGameShortcut: (id, destination) => ipcRenderer.invoke('create-game-shortcut', id, destination),
   installGameVcRuntime: (id: string) => ipcRenderer.invoke('install-game-vc-runtime', id),
   cancelGame: () => ipcRenderer.invoke('cancel-game'),
   updateSettings: (patch: Partial<Settings>) => ipcRenderer.invoke('update-settings', patch),

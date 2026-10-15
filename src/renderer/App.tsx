@@ -246,13 +246,16 @@ function StorePage({ data, toast, go, initialQuery }: { data: AppSnapshot; toast
   </main>;
 }
 
-export function GameContextMenu({ x, y, game, options, busy, onBrowse, onSettings, onInstallVc, onRemove }: {
+export function GameContextMenu({ x, y, game, options, busy, onBrowse, onSettings, onInstallVc, onRemove, onShortcut }: {
   x: number; y: number; game: Game; options?: GameLaunchOptions; busy: boolean;
   onBrowse: () => void; onSettings: () => void; onInstallVc: () => void; onRemove: () => void;
+  onShortcut?: (destination: 'desktop' | 'applications') => void;
 }) {
   return <div className="game-context-menu" role="menu" style={{ left: x, top: y }} onClick={(event) => event.stopPropagation()}>
     <button role="menuitem" onClick={onBrowse}><FolderOpen />Browse game files</button>
     <button role="menuitem" onClick={onSettings}><Settings2 />Game settings</button>
+    <button role="menuitem" disabled={!onShortcut || game.installState !== 'ready'} onClick={() => onShortcut?.('desktop')}><Plus />Create desktop shortcut</button>
+    <button role="menuitem" disabled={!onShortcut || game.installState !== 'ready'} onClick={() => onShortcut?.('applications')}><Plus />Add to applications menu</button>
     <button role="menuitem" disabled={busy || game.installState !== 'ready' || !options?.vcInstall} title={options?.vcReason} onClick={onInstallVc}><Download />Install / update VC++</button>
     <button role="menuitem" className="danger" onClick={onRemove}><Trash2 />Remove game…</button>
   </div>;
@@ -281,7 +284,7 @@ export function LibraryPage({ data, toast }: { data: AppSnapshot; toast: (value:
 
   function openMenu(game: Game, x: number, y: number) {
     setSelectedId(game.id);
-    setMenu({ id: game.id, x: Math.max(8, Math.min(x, window.innerWidth - 230)), y: Math.max(8, Math.min(y, window.innerHeight - 210)) });
+    setMenu({ id: game.id, x: Math.max(8, Math.min(x, window.innerWidth - 230)), y: Math.max(8, Math.min(y, window.innerHeight - 270)) });
   }
 
   function openDialog(game: Game, kind: 'settings' | 'remove') {
@@ -385,6 +388,12 @@ export function LibraryPage({ data, toast }: { data: AppSnapshot; toast: (value:
     {menu && menuGame ? <GameContextMenu x={menu.x} y={menu.y} game={menuGame} options={launchOptions} busy={gameBusy}
       onBrowse={() => { setMenu(undefined); void window.launcher.openPath(menuGame.path).catch((error) => toast({ kind: 'error', message: errorMessage(error) })); }}
       onSettings={() => openDialog(menuGame, 'settings')}
+      onShortcut={(destination) => {
+        setMenu(undefined);
+        void window.launcher.createGameShortcut(menuGame.id, destination)
+          .then(() => toast({ kind: 'success', message: destination === 'desktop' ? 'Desktop shortcut created. Your desktop may ask you to allow launching it.' : 'Game added to applications menu.' }))
+          .catch((error) => toast({ kind: 'error', message: errorMessage(error) }));
+      }}
       onInstallVc={() => { setMenu(undefined); void installVc(menuGame); }}
       onRemove={() => openDialog(menuGame, 'remove')} /> : null}
 {diagnosticLog ? <DiagnosticDialog log={diagnosticLog} close={() => setDiagnosticLog(undefined)} /> : null}
