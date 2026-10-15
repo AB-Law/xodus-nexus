@@ -43,6 +43,24 @@ Never copy a candidate DLL into an active or production prefix.
   waiting for authorization. Checks completion and retained user lifetime when
   a terminal abort happens while work is running; includes the gamer-picture
   provider (66 checks, no network/account).
+- `store-entitlements-probe.c`: exact runtime receipt validation with ephemeral
+  synthetic RSA signatures, nonce/time/audience checks, expired/unrelated license
+  rejection and exact licensed SKU metadata. Exercises retained query pages,
+  close-in-callback, expiry and nonblocking Manual Work/cancellation through the
+  actual async implementation. Its test bridge always fails, with no account or
+  network access. Synthetic keys and helpers are never packaged in the runtime.
+  Package-license tests reject absent proof, unowned/trial/wrong/expired SKUs;
+  check retained result handles, actual expiry events, queued/running unregister,
+  reentrant unregister/close and cancellation through the failing bridge.
+  Synthetic lifetime fixtures do not change production trust or prove game access.
+- `package-content-probe.c`: extracted content registration with matching config,
+  Appx identity/version, parent dependency and allowed products; real layout IDs
+  and declared file presence, missing payload and DTD rejection, related/publisher
+  scopes, callback stop/reentrancy, deduplication and actual runtime COM enumeration.
+  Store-ID lookup checks exact identifiers, ambiguity, unknown/unrelated packages,
+  missing current-package metadata and buffer boundaries through the real Store ABI.
+  Uses only synthetic files in a disposable prefix, without accounts or licensing.
+  File presence checks are not a full package-integrity or ownership verification.
 - `playfab-session-probe.c`: pinned threading ABI checks, asynchronous test-only
   dialog choices, preserved title callbacks, retained synthetic users, caller
   Manual completion queue, genuine upload failure and acknowledged upload before
@@ -178,6 +196,14 @@ forwarded SDK errors, retry after storage discovery failure, Unicode folders,
 the real in-process provider policy (without Windows version claims), and
 preservation of explicit provider settings. These fixtures are tests only and
 are never bundled as a runtime or used for real games/cloud authentication.
+
+## Token and signature string contract
+
+The token-dispatch fixture also checks signed UTF-8 and UTF-16 results using an
+offline IUser that supplies exactly 104 signature characters. Public results
+must preserve those characters, append a NUL within the reported buffer size,
+and relocate pointers into the caller's result buffer without overwriting it.
+These checks use no account or network and do not establish server acceptance.
 
 ## Configuration initialization contract
 

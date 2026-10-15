@@ -1,9 +1,9 @@
-# Nexus runtime — sign-in, cloud saves and shutdown fixes
+# Nexus runtime: Store licenses and related content
 
-- Fix sign-in freezes in Minecraft Dungeons II and Gears of War: E-Day by uploading cloud saves in the background.
-- Fix async cancellation and completion-callback deadlocks that could prevent games, including Palworld, from closing.
-- Add cloud-save device handover and local/cloud conflict dialogs, preserving the selected progress for synchronization.
-- Improve cloud-save shutdown draining and session finalization.
-- Restore Xbox gamer pictures by correcting authenticated profile-image requests.
+- Fix Store entitlement queries and package-license checks used by games such as DOOM Eternal.
+- Discover installed related content packages and return their real package identifiers.
+- Fix Xbox request-signature header formatting.
 
-**We recommend updating Nexus runtime from Settings.** These are shared runtime fixes, not game-specific workarounds, and other games may benefit too.
+Use launcher 0.3.1 or later to install missing licensed content through **Manage content**. Unowned DLC remains locked. Other games using these APIs may benefit, but compatibility is game-dependent.
+
+Thanks to @LZGM4702 for reporting the DOOM Eternal issue.

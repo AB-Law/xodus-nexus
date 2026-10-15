@@ -114,7 +114,7 @@ catch (e) { if (e.code !== 'ENOENT') throw e; }
 const metadata = {
   ...manifest, name: 'Nexus runtime',
   description: 'Pinned shared XGameRuntime and HTTP/2 compatibility line. Experimental; see limitations.',
-  features: [...new Set([...(baseMetadata.features ?? []), 'cloud-saves-pr28', 'xodus-tcp-bridge-v1', 'package-locale', 'xuser-contract-v1', 'wine-winhttp-http2-v1', 'nghttp2-v1', 'winrt-json-v1', 'xasync-provider-contract-v1', 'xtaskqueue-lifecycle-v1', 'playfab-package-save-folder-v1', ...(mediaMetadata ? ['bundled-ffmpeg-media-v1'] : [])])],
+  features: [...new Set([...(baseMetadata.features ?? []), 'cloud-saves-pr28', 'xodus-tcp-bridge-v1', 'package-locale', 'xuser-contract-v1', 'wine-winhttp-http2-v1', 'nghttp2-v1', 'winrt-json-v1', 'xasync-provider-contract-v1', 'xtaskqueue-lifecycle-v1', 'playfab-package-save-folder-v1', 'xstore-entitlements-v1', 'xpackage-content-v1', 'xstore-package-license-v1', ...(mediaMetadata ? ['bundled-ffmpeg-media-v1'] : [])])],
   baseWineSha256, patchedDllSha256: manifest.components['xgameruntime.dll'],
   ...(mediaMetadata ? { media: mediaMetadata } : {}),
 };

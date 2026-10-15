@@ -5,7 +5,7 @@ import {
   LoaderCircle, LogIn, MoreHorizontal, PackageCheck, Pause, Play, Plus, RefreshCw, Rocket, Search, Settings2,
   Store, Terminal, Trash2, X,
 } from 'lucide-react';
-import type { AccountLibraryPage, AppSnapshot, CatalogProduct, CatalogSearchResult, DiagnosticLog, Game, GameLaunchOptions, Page, Settings } from '../shared/types';
+import type { AccountLibraryPage, AppSnapshot, CatalogProduct, CatalogSearchResult, DiagnosticLog, Game, GameContentPlan, GameLaunchOptions, Page, Settings } from '../shared/types';
 import { estimateTimeRemaining } from '../shared/utils';
 import { runtimeDisplay } from '../shared/runtime-display';
 import { subscriptionBadge } from '../shared/subscription';
@@ -383,6 +383,50 @@ function AccountGamesForUser(props: AccountGamesProps) {
   return <AccountGames key={`${data.auth.username}:${data.auth.stored}:${data.auth.running}:${data.settings.market}:${data.backend.binaryPath}`} {...props} />;
 }
 
+export function ContentList({ plan, disabled, pending, install }: { plan: GameContentPlan; disabled: boolean; pending?: string; install: (id: string) => void }) {
+  return <div className="content-list">{plan.items.length ? plan.items.map(item => <article key={item.productId}>
+    <div><strong title={item.title}>{item.title}</strong><small>{item.access === 'owned' ? 'Owned' : item.access === 'gamepass' ? 'Game Pass' : 'License not verified'} · {item.status === 'installed' ? 'Installed' : item.status === 'available' ? 'Not installed' : item.status === 'unsupported' ? 'Unsupported package' : 'Unavailable'}</small>
+      {item.downloadBytes ? <small>Download: {(item.downloadBytes / 1024 ** 2).toFixed(1)} MiB</small> : null}<small>{item.note}</small></div>
+    <button className="secondary" disabled={disabled || Boolean(pending) || !item.access || !['available', 'installed'].includes(item.status)} onClick={() => install(item.productId)}><Download />{pending === item.productId ? 'Preparing…' : item.status === 'installed' ? 'Repair' : 'Install'}</button>
+  </article>) : <p>No related content packages are declared by this game.</p>}</div>;
+}
+
+function GameContentDialog({ game, data, close, toast }: { game: Game; data: AppSnapshot; close: () => void; toast: (value: Toast) => void }) {
+  const [plan, setPlan] = useState<GameContentPlan>();
+  const [error, setError] = useState<string>();
+  const [loading, setLoading] = useState(true);
+  const [pending, setPending] = useState<string>();
+  const [revision, setRevision] = useState(0);
+  const queue = data.downloads.filter(task => task.kind === 'content' && task.gameId === game.id);
+  const queueState = queue.map(task => task.id + ':' + task.status).join(',');
+  const busy = data.downloads.some(task => ['running', 'paused', 'queued'].includes(task.status)) || Boolean(data.gameOperation && ['preparing', 'running', 'stopping'].includes(data.gameOperation.status));
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setError(undefined); setPlan(undefined);
+    window.launcher.getGameContent(game.id).then(value => { if (!cancelled) setPlan(value); })
+      .catch(error => { if (!cancelled) setError(errorMessage(error)); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [game.id, data.auth.username, data.auth.stored, data.auth.running, data.backend.binaryPath, data.settings.market, revision, queueState]);
+  async function install(id: string) {
+    const item = plan?.items.find(item => item.productId === id);
+    if (!item || !window.confirm(`${item.status === 'installed' ? 'Repair' : 'Install'} ${item.title}? This downloads licensed content into a separate managed folder. Close the game first.`)) return;
+    setPending(id); setError(undefined);
+    try { await window.launcher.installGameContent(game.id, id); toast({ kind: 'success', message: 'Content added to Install Queue.' }); }
+    catch (error) { setError(errorMessage(error)); }
+    finally { setPending(undefined); }
+  }
+  return <div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !pending) close(); }}><section className="game-dialog content-dialog" role="dialog" aria-modal="true" aria-label={`Content for ${game.title}`}>
+    <h2>Manage content</h2><p>{game.title}</p><p>Only verified licensed PC content can be installed. Content stays separate from the base game. Restart the game after installation. Requires a runtime with Store content support.</p>
+    {loading ? <p role="status"><LoaderCircle className="spin" />Checking account licenses and packages…</p> : null}
+    {error ? <p role="alert" className="error-text">{error}</p> : null}
+    {plan?.runtimeSupported === false ? <p className="error-text">Update the Nexus runtime in Settings before installing related content.</p> : null}
+    {plan && !loading ? <ContentList plan={plan} disabled={busy || !data.backend.capabilities.streaming || plan.runtimeSupported === false} pending={pending} install={id => { void install(id); }} /> : null}
+    {queue.some(task => ['running', 'paused', 'queued'].includes(task.status)) ? <p>Content download is in Install Queue. Pause, resume or cancel it there.</p> : null}
+    <div className="dialog-actions"><button className="secondary" disabled={loading || Boolean(pending)} onClick={() => setRevision(value => value + 1)}><RefreshCw />Refresh</button><button className="secondary" disabled={Boolean(pending)} onClick={close}>Close</button></div>
+  </section></div>;
+}
+
 export function LibraryPage({ data, toast }: { data: AppSnapshot; toast: (value: Toast) => void }) {
   const [selectedId, setSelectedId] = useState<string>();
   const [menu, setMenu] = useState<{ id: string; x: number; y: number }>();
@@ -392,6 +436,7 @@ export function LibraryPage({ data, toast }: { data: AppSnapshot; toast: (value:
   const [localeOptions, setLocaleOptions] = useState<string[]>([]);
   const [dialogBusy, setDialogBusy] = useState(false);
   const [diagnosticLog, setDiagnosticLog] = useState<DiagnosticLog>();
+  const [contentGameId, setContentGameId] = useState<string>();
   const selected = data.games.find((game) => game.id === selectedId) ?? data.games[0];
   useEffect(() => { if (!selectedId && data.games[0]) setSelectedId(data.games[0].id); }, [data.games, selectedId]);
   useEffect(() => {
@@ -503,6 +548,7 @@ export function LibraryPage({ data, toast }: { data: AppSnapshot; toast: (value:
           <button className="secondary" disabled={gameBusy || data.gameUpdates?.[selected.id]?.checking || !selected.storeId || selected.installState !== 'ready' || !data.backend.capabilities.streaming || data.downloads.some((task) => task.status === 'running')} onClick={() => data.gameUpdates?.[selected.id]?.available ? updateInstalledGame() : checkUpdates(selected.id)} title="Check the installed package version without changing game files"><RefreshCw />{data.gameUpdates?.[selected.id]?.checking ? 'Checking…' : data.gameUpdates?.[selected.id]?.available ? 'Update game' : 'Check for updates'}</button>
           {gameBusy && !(selectedOperation?.kind === 'prerequisite' && selectedOperation.status === 'running') ? <button className="secondary danger" onClick={stopGame}><X />Stop</button> : null}
           <button className="icon-button" onClick={() => window.launcher.openPath(selected.path)} title="Open game folder"><FolderOpen /></button>
+          <button className="secondary" disabled={gameBusy || !selected.storeId || data.auth.stored !== true || !data.backend.capabilities.library} onClick={() => setContentGameId(selected.id)}><PackageCheck />Manage content</button>
         </div>
         {selectedOperation ? <div className={`game-operation ${selectedOperation.status}`}><div><strong>{selectedOperation.kind === 'prerequisite' ? selectedOperation.status === 'failed' ? 'Prerequisite failed' : selectedOperation.status === 'complete' ? 'Prerequisite ready' : 'Installing prerequisite' : selectedOperation.status === 'failed' ? 'Launch failed' : selectedOperation.status === 'complete' ? 'Game exited' : 'Launching game'}</strong><span>{selectedOperation.phase}</span></div>{selectedOperation.log.length > 0 ? <pre>{selectedOperation.log.slice(-12).join('\n')}</pre> : null}{selectedOperation.logPath ? <button className="secondary" onClick={() => openDiagnosticLog(selectedOperation.id)}><FolderOpen />Open diagnostic log</button> : null}</div> : null}
       </aside> : null}
@@ -519,6 +565,7 @@ export function LibraryPage({ data, toast }: { data: AppSnapshot; toast: (value:
       onInstallVc={() => { setMenu(undefined); void installVc(menuGame); }}
       onRemove={() => openDialog(menuGame, 'remove')} /> : null}
 {diagnosticLog ? <DiagnosticDialog log={diagnosticLog} close={() => setDiagnosticLog(undefined)} /> : null}
+    {contentGameId && data.games.find(game => game.id === contentGameId) ? <GameContentDialog key={`${contentGameId}:${data.auth.username}:${data.auth.stored}`} game={data.games.find(game => game.id === contentGameId)!} data={data} close={() => setContentGameId(undefined)} toast={toast} /> : null}
     {dialogGame && modalGame ? <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !dialogBusy) setDialogGame(undefined); }}><section className="game-dialog" role="dialog" aria-modal="true" aria-label={dialogGame.kind === 'remove' ? `Remove ${modalGame.title}` : `Settings for ${modalGame.title}`}>
       {dialogGame.kind === 'remove' ? <><h2>Remove {modalGame.title}?</h2><p>Keep the files, or move this installation folder to Trash. Saves stored outside this folder are not affected.</p><code className="remove-path">{modalGame.path}</code><div className="dialog-actions"><button className="secondary" disabled={dialogBusy} onClick={() => setDialogGame(undefined)}>Cancel</button><button className="secondary" disabled={dialogBusy} onClick={() => removeGame('library')}>Keep files</button><button className="secondary danger" disabled={dialogBusy} onClick={() => removeGame('trash-files')}><Trash2 />Move files to Trash</button></div></> : <form onSubmit={saveGameSettings}><h2>Game settings</h2><label>Display name<input required value={editTitle} onChange={(event) => setEditTitle(event.target.value)} /></label><label>Game language<select value={editLocale} onChange={(event) => setEditLocale(event.target.value)}><option value="">System default</option>{localeOptions.map((locale) => <option key={locale} value={locale}>{locale}</option>)}{editLocale && !localeOptions.some((locale) => locale.toLowerCase() === editLocale.toLowerCase()) ? <option value={editLocale}>{editLocale}</option> : null}</select></label><p>Available languages come from the game manifest. All games use the active Xodus Runtime.</p><div className="dialog-actions"><button type="button" className="secondary" disabled={dialogBusy} onClick={() => setDialogGame(undefined)}>Cancel</button><button className="primary" disabled={dialogBusy || !editTitle.trim()}><Check />Save</button></div></form>}
     </section></div> : null}
@@ -550,6 +597,10 @@ export function DownloadsPage({ data, toast }: { data: AppSnapshot; toast: (valu
     setRetrying(task.id);
     try {
       if (task.kind === 'update' && task.gameId) await window.launcher.updateInstalledGame(task.gameId);
+      else if (task.kind === 'content') {
+        if (!task.gameId) throw Error('This content download has no parent game.');
+        await window.launcher.installGameContent(task.gameId, task.productId);
+      }
       else await window.launcher.startInstall({ productId: task.productId, title: task.title, destination: task.destination });
       toast({ kind: 'success', message: `Retrying ${task.title} with Xodus.` });
     } catch (error) { toast({ kind: 'error', message: errorMessage(error) }); }

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "release",
+  "status": "development",
   "sources": {
     "wine": {
       "url": "https://github.com/xodus-gaming/wine.git",
@@ -92,12 +92,24 @@
     {
       "file": "assets/xgameruntime-async-cleanup.patch",
       "sha256": "5d904002da3a23d143fdc716959335c4b32fd1b37ad001c0f2a7b9d034ac946f"
+    },
+    {
+      "file": "assets/xgameruntime-store-entitlements.patch",
+      "sha256": "146e4f1fa1e794a0e332bfc58115f58185573fa9c2ad2b300e60fc9ad4ee6ea5"
+    },
+    {
+      "file": "assets/xgameruntime-package-content.patch",
+      "sha256": "3e782aef2ae05c39e3ecfec24f8319406818a76619263f7e70521a90e7ea9d7e"
+    },
+    {
+      "file": "assets/xgameruntime-package-license.patch",
+      "sha256": "e4a9c68e272719f5ad2d2baa7ffcad2542df25cb93163c1b00b081d4594ee407"
     }
   ],
   "expectedXgameruntimeSources": {
     "dlls/xgameruntime/Makefile.in": "703a51c5f2a25deb15543b43cf4136260c06118f20e921db617f183c76a2ea6f",
-    "dlls/xgameruntime/main.c": "f87307dd50ead60d8aa50bb7a8d18e25247efc4aa419a815c73b9056beef389c",
-    "dlls/xgameruntime/private.h": "e18838cc06ccb00f98b8e64f736c2e69770706b4677e33f4b4b744f64eb51f22",
+    "dlls/xgameruntime/main.c": "aa854f8dab809f887d204acd16042ad571dbdb5c99720401aada12a003033699",
+    "dlls/xgameruntime/private.h": "1355dc60dc8a7925cd737e06700e90c195a83b2f29aeebba3462f091f533aa6a",
     "dlls/xgameruntime/xerror.c": "f0dc4b456af5c4cfdcc1036f1dd422848a1ce97abd6cd1722bf654c51927b694",
     "dlls/xgameruntime/xgame.c": "7d7edff91a839cac522f910c54d4625d8efa61121c7a32f4bd3665cca184abae",
     "dlls/xgameruntime/xgameactivation.c": "48a729040d7be7aac3e28b27aa06f8285bcef3f27767fa79ddfbe33c7b629dbc",
@@ -107,14 +119,18 @@
     "dlls/xgameruntime/xgamesave.c": "5d78ee9c7b102c24a8e3c08dae66ed88f3de529ede9d182cf2f0635d79ad90d0",
     "dlls/xgameruntime/xgamesave.idl": "544319e88951f65b21c74f785fb9376c10cac8b1d57e98c7aa3079348162ccab",
     "dlls/xgameruntime/xnetworking.c": "cfd8d0110b7ebd622f62317d3134dd866e6538e4a697b06912fa752517fe7caa",
-    "dlls/xgameruntime/xpackage.c": "72cc335bc981647fb1a5cd6f01f08c04eff82895f39b56ce7e99e8993639ba24",
+    "dlls/xgameruntime/xpackage.c": "f6056539bc5d2f9d56c904aac0ce3725bdf811064d5d0c4ca15a483f72489a19",
+    "dlls/xgameruntime/xpackage_content.h": "d3addb58053e44848bfb2be29d3568019196568ad98b605544b3506c03ed1c2f",
     "dlls/xgameruntime/xpackage.idl": "afb602c0f76a97f6358950baf48e7a49df61e150134989b676879e7001a60108",
     "dlls/xgameruntime/xpersistentlocalstorage.c": "48111212dcfe4ef328fa482dc8b426ef853b7c961d575aefeaa3b559788809b2",
-    "dlls/xgameruntime/xstore.c": "25d4c481d017cf31d74f5a9cbe3e545197b1f70423a56df24bf93f639e5527c3",
+    "dlls/xgameruntime/xstore.c": "82ec008d15d426f3b6404fbfed8532d17e64455bed880faf6c465ca2836a9421",
+    "dlls/xgameruntime/xstore_entitled.h": "59b738caacfb682abe4837725e8dd828b050e0cc5434cc9b92d37d8b7311f68b",
+    "dlls/xgameruntime/xstore_receipts.h": "637cc315d72bb1ad20ce5529dfb6be4ef01ae8fd08a321aa5e852c1557c1d280",
+    "dlls/xgameruntime/xstore_package_license.h": "678f109e0a0af3f5e87951666f7c891af3999658f8698eb8855387ea355e2a31",
     "dlls/xgameruntime/xsystem.c": "974c83fe2e1b97e6b2c86e95a558b31d2effe6b9d2b3166c2c4d1882a4341058",
     "dlls/xgameruntime/xsystemanalytics.c": "189e99c83273b429325ecefa2b9246c45863c22f0c4006a791ec57b8f7b9d384",
     "dlls/xgameruntime/xthreading.c": "e04c3b71b2ff466b761985be83c8770e05258dad2817f2b4bc73af6402195f30",
-    "dlls/xgameruntime/xuser.c": "0134a9653d05c5061824992ff91ec7307b70f1a717c93aa65f7a01987158a85f",
+    "dlls/xgameruntime/xuser.c": "e6826a27ca1068f8ac55e43e047a0e6cb6393713c7acd4563fe7d08d53865cb6",
     "dlls/xgameruntime/util.c": "aebf1a7ebef0dff89d3a1683bc40e16c821eaeb5cc1160ce474b905d14d7cb5c",
     "dlls/xgameruntime/util.h": "b739dba8a69a36103e72afc8dcaeaf324470d9ed47a5a7dd81b18e4e511ae69a",
     "dlls/xgameruntime/userprovider.idl": "66fb09670b7dabfc55257475094239018ea9a19ec2be348e56cf2b17ef615d7a",
@@ -133,6 +149,9 @@
   "limitations": [
     "PlayFab in-process fallback supports the verified x64 40-export SDK ABI; missing device/conflict/failure UI and final upload before normal SDK cleanup are provided. Forced process termination is not a successful cloud sync. Default-on Gaming Services version metadata is not a Microsoft service implementation.",
     "Store update queries support the verified current-game no-update case; DLC, mandatory updates and downloads remain unsupported",
+    "Entitled-product queries verify fresh signed Store receipts for the current game and config-declared related products, with public catalog metadata. Online access is required; other Store queries, purchase/download APIs and consumable quantities are not supplied by this increment.",
+    "Installed Content discovery supports extracted PC packages with matching config/Appx identity, dependency, allowed parent and layout/file presence. It checks nearby installation directories and optional XODUS_CONTENT_ROOTS paths, not an OS-wide registry or full payload integrity. PublisherContent and content mounting remain unsupported; disk metadata never grants a license.",
+    "Package license acquire/result/valid/close requires fresh verified signed proof for an installed current/related nontrial Durable package. Handles are bounded by proof/SKU expiry; lost callbacks report expiry only, not account, network or concurrency revocations. Other acquisition variants and mounting remain unsupported.",
     "Incomplete XAsync cancellation/resource reclamation",
     "Partial package/event/privilege APIs are not complete GDK implementations",
     "Single HTTP/2 stream per connection; chunked uploads and proxy/client-certificate transport gaps",
