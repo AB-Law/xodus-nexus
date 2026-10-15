@@ -63,6 +63,13 @@ installation folder and are checked against the package before continuing.
 Progress comes directly from the backend; no `script` or `util-linux` package
 is needed for download progress.
 
+Right-click an installed game in My Library to create a desktop shortcut or add
+it to the applications menu. Shortcuts start the game through Nexus with the same
+runtime, account and cloud-save setup as Play, without opening the main window.
+If you move the AppImage manually, open it once from its new location to refresh
+existing shortcuts. Game artwork is cached locally for shortcut icons, with the
+Nexus icon as a fallback. Your desktop may ask you to allow launching a new shortcut.
+
 [Downloads](https://github.com/domsvoboda/xodus-nexus/releases) ·
 [Setup & documentation](https://github.com/domsvoboda/xodus-nexus/wiki) ·
 [Report an issue](https://github.com/domsvoboda/xodus-nexus/issues)

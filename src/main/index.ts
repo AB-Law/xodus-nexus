@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, screen, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, screen, shell } from 'electron';
 import { constants, createWriteStream, promises as fs, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -26,6 +26,9 @@ import { LauncherUpdater } from './launcher-update.js';
 import { readDiagnosticTail } from './diagnostic-log.js';
 import { queryGameUpdate } from './game-updates.js';
 import { DownloadProgress, PROGRESS_PREFIX } from './download-progress.js';
+import { GameShortcuts, shortcutArguments, type ShortcutDestination } from './game-shortcuts.js';
+import { ShortcutLaunch } from './shortcut-launch.js';
+import { loadShortcutIcon } from './shortcut-icon.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -55,6 +58,58 @@ let checkingGameUpdates = false;
 let gameUpdateController: AbortController | undefined;
 let gameUpdateJob: Promise<void> | undefined;
 let snapshotTimer: ReturnType<typeof setTimeout> | undefined;
+let shortcuts: GameShortcuts;
+let preparingLaunch = false;
+let finalizingGame = false;
+let shortcutOnly = false;
+let launchReady = false;
+let windowOpening: Promise<void> | undefined;
+const pendingRequests: (string | undefined)[] = [];
+const pendingShortcutErrors: unknown[] = [];
+let startupRequest: ReturnType<typeof shortcutArguments> = {};
+let startupError: Error | undefined;
+try {
+  startupRequest = shortcutArguments(process.argv.slice(1));
+  if (startupRequest.profile) app.setPath('userData', startupRequest.profile);
+} catch (error) { startupError = error as Error; }
+// Electron's lock is scoped to userData, so independent profiles stay isolated.
+const primaryInstance = demoMode || app.requestSingleInstanceLock();
+if (!primaryInstance) app.quit();
+else if (!demoMode) app.on('second-instance', (_event, argv) => {
+  try { receiveLaunchRequest(shortcutArguments(argv.slice(1)).gameId); }
+  catch (error) {
+    if (launchReady) void shortcutError(error);
+    else pendingShortcutErrors.push(error);
+  }
+});
+const shortcutLaunch = new ShortcutLaunch(
+  () => gameOperation?.kind === 'launch' && ['preparing', 'running', 'stopping'].includes(gameOperation.status) ? gameOperation.gameId : undefined,
+  (id) => launchGame(id),
+);
+
+async function showLauncher(): Promise<void> {
+  shortcutOnly = false;
+  if (windowOpening) await windowOpening;
+  else if (!mainWindow || mainWindow.isDestroyed()) {
+    windowOpening ??= createWindow().finally(() => { windowOpening = undefined; });
+    await windowOpening;
+  }
+  mainWindow?.show(); mainWindow?.focus();
+}
+async function shortcutError(error: unknown): Promise<void> {
+  await showLauncher();
+  await dialog.showMessageBox(mainWindow!, { type: 'error', title: 'Unable to launch game',
+    message: error instanceof Error ? error.message : 'The game could not be launched.' });
+}
+function finishShortcutSession(): void {
+  // Account service and game-process cleanup must finish before normal quit.
+  if (shortcutOnly && !shortcutLaunch.preparing && !preparingLaunch && !finalizingGame && operations.size === 0 && serviceSessions.size === 0) app.quit();
+}
+function receiveLaunchRequest(id?: string): void {
+  if (!launchReady) { pendingRequests.push(id); return; }
+  if (!id) { void showLauncher(); return; }
+  void shortcutLaunch.request(id).catch(shortcutError).finally(finishShortcutSession);
+}
 
 function snapshot(): AppSnapshot {
   if (demoMode) return demoSnapshot(demoCoverUrls);
@@ -132,6 +187,8 @@ function requireBackend(command: keyof typeof backend.current.capabilities): str
 }
 
 function ensureIdle(): void {
+  if (preparingLaunch) throw new Error('A game launch is already being prepared.');
+  if (finalizingGame) throw new Error('The previous game is still finishing cleanup.');
   if (launcherUpdater?.state.updating) throw new Error('The launcher is being updated.');
   if (checkingGameUpdates) throw new Error('A game update check is in progress.');
   if (gameRemovalInProgress) throw new Error('A game is being removed. Wait for it to finish.');
@@ -417,6 +474,12 @@ async function gameTitleId(game: Game): Promise<string | undefined> {
 
 async function launchGame(id: string): Promise<void> {
   ensureIdle();
+  preparingLaunch = true;
+  try { await prepareGameLaunch(id); }
+  finally { preparingLaunch = false; }
+}
+
+async function prepareGameLaunch(id: string): Promise<void> {
   const game = store.games.find((entry) => entry.id === id);
   if (!game) throw new Error('Game not found.');
   const inspected = await inspectGameDirectory(game.path);
@@ -545,16 +608,20 @@ async function launchGame(id: string): Promise<void> {
       gameOperation.phase = gameOperation.error;
       gameOperation.finishedAt = new Date().toISOString();
     }).finally(async () => {
-      operations.delete(operationId);
-      gameProcesses.delete(operationId);
-      if (serviceSession) {
-        await serviceSession.stop().catch((error) => addGameLog(`Account service cleanup failed: ${(error as Error).message}`));
-        serviceSessions.delete(operationId);
-      }
-      await tracked.cleanup().catch((error) => console.error('Game service cleanup failed:', error));
-      gameLog.flush();
-      launchLog.end();
-      emitSnapshot();
+      finalizingGame = true;
+      try {
+        operations.delete(operationId);
+        gameProcesses.delete(operationId);
+        if (serviceSession) {
+          await serviceSession.stop().catch((error) => addGameLog(`Account service cleanup failed: ${(error as Error).message}`));
+          serviceSessions.delete(operationId);
+        }
+        await tracked.cleanup().catch((error) => console.error('Game service cleanup failed:', error));
+        gameLog.flush();
+        launchLog.end();
+        emitSnapshot();
+        if (gameOperation?.status === 'failed' && shortcutOnly) await shortcutError(new Error(gameOperation.error ?? 'The game exited with an error.'));
+      } finally { finalizingGame = false; finishShortcutSession(); }
     });
   } catch (error) {
     if (serviceSession) {
@@ -735,6 +802,7 @@ function registerDemoIpc(catalogMarket: () => string): void {
   ipcMain.handle('remove-game', () => {});
   ipcMain.handle('game-launch-options', () => demoLaunchOptions);
   ipcMain.handle('launch-game', () => {});
+  ipcMain.handle('create-game-shortcut', () => { throw new Error('Shortcuts are unavailable in demo mode.'); });
   ipcMain.handle('install-game-vc-runtime', () => {});
   ipcMain.handle('cancel-game', () => {});
   ipcMain.handle('update-settings', (_event, patch: Partial<Settings>) => ({ ...demoSnapshot().settings, ...patch }));
@@ -884,6 +952,7 @@ function registerIpc(): void {
         await shell.trashItem(target);
       }
       await store.removeGame(id);
+      await shortcuts.remove(id).catch((error) => console.error('Could not remove game shortcuts:', error));
       emitSnapshot();
     } finally {
       gameRemovalInProgress = false;
@@ -891,6 +960,20 @@ function registerIpc(): void {
   });
   ipcMain.handle('game-launch-options', (_event, id: string) => gameLaunchOptions(id));
   ipcMain.handle('launch-game', (_event, id: string) => launchGame(id));
+  ipcMain.handle('create-game-shortcut', async (_event, id: string, destination: ShortcutDestination) => {
+    const game = store.games.find(entry => entry.id === id);
+    if (!game) throw new Error('Game not found.');
+    if (destination !== 'desktop' && destination !== 'applications') throw new Error('Invalid shortcut destination.');
+    const png = await loadShortcutIcon(game, bytes => {
+      const image = nativeImage.createFromBuffer(bytes);
+      if (image.isEmpty()) return;
+      const { width, height } = image.getSize();
+      if (width < 1 || height < 1 || width * height > 16_777_216) return;
+      const scale = Math.min(1, 256 / Math.max(width, height));
+      return image.resize({ width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)), quality: 'best' }).toPNG();
+    });
+    return shortcuts.create(game, destination, png);
+  });
   ipcMain.handle('install-game-vc-runtime', (_event, id: string) => installGameVcRuntime(id));
   ipcMain.handle('cancel-game', async () => {
     if (!gameOperation || !['preparing', 'running', 'stopping'].includes(gameOperation.status)) throw new Error('No game launch is currently active.');
@@ -1076,10 +1159,21 @@ async function createWindow(): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  if (!primaryInstance) return;
+  if (startupError) { dialog.showErrorBox('Invalid Nexus shortcut', startupError.message); app.quit(); return; }
+  shortcutOnly = Boolean(startupRequest.gameId) && !demoMode;
   store = new StateStore(app.getPath('userData'));
   await store.load();
   launcherUpdater = new LauncherUpdater(app.getVersion(), app.isPackaged ? process.env.APPIMAGE : undefined, app.getPath('userData'), scheduleSnapshot);
   await launcherUpdater.initialize();
+  const dataHome = process.env.XDG_DATA_HOME && path.isAbsolute(process.env.XDG_DATA_HOME)
+    ? process.env.XDG_DATA_HOME : path.join(os.homedir(), '.local', 'share');
+  const appImage = app.isPackaged ? process.env.APPIMAGE : undefined;
+  const persistentBinary = app.isPackaged && !process.env.APPDIR && !process.execPath.includes('/.mount_') ? process.execPath : undefined;
+  shortcuts = new GameShortcuts({ userData: app.getPath('userData'), desktop: app.getPath('desktop'),
+    applications: path.join(dataHome, 'applications'), launcher: appImage ?? persistentBinary,
+    icon: fileURLToPath(new URL('../../assets/icon.png', import.meta.url)) });
+  if (!demoMode) await shortcuts.initialize().catch((error) => console.error('Game shortcut integration unavailable:', error));
   if (demoMode) {
     // Demo mode: no backend build, no runtime, no account access. Library
     // covers are fetched from the live Store; Store pages are live too.
@@ -1131,12 +1225,20 @@ app.whenReady().then(async () => {
   void enrichLibraryCovers().then(() => emitSnapshot(), () => { /* Covers are optional. */ });
   void checkLauncherUpdate().then(() => emitSnapshot());
   registerIpc();
-  await createWindow();
-  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) void createWindow(); });
-}).catch((error) => { console.error(error); app.quit(); });
+  launchReady = true;
+  if (startupRequest.gameId) receiveLaunchRequest(startupRequest.gameId);
+  else await showLauncher();
+  for (const id of pendingRequests.splice(0)) receiveLaunchRequest(id);
+  for (const error of pendingShortcutErrors.splice(0)) void shortcutError(error);
+  app.on('activate', () => { void showLauncher(); });
+}).catch((error) => {
+  console.error(error);
+  if (startupRequest.gameId && primaryInstance) dialog.showErrorBox('Unable to start Nexus', error instanceof Error ? error.message : String(error));
+  app.quit();
+});
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  if (process.platform !== 'darwin' && !shortcutOnly) app.quit();
 });
 
 app.on('before-quit', (event) => {

@@ -256,6 +256,7 @@ export interface LauncherApi {
   removeGame(id: string, mode: 'library' | 'trash-files'): Promise<void>;
   getGameLaunchOptions(id: string): Promise<GameLaunchOptions>;
   launchGame(id: string): Promise<void>;
+  createGameShortcut(id: string, destination: 'desktop' | 'applications'): Promise<string>;
   installGameVcRuntime(id: string): Promise<void>;
   cancelGame(): Promise<void>;
   updateSettings(patch: Partial<Settings>): Promise<Settings>;
