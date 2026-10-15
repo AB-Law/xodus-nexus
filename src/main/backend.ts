@@ -61,6 +61,11 @@ export class BackendManager {
       const result = await run(binaryPath, ['--help'], { maxOutput: 100_000 });
       if (result.code !== 0) return null;
       const capabilities = parseBackendHelp(result.output);
+      if (capabilities.streaming) {
+        const streaming = await run(binaryPath, ['streaming', '--help'], { maxOutput: 100_000 });
+        capabilities.streamingProgressJson = streaming.code === 0 && /(?:^|\s)--progress-json(?:\s|$)/m.test(streaming.output);
+        capabilities.streamingControls = Boolean(capabilities.streamingProgressJson && /(?:^|\s)--control-stdin(?:\s|$)/m.test(streaming.output));
+      }
       return capabilities.login && capabilities.streaming ? capabilities : null;
     } catch { return null; }
   }

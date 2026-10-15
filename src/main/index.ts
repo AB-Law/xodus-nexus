@@ -9,7 +9,7 @@ import type { AppSnapshot, AuthStatus, DownloadTask, Game, GameLaunchOptions, Ga
 import { downloadFailure, safeProductId } from '../shared/utils.js';
 import { demoDownloads, demoGames, demoLaunchOptions, demoLocales, demoSnapshot } from '../shared/demo-data.js';
 import { BackendManager } from './backend.js';
-import { resolveScriptCommand, run, spawnTracked } from './process.js';
+import { run, spawnTracked } from './process.js';
 import { inspectGameDirectory, StateStore } from './store.js';
 import { RuntimeManager } from './runtime.js';
 import { prepareProtonRunner, syncPrefixUserLocale, syncUnrealCultureGameIni } from './proton.js';
@@ -25,7 +25,7 @@ import { gameLaunchArguments } from './game-launch.js';
 import { LauncherUpdater } from './launcher-update.js';
 import { readDiagnosticTail } from './diagnostic-log.js';
 import { queryGameUpdate } from './game-updates.js';
-import { DownloadProgress } from './download-progress.js';
+import { DownloadProgress, PROGRESS_PREFIX } from './download-progress.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -35,6 +35,7 @@ let runtime: RuntimeManager;
 const operations = new Map<string, ChildProcessWithoutNullStreams>();
 const gameProcesses = new Map<string, GameProcess>();
 const cancelledDownloads = new Set<string>();
+const downloadControls = new Map<string, (paused: boolean) => Promise<void>>();
 const serviceSessions = new Map<string, XodusServiceSession>();
 const preparationControllers = new Map<string, AbortController>();
 let gameOperation: GameOperation | undefined;
@@ -66,7 +67,7 @@ function snapshot(): AppSnapshot {
     auth: structuredClone(authState),
     launcherUpdate: structuredClone(launcherUpdater.state),
     gameUpdates: structuredClone(gameUpdates),
-    downloadProgressSupported: resolveScriptCommand() !== null,
+    downloadProgressSupported: Boolean(backend.current.capabilities.streamingProgressJson),
     gameOperation: gameOperation ? structuredClone(gameOperation) : undefined,
   };
 }
@@ -254,7 +255,9 @@ async function startInstall(request: InstallRequest, updateGame?: Game): Promise
     startedAt: new Date().toISOString(),
   };
   await store.addDownload(task);
-  if (!resolveScriptCommand()) task.log.push('Progress reporting is unavailable: install util-linux (script). The download will continue without a numeric progress bar.');
+  const structured = Boolean(backend.current.capabilities.streamingProgressJson);
+  const controllable = structured && Boolean(backend.current.capabilities.streamingControls);
+  if (!structured) task.log.push('Update the Nexus backend in Settings for numeric progress and Pause/Resume. This download can continue without them.');
   emitSnapshot();
   // Show the game's Store box art in the queue while it downloads.
   void catalog.posters([productId], currentMarket()).then(async (posters) => {
@@ -266,25 +269,32 @@ async function startInstall(request: InstallRequest, updateGame?: Game): Promise
 
   const args = ['streaming', productId, destination, '--parallel', String(store.settings.parallelDownloads)];
   if (store.settings.market) args.push('--market', store.settings.market);
+  if (structured) args.push('--progress-json');
+  if (controllable) args.push('--control-stdin');
   const progressTracker = new DownloadProgress();
   let lastLoggedPercent = -1;
+  let pending: { paused: boolean; resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> } | undefined;
   const tracked = spawnTracked(binary, args, {
-    terminal: true,
     onLine: (line) => {
-      const progress = progressTracker.update(line);
-      // indicatif emits one bar per file and a separate aggregate bar. Do not
-      // let a small file's 100% overwrite the whole game's progress.
+      const progress = structured ? progressTracker.update(line) : undefined;
       if (progress) {
           Object.assign(task, progress);
+          task.canPause = controllable && progress.canPause;
+          if (pending) {
+            task.controlPending = true;
+            if ((task.status === 'paused') === pending.paused || !task.canPause) {
+              clearTimeout(pending.timer); pending.resolve(); pending = undefined;
+              task.controlPending = false;
+            }
+          }
           const percent = Math.floor(task.progress ?? 0);
           if (percent !== lastLoggedPercent) {
-            task.log.push(`${percent}% · ${line.trim().slice(0, 180)}`);
+            task.log.push(task.progress === null ? task.phase : `${percent}% · ${task.phase}`);
             lastLoggedPercent = percent;
           }
       } else {
-        // Ignore per-file progress after an aggregate counter was established.
-        if (/\d\s*(?:KiB|MiB|GiB|TiB|KB|MB|GB|B)\s*\/|\d%/.test(line)) return;
-        task.phase = line.length > 160 ? `${line.slice(0, 157)}…` : line;
+        if (line.startsWith(PROGRESS_PREFIX)) return; // Malformed/future records aren't user logs.
+        if (!structured) task.phase = line.length > 160 ? `${line.slice(0, 157)}…` : line;
         task.log.push(line);
       }
       task.log = task.log.slice(-300);
@@ -292,16 +302,43 @@ async function startInstall(request: InstallRequest, updateGame?: Game): Promise
     },
     maxOutput: 8_000_000,
   });
+  // Broken stdin is an operation error, not an unhandled Electron error event.
+  tracked.child.stdin.on('error', error => {
+    if (pending) { clearTimeout(pending.timer); pending.reject(error); pending = undefined; }
+    task.controlPending = false; scheduleSnapshot();
+  });
   operations.set(id, tracked.child);
+  if (controllable) downloadControls.set(id, paused => new Promise<void>((resolve, reject) => {
+    if (pending || !task.canPause || !['running', 'paused'].includes(task.status)) { reject(new Error('This download cannot be paused or resumed right now.')); return; }
+    if ((task.status === 'paused') === paused) { resolve(); return; }
+    task.controlPending = true; emitSnapshot();
+    const timer = setTimeout(() => {
+      pending = undefined; task.controlPending = false; emitSnapshot();
+      reject(new Error('The backend did not acknowledge the download control.'));
+    }, 10_000);
+    pending = { paused, resolve, reject, timer };
+    tracked.child.stdin.write(JSON.stringify({ schema: 1, command: paused ? 'pause' : 'resume' }) + '\n');
+  }));
+  const finishControls = () => {
+    downloadControls.delete(id);
+    if (pending) { clearTimeout(pending.timer); pending.reject(new Error('The download has ended.')); pending = undefined; }
+    task.canPause = false; task.controlPending = false;
+  };
   void tracked.result.then(async (result) => {
+    finishControls();
     operations.delete(id);
     const cancelled = cancelledDownloads.delete(id);
     task.exitCode = result.code;
     task.finishedAt = new Date().toISOString();
-    task.status = cancelled || result.code === 130 ? 'cancelled' : result.code === 0 ? 'complete' : 'failed';
+    task.status = cancelled || result.code === 130 ? 'cancelled' : result.code === 0 && (!structured || progressTracker.terminal === 'complete') ? 'complete' : 'failed';
+    if (shutdownStarted && controllable && !cancelled && task.status !== 'complete') task.status = 'paused';
     task.progress = task.status === 'complete' ? 100 : task.progress;
-    task.phase = task.status === 'complete' ? updateGame ? 'Update complete' : 'Installation complete' : task.status === 'cancelled' ? 'Cancelled by user' : `Xodus exited with code ${result.code}`;
+    task.phase = task.status === 'complete' ? updateGame ? 'Update complete' : 'Installation complete' : task.status === 'cancelled' ? 'Cancelled by user' : structured && result.code === 0 ? 'The backend did not confirm a completed installation.' : `Xodus exited with code ${result.code}`;
     if (task.status === 'failed') task.error = downloadFailure(task.log, result.code);
+    if (task.status === 'paused') {
+      task.phase = 'Paused — resume to restore saved download checkpoints';
+      task.canPause = true; task.error = undefined; task.finishedAt = undefined;
+    }
     await store.updateDownload(id, task);
     if (task.status === 'complete') {
       try {
@@ -315,6 +352,7 @@ async function startInstall(request: InstallRequest, updateGame?: Game): Promise
     }
     emitSnapshot();
   }).catch(async (error) => {
+    finishControls();
     operations.delete(id);
     const cancelled = cancelledDownloads.delete(id);
     task.status = cancelled ? 'cancelled' : 'failed';
@@ -775,9 +813,40 @@ function registerIpc(): void {
   });
   ipcMain.handle('cancel-download', async (_event, id: string) => {
     const child = operations.get(id);
-    if (!child) throw new Error('The download is no longer running.');
+    if (!child) {
+      const task = store.downloads.find(entry => entry.id === id);
+      if (task?.status !== 'paused') throw new Error('The download is no longer running.');
+      await store.updateDownload(id, { status: 'cancelled', canPause: false, phase: 'Cancelled; downloaded files and checkpoints were kept.' });
+      emitSnapshot(); return;
+    }
     cancelledDownloads.add(id);
     child.kill('SIGINT');
+  });
+  ipcMain.handle('pause-download', (_event, id: string) => {
+    const control = downloadControls.get(id);
+    if (!control) throw new Error('Pause requires a backend with download controls. Update the Nexus backend in Settings.');
+    return control(true);
+  });
+  ipcMain.handle('resume-download', (_event, id: string) => {
+    const control = downloadControls.get(id);
+    if (!control) {
+      if (!backend.current.capabilities.streamingControls) throw new Error('Update the Nexus backend in Settings before resuming a saved download.');
+      const task = store.downloads.find(entry => entry.id === id);
+      if (!task || task.status !== 'paused' || operations.has(id)) throw new Error('This download cannot be resumed.');
+      // Remove only the stale queue row, never files/checkpoints. The new backend
+      // process validates package identity and resumes durable byte checkpoints.
+      task.status = 'cancelled';
+      return (async () => {
+        try {
+          const game = task.kind === 'update' && task.gameId ? store.games.find(game => game.id === task.gameId) : undefined;
+          if (task.kind === 'update' && !game) throw new Error('The installed game for this update is no longer in the library.');
+          await startInstall({ productId: task.productId, title: task.title, destination: task.destination }, game);
+          await store.removeDownload(id);
+        } catch (error) { task.status = 'paused'; throw error; }
+        finally { emitSnapshot(); }
+      })();
+    }
+    return control(false);
   });
   ipcMain.handle('remove-download', async (_event, id: string) => { await store.removeDownload(id); emitSnapshot(); });
   ipcMain.handle('clear-finished-downloads', async () => { await store.clearFinishedDownloads(); emitSnapshot(); });
@@ -802,7 +871,7 @@ function registerIpc(): void {
   ipcMain.handle('remove-game', async (_event, id: string, mode: 'library' | 'trash-files') => {
     if (mode !== 'library' && mode !== 'trash-files') throw new Error('Invalid removal option.');
     ensureIdle();
-    if (store.downloads.some((task) => task.status === 'queued' || task.status === 'running')) {
+    if (store.downloads.some((task) => task.status === 'queued' || task.status === 'running' || task.status === 'paused')) {
       throw new Error('Wait for active installations before removing a game.');
     }
     const game = store.games.find((entry) => entry.id === id);
@@ -1080,6 +1149,16 @@ app.on('before-quit', (event) => {
     launcherUpdater?.cancel();
     // Let the atomic replacement transaction finish or safely fail before exit.
     while (launcherUpdater?.state.updating) await new Promise(resolve => setTimeout(resolve, 100));
+    // Persist queue ownership before terminating downloads. Partial files are
+    // restored only from the backend's validated durable checkpoints next time.
+    for (const [id] of operations) {
+      const task = store.downloads.find(entry => entry.id === id);
+      if (task && backend.current.capabilities.streamingControls) Object.assign(task, {
+        status: 'paused', canPause: true, controlPending: false, transferRate: undefined,
+        phase: 'Paused — resume to restore saved download checkpoints',
+      });
+    }
+    await store.save();
     for (const [id, child] of operations) if (!gameProcesses.has(id)) child.kill('SIGINT');
     const runningGames = [...gameProcesses.values()];
     await Promise.all(runningGames.map((process) => process.stop().catch((error) => console.error('Could not stop game on exit:', error))));

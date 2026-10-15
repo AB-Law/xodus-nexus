@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   ArrowDownToLine, Check, ChevronRight, CircleAlert, CircleUserRound,
   Cog, Download, FolderOpen, Gamepad2, Github, HardDrive, Home, Library,
-  LoaderCircle, LogIn, MoreHorizontal, PackageCheck, Play, Plus, RefreshCw, Rocket, Search, Settings2,
+  LoaderCircle, LogIn, MoreHorizontal, PackageCheck, Pause, Play, Plus, RefreshCw, Rocket, Search, Settings2,
   Store, Terminal, Trash2, X,
 } from 'lucide-react';
 import type { AppSnapshot, CatalogProduct, CatalogSearchResult, DiagnosticLog, Game, GameLaunchOptions, Page, Settings } from '../shared/types';
@@ -49,7 +49,7 @@ function NavItem({ active, icon, label, badge, onClick }: {
 }
 
 export function Sidebar({ data, page, go }: { data: AppSnapshot; page: Page; go: (page: Page) => void }) {
-  const count = data.downloads.filter(task => task.status === 'running').length;
+  const count = data.downloads.filter(task => task.status === 'running' || task.status === 'paused').length;
   const account = data.auth.username ?? (data.auth.stored === true ? 'Microsoft account' : 'Sign in');
   return <aside className="sidebar">
     <button className="account-summary" onClick={() => go('settings')}><div className="account-avatar"><CircleUserRound /></div><span><strong>{account}</strong><small>{data.auth.stored === true ? 'Credentials stored' : data.auth.stored === false ? 'Not signed in' : 'Status unavailable'}</small></span><ChevronRight /></button>
@@ -108,7 +108,7 @@ export function HomePage({ data, go, action }: {
   data: AppSnapshot; go: (page: Page) => void; action: (fn: () => Promise<unknown>, success?: string) => void;
 }) {
   const featured = data.games[0];
-  const active = data.downloads.find((task) => task.status === 'running');
+  const active = data.downloads.find((task) => task.status === 'running' || task.status === 'paused');
   const canPlay = Boolean(featured?.installState === 'ready' && data.backend.capabilities.run && (data.settings.winePath || data.runtime.winePath));
   const launchOptions = useGameLaunchOptions(featured, data);
   const spotlightArt = featured?.coverDataUrl ?? featured?.coverUrl;
@@ -394,12 +394,18 @@ export function LibraryPage({ data, toast }: { data: AppSnapshot; toast: (value:
   </main>;
 }
 
-function DownloadsPage({ data, toast }: { data: AppSnapshot; toast: (value: Toast) => void }) {
+export function DownloadsPage({ data, toast }: { data: AppSnapshot; toast: (value: Toast) => void }) {
   const [expanded, setExpanded] = useState<string>();
   const [retrying, setRetrying] = useState<string>();
   async function cancel(id: string) {
     try { await window.launcher.cancelDownload(id); }
     catch (error) { toast({ kind: 'error', message: errorMessage(error) }); }
+  }
+  async function pauseOrResume(task: AppSnapshot['downloads'][number]) {
+    try {
+      if (task.status === 'paused') await window.launcher.resumeDownload(task.id);
+      else await window.launcher.pauseDownload(task.id);
+    } catch (error) { toast({ kind: 'error', message: errorMessage(error) }); }
   }
   async function remove(id: string) {
     try { await window.launcher.removeDownload(id); if (expanded === id) setExpanded(undefined); }
@@ -420,16 +426,16 @@ function DownloadsPage({ data, toast }: { data: AppSnapshot; toast: (value: Toas
   }
 
   const size = (bytes: number) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GiB` : bytes >= 1024 ** 2 ? `${(bytes / 1024 ** 2).toFixed(1)} MiB` : `${Math.round(bytes / 1024)} KiB`;
-  const finishedCount = data.downloads.filter((task) => task.status !== 'running' && task.status !== 'queued').length;
+  const finishedCount = data.downloads.filter((task) => !['running', 'paused', 'queued'].includes(task.status)).length;
   return <main className="page downloads-page">
     <header className="page-header"><div><h1>Install Queue</h1></div>{finishedCount ? <button className="secondary" onClick={clearFinished}><Trash2 />Clear finished</button> : null}</header>
-    {data.downloadProgressSupported === false ? <div className="alert amber"><CircleAlert /><span>Numeric download progress requires util-linux (the script command). Install it or re-run the installer. Downloads can still finish without it.</span></div> : null}
+    {data.downloadProgressSupported === false ? <div className="alert amber"><CircleAlert /><span>Update the Nexus backend in Settings for numeric download progress and Pause/Resume. Downloads still work with an older backend.</span></div> : null}
     {data.downloads.length === 0 ? <div className="empty-state"><div><Download /></div><h2>Nothing in the queue</h2><p>Installations started from Store will appear here.</p></div> : <div className="download-list">{data.downloads.map((task) => {
-      const running = task.status === 'running'; const failed = task.status === 'failed';
+      const running = task.status === 'running'; const paused = task.status === 'paused'; const active = running || paused; const failed = task.status === 'failed';
       return <article className={`download-item ${task.status}`} key={task.id}>
         <div className="download-status">{task.coverUrl ? <img className="download-cover" src={task.coverUrl} alt={`${task.title} artwork`} /> : running ? <LoaderCircle className="spin" /> : failed ? <CircleAlert /> : task.status === 'complete' ? <PackageCheck /> : <X />}{task.coverUrl && (running || failed) ? <span className={`download-badge ${failed ? 'failed' : ''}`}>{running ? <LoaderCircle className="spin" /> : <CircleAlert />}</span> : null}</div>
         <div className="download-main"><div className="download-heading"><div><h3>{task.kind === 'update' ? `Update · ${task.title}` : task.title}</h3><span>{task.productId} · {task.destination}</span></div><strong>{task.progress === null ? (running ? 'Active' : task.status) : `${Math.round(task.progress)}%`}</strong></div><div className={`progress-track ${task.progress === null && running ? 'indeterminate' : ''}`}><i style={task.progress !== null ? { width: `${task.progress}%` } : undefined} /></div><p className={failed ? 'error-text' : ''}>{task.error ?? task.phase}{task.totalBytes ? ` · ${size(task.downloadedBytes ?? 0)} / ${size(task.totalBytes)}` : ''}{task.transferRate ? ` · ${task.transferRate}` : ''}{running && estimateTimeRemaining(task.transferRate, task.downloadedBytes, task.totalBytes) ? ` · ${estimateTimeRemaining(task.transferRate, task.downloadedBytes, task.totalBytes)}` : ''}</p>{expanded === task.id ? <pre className="task-log">{task.log.length ? task.log.join('\n') : 'Xodus has not emitted text output yet.'}</pre> : null}</div>
-        <div className="download-actions">{running ? <button onClick={() => cancel(task.id)} title="Stop"><X /></button> : null}{failed || task.status === 'cancelled' ? <button disabled={Boolean(retrying) || data.downloads.some((entry) => entry.status === 'running')} onClick={() => retry(task)} title="Retry installation"><RefreshCw className={retrying === task.id ? 'spin' : ''} /></button> : null}<button onClick={() => setExpanded(expanded === task.id ? undefined : task.id)} title="Show log"><Terminal /></button><button onClick={() => window.launcher.openPath(task.destination)} title="Open folder"><FolderOpen /></button>{task.status !== 'running' && task.status !== 'queued' ? <button onClick={() => remove(task.id)} title="Remove from queue"><Trash2 /></button> : null}</div>
+        <div className="download-actions">{active ? <><button disabled={!task.canPause || task.controlPending} onClick={() => pauseOrResume(task)} title={paused ? 'Resume download' : task.canPause ? 'Pause download' : 'Pause is available while downloading game files'}>{task.controlPending ? <LoaderCircle className="spin" /> : paused ? <Play /> : <Pause />}</button><button onClick={() => cancel(task.id)} title="Cancel download"><X /></button></> : null}{failed || task.status === 'cancelled' ? <button disabled={Boolean(retrying) || data.downloads.some((entry) => entry.status === 'running' || entry.status === 'paused')} onClick={() => retry(task)} title="Retry installation"><RefreshCw className={retrying === task.id ? 'spin' : ''} /></button> : null}<button onClick={() => setExpanded(expanded === task.id ? undefined : task.id)} title="Show log"><Terminal /></button><button onClick={() => window.launcher.openPath(task.destination)} title="Open folder"><FolderOpen /></button>{!active && task.status !== 'queued' ? <button onClick={() => remove(task.id)} title="Remove from queue"><Trash2 /></button> : null}</div>
       </article>;
     })}</div>}
   </main>;
