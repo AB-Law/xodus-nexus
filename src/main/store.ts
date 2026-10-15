@@ -40,7 +40,11 @@ export class StateStore {
           };
           return current;
         }) : [],
-        downloads: Array.isArray(parsed.downloads) ? parsed.downloads.slice(-30) : [],
+        downloads: Array.isArray(parsed.downloads) ? parsed.downloads.slice(-30).map((task: DownloadTask) =>
+          ['running', 'paused', 'queued'].includes(task.status) ? {
+            ...task, status: 'paused' as const, canPause: true, controlPending: false,
+            transferRate: undefined, phase: 'Paused — resume to reconnect and restore saved download checkpoints',
+          } : task) : [],
         settings: Object.fromEntries(Object.entries({ ...defaultSettings, ...parsed.settings }).filter(([key]) => key !== 'separateGameProcess')) as unknown as Settings,
       };
     } catch (error) {
@@ -101,13 +105,13 @@ export class StateStore {
   async removeDownload(id: string): Promise<void> {
     const task = this.state.downloads.find((entry) => entry.id === id);
     if (!task) throw new Error('Queue entry not found.');
-    if (task.status === 'running' || task.status === 'queued') throw new Error('Stop the installation before removing it from the queue.');
+    if (task.status === 'running' || task.status === 'queued' || task.status === 'paused') throw new Error('Stop the installation before removing it from the queue.');
     this.state.downloads = this.state.downloads.filter((entry) => entry.id !== id);
     await this.save();
   }
 
   async clearFinishedDownloads(): Promise<void> {
-    this.state.downloads = this.state.downloads.filter((entry) => entry.status === 'running' || entry.status === 'queued');
+    this.state.downloads = this.state.downloads.filter((entry) => entry.status === 'running' || entry.status === 'queued' || entry.status === 'paused');
     await this.save();
   }
 }

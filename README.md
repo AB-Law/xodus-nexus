@@ -57,6 +57,12 @@ restart; the previous AppImage is kept for rollback. Backend and runtime updates
 are versioned independently. In My Library, **Check game updates** marks installed
 games with a newer verified package version without changing their files.
 
+The Install Queue supports **Pause / Resume**, including after restarting the
+launcher, with a compatible Nexus backend. Download checkpoints stay in the
+installation folder and are checked against the package before continuing.
+Progress comes directly from the backend; no `script` or `util-linux` package
+is needed for download progress.
+
 [Downloads](https://github.com/domsvoboda/xodus-nexus/releases) ·
 [Setup & documentation](https://github.com/domsvoboda/xodus-nexus/wiki) ·
 [Report an issue](https://github.com/domsvoboda/xodus-nexus/issues)
