@@ -50,13 +50,21 @@ function NavItem({ active, icon, label, badge, onClick }: {
 
 export function Sidebar({ data, page, go }: { data: AppSnapshot; page: Page; go: (page: Page) => void }) {
   const count = data.downloads.filter(task => task.status === 'running' || task.status === 'paused').length;
-  const account = data.auth.username ?? (data.auth.stored === true ? 'Microsoft account' : 'Sign in');
+  const account = data.auth.gamertag ?? data.auth.username ?? (data.auth.stored === true ? 'Microsoft account' : 'Sign in');
   return <aside className="sidebar">
-    <button className="account-summary" onClick={() => go('settings')}><div className="account-avatar"><CircleUserRound /></div><span><strong>{account}</strong><small>{data.auth.stored === true ? 'Credentials stored' : data.auth.stored === false ? 'Not signed in' : 'Status unavailable'}</small></span><ChevronRight /></button>
+    <button className="account-summary" onClick={() => go('settings')}><AccountAvatar auth={data.auth} /><span><strong>{account}</strong><small>{data.auth.stored === true ? 'Credentials stored' : data.auth.stored === false ? 'Not signed in' : 'Status unavailable'}</small></span><ChevronRight /></button>
     <nav><NavItem active={page === 'home'} icon={<Home />} label="Home" onClick={() => go('home')} /><NavItem active={page === 'store'} icon={<Store />} label="Store" onClick={() => go('store')} /><NavItem active={page === 'library'} icon={<Library />} label="My Library" onClick={() => go('library')} /></nav>
     {data.games.length > 0 ? <div className="recents"><span>Most recent</span>{data.games.slice(0, 5).map(game => <button key={game.id} onClick={() => go('library')}><Cover game={game} /><strong>{game.title}</strong></button>)}</div> : null}
     <div className="sidebar-bottom"><NavItem active={page === 'settings'} icon={<Cog />} label="Settings" onClick={() => go('settings')} /><button className={`queue-summary ${page === 'downloads' ? 'active' : ''}`} aria-current={page === 'downloads' ? 'page' : undefined} onClick={() => go('downloads')}><Download /><span><strong>Install Queue{count ? ` · ${count}` : ''}</strong><small>{count ? `${count} active installation${count === 1 ? '' : 's'}` : 'Manage installations'}</small></span></button></div>
   </aside>;
+}
+
+function AccountAvatar({ auth, large = false }: { auth: AppSnapshot['auth']; large?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [auth.avatarDataUrl]);
+  return <div className={`account-avatar${large ? ' large' : ''}`}>
+    {auth.avatarDataUrl && !failed ? <img src={auth.avatarDataUrl} alt="Xbox profile picture" onError={() => setFailed(true)} /> : <CircleUserRound />}
+  </div>;
 }
 
 export function TopStatus({ data, go }: { data: AppSnapshot; go: (page: Page) => void }) {
@@ -499,7 +507,7 @@ export function SettingsPage({ data, toast }: { data: AppSnapshot; toast: (value
     </section>
 
     <section className="settings-card account-card">
-      <div className="settings-heading"><div className="account-avatar large"><CircleUserRound /></div><div><span className="overline">MICROSOFT ACCOUNT</span><h2>{data.auth.username ?? (data.auth.stored === false ? 'Not signed in' : 'Account status unavailable')}</h2><p>{data.auth.stored === true ? 'Credentials stored by Xodus' : 'Authentication uses the original Xodus webview'}</p></div><span className={`status-label ${data.auth.stored === true ? 'ready' : data.auth.stored === false ? 'off' : 'unknown'}`}><StatusDot tone={data.auth.stored === true ? 'green' : data.auth.stored === false ? 'red' : 'amber'} />{data.auth.stored === true ? 'STORED' : data.auth.stored === false ? 'SIGNED OUT' : 'UNKNOWN'}</span></div>
+      <div className="settings-heading"><AccountAvatar auth={data.auth} large /><div><span className="overline">MICROSOFT ACCOUNT</span><h2>{data.auth.gamertag ?? data.auth.username ?? (data.auth.stored === false ? 'Not signed in' : 'Account status unavailable')}</h2><p>{data.auth.stored === true ? 'Credentials stored by Xodus' : 'Authentication uses the original Xodus webview'}</p></div><span className={`status-label ${data.auth.stored === true ? 'ready' : data.auth.stored === false ? 'off' : 'unknown'}`}><StatusDot tone={data.auth.stored === true ? 'green' : data.auth.stored === false ? 'red' : 'amber'} />{data.auth.stored === true ? 'STORED' : data.auth.stored === false ? 'SIGNED OUT' : 'UNKNOWN'}</span></div>
       <div className="account-note"><CircleAlert /><span>{data.auth.note}</span></div>
       <div className="button-row"><button className="primary" disabled={!caps.login || data.auth.running} onClick={() => invoke('login', () => window.launcher.login(), 'Xodus sign-in completed.')}>{data.auth.running ? <LoaderCircle className="spin" /> : <LogIn />}{data.auth.stored ? 'Sign in again' : 'Sign in with Xodus'}</button><button className="secondary" disabled={!caps.logout || data.auth.running || data.auth.stored === false} onClick={() => invoke('logout', () => window.launcher.logout(), 'Stored Xodus user credentials were removed.')}>Sign out</button><button className="secondary" disabled={!caps.account || data.auth.running} onClick={() => invoke('account', () => window.launcher.refreshAccount())}><RefreshCw />Refresh status</button></div>
     </section>

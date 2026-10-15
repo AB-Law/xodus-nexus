@@ -5,3 +5,4 @@
 - Validate resumed byte ranges and preserve checkpoints after interrupted transfers.
 - Report installation failures correctly instead of returning success.
 - Resolve Windows executable paths with different letter casing on Linux.
+- Provide Xbox gamertags and profile pictures for the launcher account display.
