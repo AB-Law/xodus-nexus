@@ -9,6 +9,11 @@ it('shows the Xbox gamertag and cached avatar in sidebar and Settings, with emai
   const sidebar = () => renderToStaticMarkup(<Sidebar data={data} page="home" go={() => {}} />);
   expect(sidebar()).toContain('<strong>ExampleGamer</strong>');
   expect(sidebar()).toContain('alt="Xbox profile picture"');
+  expect(sidebar()).not.toContain('Credentials stored');
+  data.auth.subscription = { status: 'active', productIds: ['CFQ7TTC0KGQ8'], checkedAt: new Date().toISOString() };
+  expect(sidebar()).toContain('GAME PASS');
+  data.auth.subscription = { ...data.auth.subscription, status: 'unknown', productIds: [] };
+  expect(sidebar()).not.toContain('account-membership');
   const settings = renderToStaticMarkup(<SettingsPage data={data} toast={() => {}} />);
   expect(settings).toContain('<h2>ExampleGamer</h2>'); expect(settings).toContain('alt="Xbox profile picture"');
   delete data.auth.gamertag; delete data.auth.avatarDataUrl;

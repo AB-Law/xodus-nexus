@@ -254,6 +254,29 @@ export class CatalogService {
 
   constructor(private readonly fetcher: Fetcher = fetch) {}
 
+  /** Resolve licensed IDs, never search results or an install-history guess. */
+  async licensedProducts(ids: string[], rawMarket: string): Promise<CatalogProduct[]> {
+    if (ids.length > 60 || ids.some(id => !/^[A-Z0-9]{12}$/.test(id))) throw Error('Invalid licensed product list.');
+    const catalog = await this.details(ids, normalizeMarket(rawMarket));
+    const wanted = new Set(ids);
+    const rows = (Array.isArray(catalog.Products) ? catalog.Products : []).flatMap(entry => {
+      const product = object(entry);
+      const id = string(product?.ProductId);
+      if (!product || !id || !wanted.has(id) || product.ProductType !== 'Game') return [];
+      const localized = Array.isArray(product.LocalizedProperties) ? object(product.LocalizedProperties[0]) : undefined;
+      const images = Array.isArray(localized?.Images) ? localized.Images as DisplayCatalogImage[] : [];
+      const find = (purposes: string[]) => {
+        const uri = string(purposes.flatMap(purpose => images.filter(image => image.ImagePurpose === purpose))[0]?.Uri);
+        return uri?.startsWith('//') ? `https:${uri}` : uri;
+      };
+      return [{ productId: id, title: localized?.ProductTitle, description: localized?.ProductDescription,
+        publisherName: localized?.PublisherName, boxArtUrl: find(POSTER_PURPOSES), isGame: true }];
+    });
+    // Entitlement does not imply a PC package or supported format. Only a real
+    // unambiguous Windows.Desktop MSIXVC target can be "Ready to install".
+    return parseCatalogProducts({ productsList: rows }, catalog).filter(product => product.installability === 'supported');
+  }
+
   private async details(ids: string[], market: string): Promise<DisplayCatalogResponse> {
     const details = new Map<string, Record<string, unknown>>();
     let pending = ids.filter((value, index, values) => values.indexOf(value) === index);

@@ -104,6 +104,16 @@ describe('Microsoft Store catalog parsing', () => {
 });
 
 describe('CatalogService', () => {
+  it('only lists licensed base games with supported PC packages, not add-ons or console products', async () => {
+    const id='9AAAAAAAAAAA';
+    const data={Products:[{ ...catalog.Products[0],ProductId:id,ProductType:'Game',LocalizedProperties:[{ProductTitle:'Licensed PC Game',PublisherName:'Studio'}]},
+      { ...catalog.Products[0],ProductId:'9BBBBBBBBBBB',ProductType:'Durable',LocalizedProperties:[{ProductTitle:'DLC'}]},
+      {ProductId:'9CCCCCCCCCCC',ProductType:'Game',LocalizedProperties:[{ProductTitle:'Console game'}],DisplaySkuAvailabilities:[]} ]};
+    const fetcher=(async()=>new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}})) as typeof fetch;
+    const result=await new CatalogService(fetcher).licensedProducts([id,'9BBBBBBBBBBB','9CCCCCCCCCCC'],'US');
+    expect(result.map(p=>p.title)).toEqual(['Licensed PC Game']);
+    expect(result[0].installability).toBe('supported');
+  });
   it('queries games and enriches them with display catalog package metadata', async () => {
     const urls: string[] = [];
     const fetcher = (async (input: URL | RequestInfo) => {

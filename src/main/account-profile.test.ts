@@ -52,3 +52,18 @@ it('keeps email/default fallback with old backends or malformed profile response
     }
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
+
+it('retains a fresh subscription only for the matching account and removes it on sign-out', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-membership-'));
+  try {
+    const subscription = { status: 'active', productIds: ['CFQ7TTC0KGQ8'], checkedAt: new Date().toISOString() };
+    const profile = new AccountProfile(root, () => {}, value => value, async () => JSON.stringify({ ...JSON.parse(result()), subscription }));
+    await profile.select('one@example.test', '/fake/backend'); await profile.settled();
+    expect(profile.value?.subscription).toEqual(subscription);
+    const offline = new AccountProfile(root, () => {}, value => value);
+    await offline.select('one@example.test');
+    expect(offline.value?.subscription).toEqual(subscription);
+    await offline.select('two@example.test'); expect(offline.value?.subscription).toBeUndefined();
+    await profile.select(undefined); expect(profile.value?.subscription).toBeUndefined();
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});

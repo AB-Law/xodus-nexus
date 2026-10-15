@@ -23,6 +23,7 @@ export function parseBackendHelp(help: string): BackendCapabilities {
     commands,
     account: commands.includes('account'),
     profile: commands.includes('profile'),
+    library: commands.includes('library'),
     login: commands.includes('login'),
     logout: commands.includes('logout'),
     download: commands.includes('download'),

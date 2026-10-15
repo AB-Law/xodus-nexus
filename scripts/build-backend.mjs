@@ -40,6 +40,8 @@ const offline = args.includes('--offline') ? ['--offline'] : [];
 const rustc = command('rustc', ['--version'], true).trim();
 if (!rustc.startsWith(`rustc ${lock.rust} `)) throw Error(`Use the locked Rust toolchain ${lock.rust}`);
 command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-cli', 'commands::run::tests']);
+command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-cli', 'commands::library::tests']);
+command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-cli', 'commands::subscription::tests']);
 command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-service', 'store_']);
 command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-cli', '-p', 'msixvc', 'streaming_']);
 command('cargo', ['build', '--release', '--locked', ...offline, '-p', 'xodus-cli', '-p', 'xodus-service']);
