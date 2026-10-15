@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { DownloadTask, Game, Settings } from '../shared/types.js';
+import { resolvePackageFile } from './windows-path.js';
 
 interface PersistedState {
   games: Game[];
@@ -175,7 +176,7 @@ export async function inspectGameDirectory(directory: string): Promise<Game> {
   const temporaryContainer = path.join(canonical, '.xodus-streaming-tmp.msixvc');
   const hasFinal = await readable(finalContainer);
   const hasTemporary = await readable(temporaryContainer);
-  const exeExists = executable ? await readable(path.join(canonical, executable.replace(/\\/g, path.sep))) : false;
+  const exeExists = executable ? Boolean(await resolvePackageFile(canonical, executable)) : false;
   const vcRedistPath = path.join(canonical, 'Engine', 'Extras', 'Redist', 'en-us', 'vc_redist.x64.exe');
   const vcRedistEncrypted = /<KnownDependency\b[^>]*\bName=["']VC14["']/i.test(configXml)
     && await readable(vcRedistPath) && !await beginsWithMz(vcRedistPath);
@@ -211,7 +212,9 @@ export async function inspectGameDirectory(directory: string): Promise<Game> {
     ? 'A temporary Xodus container was found; the download was not completed.'
     : installState === 'imported' && !hasFinal
       ? 'The .xodus-streaming.msixvc container is missing; Xodus run may not work.'
-      : undefined;
+      : installState === 'imported' && !exeExists
+        ? 'The manifest executable is missing, ambiguous, or outside the installation directory.'
+        : undefined;
 
   return {
     id: createHash('sha256').update(canonical).digest('hex').slice(0, 16),
