@@ -1,5 +1,35 @@
 # Shared Nexus backend
 
+## Structured downloads
+
+`streaming --progress-json --control-stdin` enables Nexus progress protocol v1.
+The CLI emits `NEXUS_PROGRESS ` followed by one JSON object per line. Records
+carry `schema`, monotonically increasing `sequence`, `event: "progress"`, `phase`,
+`completedBytes`, nullable `totalBytes`, `bytesPerSecond`, `paused` and `canPause`.
+Progress updates are throttled; phase/control/terminal transitions are immediate.
+Logs remain separate from these prefixed records. A successful process exit AND
+a `complete` record are required before the launcher marks installation complete.
+
+Stdin accepts `{"schema":1,"command":"pause"}` and `resume` commands, one per
+line. Pause is available during game-file transfer, not metadata/finalization.
+It cooperatively closes HTTP streams and checkpoints flushed output; resume opens
+validated Range requests without stopping the process or discarding files.
+
+`.nexus-streaming-v1.jsonl` in the destination is an append-only checkpoint
+journal, compacted atomically on reopen. Identity includes signed XVD/header data
+and the exact file layout. Checkpoints record completed byte offsets and a
+SHA-256 boundary digest; they are synced after file data, on pause/completion and
+at most every 32 MiB while transferring. After interruption the last unchecked
+tail may be downloaded again; this is not a full-file integrity verification.
+A changed package, missing/truncated file or mismatched boundary is not resumed
+from an unverified offset. An exclusive folder lock prevents concurrent writers.
+CDN URLs/credentials are never stored in the journal. Restart refreshes normal
+package authentication/URLs, then restores matching checkpoints.
+
+The launcher probes `streaming --help` before enabling these optional features.
+Older backends can still download without numeric progress or pause controls.
+No terminal emulator, PTY wrapper or host `script`/`util-linux` dependency is used.
+
 `assets/backend-source.lock.json` pins the upstream Git commit, Cargo.lock hash,
 Rust toolchain, backend package version and ordered SHA-256 patch set. Launcher
 and CI use the same recipe. Updating upstream is an explicit reviewed change;

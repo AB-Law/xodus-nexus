@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { demoSnapshot } from '../shared/demo-data';
-import { DiagnosticDialog, LibraryPage, SettingsPage, Sidebar, TopStatus } from './App';
+import { DiagnosticDialog, DownloadsPage, LibraryPage, SettingsPage, Sidebar, TopStatus } from './App';
 it('has one sidebar queue entry below Settings', () => {
   const html = renderToStaticMarkup(<Sidebar data={demoSnapshot()} page="downloads" go={() => {}} />);
   expect(html.match(/Install Queue/g)).toHaveLength(1); expect(html.indexOf('Settings')).toBeLessThan(html.indexOf('Install Queue')); expect(html).toContain('aria-current="page"');
@@ -24,4 +24,13 @@ it('shows game update badges and a separate version-check action', () => {
 it('renders diagnostic logs as escaped text rather than executable HTML', () => {
   const html = renderToStaticMarkup(<DiagnosticDialog log={{ name: 'game.log', content: '<script>bad()</script>', truncated: true }} close={() => {}} />);
   expect(html).not.toContain('<script>'); expect(html).toContain('&lt;script&gt;'); expect(html).toContain('512 KiB');
+});
+it('offers Resume and Cancel for paused downloads, without treating them as finished', () => {
+  const data = demoSnapshot();
+  data.downloads = [{ id:'paused', title:'Game', destination:'/tmp/demo', productId:'TEST', status:'paused',
+    canPause:true, progress:25, phase:'Paused', log:[], startedAt:'today' }];
+  const html = renderToStaticMarkup(<DownloadsPage data={data} toast={() => {}} />);
+  expect(html).toContain('Resume download'); expect(html).toContain('Cancel download');
+  expect(html).not.toContain('Clear finished'); expect(html).not.toContain('Remove from queue');
+  expect(html).not.toContain('util-linux');
 });

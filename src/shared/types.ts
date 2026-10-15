@@ -7,6 +7,8 @@ export interface BackendCapabilities {
   logout: boolean;
   download: boolean;
   streaming: boolean;
+  streamingProgressJson?: boolean;
+  streamingControls?: boolean;
   run: boolean;
   version?: string;
 }
@@ -104,7 +106,9 @@ export interface DownloadTask {
   title: string;
   productId: string;
   destination: string;
-  status: 'queued' | 'running' | 'complete' | 'failed' | 'cancelled';
+  status: 'queued' | 'running' | 'paused' | 'complete' | 'failed' | 'cancelled';
+  canPause?: boolean;
+  controlPending?: boolean;
   progress: number | null;
   downloadedBytes?: number;
   totalBytes?: number;
@@ -242,6 +246,8 @@ export interface LauncherApi {
   startInstall(request: InstallRequest): Promise<string>;
   updateInstalledGame(id: string): Promise<string>;
   cancelDownload(id: string): Promise<void>;
+  pauseDownload(id: string): Promise<void>;
+  resumeDownload(id: string): Promise<void>;
   removeDownload(id: string): Promise<void>;
   clearFinishedDownloads(): Promise<void>;
   importGame(path?: string): Promise<Game | null>;

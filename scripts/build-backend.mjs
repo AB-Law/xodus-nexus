@@ -41,6 +41,7 @@ const rustc = command('rustc', ['--version'], true).trim();
 if (!rustc.startsWith(`rustc ${lock.rust} `)) throw Error(`Use the locked Rust toolchain ${lock.rust}`);
 command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-cli', 'commands::run::tests']);
 command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-service', 'store_']);
+command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-cli', '-p', 'msixvc', 'streaming_']);
 command('cargo', ['build', '--release', '--locked', ...offline, '-p', 'xodus-cli', '-p', 'xodus-service']);
 const cli = path.join(target, 'release/xodus-cli');
 const help = command(cli, ['--help'], true);
@@ -48,6 +49,10 @@ for (const name of ['account', 'login', 'logout', 'download', 'streaming', 'run'
   if (!new RegExp(`^\\s{2}${name}\\s{2,}`, 'm').test(help)) throw Error(`Backend lacks ${name}`);
 }
 if (!command(cli, ['run', '--help'], true).includes('--materialize-chain')) throw Error('Launch-chain support missing');
+const streamingHelp = command(cli, ['streaming', '--help'], true);
+for (const flag of ['--progress-json', '--control-stdin']) {
+  if (!streamingHelp.includes(flag)) throw Error(`Structured download capability missing: ${flag}`);
+}
 // xodus-service has no --help parser; running it would access keychain/network.
 const name = `xodus-nexus-backend-${lock.version}-linux-x86_64`;
 const bundle = path.join(work, name);
