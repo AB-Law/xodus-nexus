@@ -3,6 +3,7 @@ export type Page = 'home' | 'store' | 'library' | 'downloads' | 'settings';
 export interface BackendCapabilities {
   commands: string[];
   account: boolean;
+  profile?: boolean;
   login: boolean;
   logout: boolean;
   download: boolean;
@@ -17,6 +18,8 @@ export interface AuthStatus {
   running: boolean;
   stored: boolean | null;
   username?: string;
+  gamertag?: string;
+  avatarDataUrl?: string;
   lastResult?: 'success' | 'failed';
   lastAction?: 'login' | 'logout';
   note: string;

@@ -52,6 +52,10 @@ Settings, and sign in to your Microsoft account. Both components are downloaded
 as verified precompiled packages from Nexus Releases. No local compilation is
 needed; neither component is bundled with the AppImage.
 
+With a compatible Nexus backend, the account panel shows your Xbox gamertag and
+profile picture. Profile details are cached locally; email and a default avatar
+remain available when Xbox profile data cannot be loaded.
+
 Launcher updates appear in the top-right corner. Install them from Settings and
 restart; the previous AppImage is kept for rollback. Backend and runtime updates
 are versioned independently. In My Library, **Check game updates** marks installed

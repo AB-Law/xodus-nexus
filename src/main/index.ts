@@ -29,6 +29,7 @@ import { DownloadProgress, PROGRESS_PREFIX } from './download-progress.js';
 import { GameShortcuts, shortcutArguments, type ShortcutDestination } from './game-shortcuts.js';
 import { ShortcutLaunch } from './shortcut-launch.js';
 import { loadShortcutIcon } from './shortcut-icon.js';
+import { AccountProfile } from './account-profile.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -59,6 +60,7 @@ let gameUpdateController: AbortController | undefined;
 let gameUpdateJob: Promise<void> | undefined;
 let snapshotTimer: ReturnType<typeof setTimeout> | undefined;
 let shortcuts: GameShortcuts;
+let accountProfile: AccountProfile;
 let preparingLaunch = false;
 let finalizingGame = false;
 let shortcutOnly = false;
@@ -119,7 +121,7 @@ function snapshot(): AppSnapshot {
     games: structuredClone(store.games),
     downloads: structuredClone(store.downloads),
     settings: structuredClone(store.settings),
-    auth: structuredClone(authState),
+    auth: structuredClone({ ...authState, gamertag: accountProfile?.value?.gamertag, avatarDataUrl: accountProfile?.value?.avatarDataUrl }),
     launcherUpdate: structuredClone(launcherUpdater.state),
     gameUpdates: structuredClone(gameUpdates),
     downloadProgressSupported: Boolean(backend.current.capabilities.streamingProgressJson),
@@ -244,12 +246,15 @@ async function refreshAccount(emit = true): Promise<AuthStatus> {
       }
     }
   }
+  await accountProfile?.select(authState.stored === true ? authState.username : undefined,
+    status.capabilities.profile ? status.binaryPath : undefined, emit);
   if (emit) emitSnapshot();
   return structuredClone(authState);
 }
 
 async function runAuth(command: 'login' | 'logout'): Promise<void> {
   ensureIdle();
+  await accountProfile.select(undefined);
   const binary = requireBackend(command);
   const id = `auth-${randomUUID()}`;
   authState = { ...authState, running: true, lastResult: undefined };
@@ -1164,6 +1169,16 @@ app.whenReady().then(async () => {
   shortcutOnly = Boolean(startupRequest.gameId) && !demoMode;
   store = new StateStore(app.getPath('userData'));
   await store.load();
+  accountProfile = new AccountProfile(app.getPath('userData'), scheduleSnapshot, dataUrl => {
+    try {
+      const picture = nativeImage.createFromDataURL(dataUrl);
+      if (picture.isEmpty()) return;
+      const { width, height } = picture.getSize();
+      if (width < 1 || height < 1 || width * height > 16_777_216) return;
+      const scale = Math.min(1, 256 / Math.max(width, height));
+      return picture.resize({ width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)), quality: 'best' }).toDataURL();
+    } catch { return undefined; }
+  });
   launcherUpdater = new LauncherUpdater(app.getVersion(), app.isPackaged ? process.env.APPIMAGE : undefined, app.getPath('userData'), scheduleSnapshot);
   await launcherUpdater.initialize();
   const dataHome = process.env.XDG_DATA_HOME && path.isAbsolute(process.env.XDG_DATA_HOME)
@@ -1242,6 +1257,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', (event) => {
+  accountProfile?.cancel();
   if (shutdownStarted || (operations.size === 0 && serviceSessions.size === 0 && !checkingGameUpdates && !launcherUpdater?.state.updating)) return;
   event.preventDefault();
   shutdownStarted = true;
