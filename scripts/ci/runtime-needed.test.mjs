@@ -22,6 +22,8 @@ test('runtime inputs trigger native CI but documentation/UI-only diffs do not', 
     'scripts/runtime-tests/winrt-json-probe.c', 'scripts/runtime-tests/media-codecs-probe.c', 'scripts/runtime-compat/playfab-save-folder.c', 'scripts/runtime-compat/build.mjs', 'scripts/build-shared-runtime.mjs', 'scripts/build-runtime-media.mjs', 'scripts/assemble-shared-runtime.mjs',
     '.github/workflows/runtime.yml', 'src/main/proton.ts']) assert.equal(runtimeInputsChanged([file]), true, file);
   assert.equal(runtimeInputsChanged(['docs/development/STATUS.md', 'src/renderer/App.tsx']), false);
+  assert.equal(runtimeInputsChanged(['assets/xodus-subscription-login.patch', 'assets/xodus-account-profile.patch', 'assets/backend-source.lock.json', 'scripts/build-backend.mjs']), false);
+  assert.equal(runtimeInputsChanged(['assets/xodus-subscription-login.patch', 'assets/xgameruntime-user-signin.patch']), true);
 });
 test('first/manual runtime builds are forced and malformed revisions are rejected', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'runtime-needed-test-'));

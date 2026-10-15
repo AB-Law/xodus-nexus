@@ -28,6 +28,7 @@ const api: LauncherApi = {
   logout: () => ipcRenderer.invoke('logout'),
   searchCatalog: (query: string, cursor?: string) => ipcRenderer.invoke('catalog-search', query, cursor),
   getFeaturedCatalog: () => ipcRenderer.invoke('catalog-featured'),
+  getAccountLibrary: (kind, cursor, refresh) => ipcRenderer.invoke('account-library', kind, cursor, refresh),
   startInstall: (request: InstallRequest) => ipcRenderer.invoke('start-install', request),
   updateInstalledGame: (id: string) => ipcRenderer.invoke('update-installed-game', id),
   cancelDownload: (id: string) => ipcRenderer.invoke('cancel-download', id),

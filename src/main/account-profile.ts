@@ -2,8 +2,10 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnTracked } from './process.js';
+import { parseSubscription } from '../shared/subscription.js';
+import type { GamePassSubscription } from '../shared/types.js';
 
-export interface XboxProfile { gamertag: string; avatarDataUrl?: string }
+export interface XboxProfile { gamertag: string; avatarDataUrl?: string; subscription?: GamePassSubscription }
 type Reader = (binary: string, signal: AbortSignal) => Promise<string>;
 const name = (value: unknown): value is string => typeof value === 'string' && Boolean(value.trim()) && value.length <= 128 && !/[\x00-\x1f\x7f]/.test(value);
 const image = (value: unknown): value is string => typeof value === 'string' && value.length < 3_000_000 && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(value);
@@ -62,7 +64,8 @@ export class AccountProfile {
         const cached = JSON.parse(await fs.readFile(this.file, 'utf8'));
         if (generation !== this.generation) return;
         if (cached.schema !== 1 || cached.accountHash !== this.hash(account) || !name(cached.gamertag)) throw Error('Different account');
-        this.value = { gamertag: cached.gamertag, avatarDataUrl: image(cached.avatarDataUrl) ? this.normalize(cached.avatarDataUrl) : undefined };
+        this.value = { gamertag: cached.gamertag, avatarDataUrl: image(cached.avatarDataUrl) ? this.normalize(cached.avatarDataUrl) : undefined,
+          subscription: parseSubscription(cached.subscription) };
         this.changed();
       } catch {
         if (generation !== this.generation) return;
@@ -79,7 +82,8 @@ export class AccountProfile {
         const result = JSON.parse(line ?? '');
         if (generation !== this.generation || controller.signal.aborted) return;
         if (result.schema !== 1 || result.account !== account || !name(result.gamertag)) throw Error('Profile identity mismatch');
-        const value = { gamertag: result.gamertag.trim(), avatarDataUrl: image(result.gamerpicDataUrl) ? this.normalize(result.gamerpicDataUrl) : undefined };
+        const value = { gamertag: result.gamertag.trim(), avatarDataUrl: image(result.gamerpicDataUrl) ? this.normalize(result.gamerpicDataUrl) : undefined,
+          subscription: parseSubscription(result.subscription) };
         this.value = value; this.changed();
         await this.write(async () => {
           if (generation !== this.generation) return;
