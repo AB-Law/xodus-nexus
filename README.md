@@ -108,8 +108,8 @@ belong in the backend/runtime, not in title-specific launcher routes.
 
 ## Compatible games
 
-These games have been manually tested. Other games may work, but have not been
-verified and may encounter compatibility issues.
+These results come from manual testing and user reports. Other games may work,
+but have not been verified and may encounter compatibility issues.
 
 | Game | Playable | Status |
 | --- | --- | --- |
@@ -120,7 +120,12 @@ verified and may encounter compatibility issues.
 | Valor Mortis | Yes | Fully playable. |
 | Forza Horizon 6 | Yes | Playable online. |
 | Palworld | Yes | Playable online. |
-| DOOM Eternal | Partial | Campaign works; Horde and BATTLEMODE unlock with an unreleased runtime fix and the campaign package installed. Paid DLC and online play unverified ([#10](https://github.com/domsvoboda/xodus-nexus/issues/10)). |
+| DOOM Eternal | Yes | Playable. |
+| The Outer Worlds 2 | Yes | Playable (manual report). |
+| Wolfenstein: The Old Blood | Yes | Playable (manual report). |
+| Wasteland Remastered | Yes | Playable (manual report). |
+| Danganronpa 2 | Yes | Playable (manual report). |
+| The Witcher 3 | No | Currently crashes on launch (manual report). |
 
 [Full compatibility list](https://github.com/domsvoboda/xodus-nexus/wiki/Compatibility)
 
