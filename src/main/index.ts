@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { AppSnapshot, AuthStatus, DownloadTask, Game, GameLaunchOptions, GameOperation, GameUpdate, InstallRequest, Settings } from '../shared/types.js';
 import { downloadFailure, safeProductId } from '../shared/utils.js';
-import { demoDownloads, demoGames, demoLaunchOptions, demoLocales, demoSnapshot } from '../shared/demo-data.js';
+import { demoAccountLibrary, demoAccountProducts, demoDownloads, demoGames, demoLaunchOptions, demoLocales, demoSnapshot } from '../shared/demo-data.js';
 import { BackendManager } from './backend.js';
 import { run, spawnTracked } from './process.js';
 import { inspectGameDirectory, StateStore } from './store.js';
@@ -30,6 +30,7 @@ import { GameShortcuts, shortcutArguments, type ShortcutDestination } from './ga
 import { ShortcutLaunch } from './shortcut-launch.js';
 import { loadShortcutIcon } from './shortcut-icon.js';
 import { AccountProfile } from './account-profile.js';
+import { AccountLibrary } from './account-library.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -51,6 +52,7 @@ let authState: AppSnapshot['auth'] = {
   note: 'Checking the Xodus system keychain for a stored Microsoft account…',
 };
 const catalog = new CatalogService();
+const accountLibrary = new AccountLibrary((ids, market) => catalog.licensedProducts(ids, market));
 const demoMode = process.env.XODUS_DEMO === '1';
 const demoCoverUrls = new Map<string, string>();
 let launcherUpdater: LauncherUpdater;
@@ -121,7 +123,7 @@ function snapshot(): AppSnapshot {
     games: structuredClone(store.games),
     downloads: structuredClone(store.downloads),
     settings: structuredClone(store.settings),
-    auth: structuredClone({ ...authState, gamertag: accountProfile?.value?.gamertag, avatarDataUrl: accountProfile?.value?.avatarDataUrl }),
+    auth: structuredClone({ ...authState, gamertag: accountProfile?.value?.gamertag, avatarDataUrl: accountProfile?.value?.avatarDataUrl, subscription: accountProfile?.value?.subscription }),
     launcherUpdate: structuredClone(launcherUpdater.state),
     gameUpdates: structuredClone(gameUpdates),
     downloadProgressSupported: Boolean(backend.current.capabilities.streamingProgressJson),
@@ -246,6 +248,8 @@ async function refreshAccount(emit = true): Promise<AuthStatus> {
       }
     }
   }
+  accountLibrary.select(authState.stored === true ? authState.username : undefined,
+    status.capabilities.library ? status.binaryPath : undefined, currentMarket());
   await accountProfile?.select(authState.stored === true ? authState.username : undefined,
     status.capabilities.profile ? status.binaryPath : undefined, emit);
   if (emit) emitSnapshot();
@@ -257,6 +261,7 @@ async function runAuth(command: 'login' | 'logout'): Promise<void> {
   await accountProfile.select(undefined);
   const binary = requireBackend(command);
   const id = `auth-${randomUUID()}`;
+  accountLibrary.reset();
   authState = { ...authState, running: true, lastResult: undefined };
   emitSnapshot();
   // The sign-in webview is WebKitGTK. Its DMA-BUF renderer shows a blank
@@ -763,6 +768,7 @@ async function loadDemoCovers(): Promise<void> {
   const ids = [...new Set([
     ...demoGames.flatMap((game) => (game.storeId ? [game.storeId] : [])),
     ...demoDownloads.flatMap((task) => (task.productId ? [task.productId] : [])),
+    ...demoAccountProducts.map(product => product.productId),
   ])];
   for (const [id, url] of await catalog.posters(ids, demoSnapshot().settings.market)) demoCoverUrls.set(id, url);
 }
@@ -793,6 +799,7 @@ function registerDemoIpc(catalogMarket: () => string): void {
   ipcMain.handle('logout', () => {});
   ipcMain.handle('catalog-search', (_event, query: string, cursor?: string) => catalog.search(query, catalogMarket(), cursor));
   ipcMain.handle('catalog-featured', () => catalog.featured(catalogMarket()));
+  ipcMain.handle('account-library', (_event, kind: 'all' | 'owned' | 'gamepass') => demoAccountLibrary(kind, demoCoverUrls));
   ipcMain.handle('start-install', () => 'demo-download');
   ipcMain.handle('update-installed-game', (_event, id: string) => id);
   ipcMain.handle('cancel-download', () => {});
@@ -875,6 +882,11 @@ function registerIpc(): void {
   ipcMain.handle('logout', () => runAuth('logout'));
   ipcMain.handle('catalog-search', (_event, query: string, cursor?: string) => {
     return catalog.search(query, catalogMarket(), cursor);
+  });
+  ipcMain.handle('account-library', (_event, kind: 'all' | 'owned' | 'gamepass', cursor?: string, refresh = false) => {
+    if (authState.running || authState.stored !== true) throw Error('Finish signing in before loading account games.');
+    accountLibrary.select(authState.username, backend.current.capabilities.library ? backend.current.binaryPath : undefined, currentMarket());
+    return accountLibrary.get(kind, cursor, refresh);
   });
   ipcMain.handle('catalog-featured', () => catalog.featured(catalogMarket()));
   ipcMain.handle('start-install', (_event, request: InstallRequest) => startInstall(request));
@@ -1257,6 +1269,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', (event) => {
+  accountLibrary.reset();
   accountProfile?.cancel();
   if (shutdownStarted || (operations.size === 0 && serviceSessions.size === 0 && !checkingGameUpdates && !launcherUpdater?.state.updating)) return;
   event.preventDefault();

@@ -7,7 +7,7 @@ it('has one sidebar queue entry below Settings', () => {
   expect(html.match(/Install Queue/g)).toHaveLength(1); expect(html.indexOf('Settings')).toBeLessThan(html.indexOf('Install Queue')); expect(html).toContain('aria-current="page"');
 });
 it('keeps backend health and launcher update notices distinct', () => {
-  const data = demoSnapshot(); data.launcherUpdate!.latestVersion = '0.2.3';
+  const data = demoSnapshot(); data.launcherUpdate!.latestVersion = '0.3.1';
   const html = renderToStaticMarkup(<TopStatus data={data} go={() => {}} />);
   expect(html).toContain('Update available'); expect(html).toContain('Xodus ready');
 });

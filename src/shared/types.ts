@@ -4,6 +4,7 @@ export interface BackendCapabilities {
   commands: string[];
   account: boolean;
   profile?: boolean;
+  library?: boolean;
   login: boolean;
   logout: boolean;
   download: boolean;
@@ -20,9 +21,16 @@ export interface AuthStatus {
   username?: string;
   gamertag?: string;
   avatarDataUrl?: string;
+  subscription?: GamePassSubscription;
   lastResult?: 'success' | 'failed';
   lastAction?: 'login' | 'logout';
   note: string;
+}
+
+export interface GamePassSubscription {
+  status: 'active' | 'none' | 'unknown';
+  productIds: string[];
+  checkedAt: string;
 }
 
 export interface BackendStatus {
@@ -223,6 +231,14 @@ export interface CatalogSearchResult {
   source: 'Microsoft Store';
 }
 
+export interface AccountLibraryPage {
+  kind: 'all' | 'owned' | 'gamepass';
+  products: (CatalogProduct & { access: 'owned' | 'gamepass' })[];
+  accessByProductId: Record<string, 'owned' | 'gamepass'>;
+  cursor?: string;
+  checkedAt: string;
+}
+
 export interface LauncherApi {
   getSnapshot(): Promise<AppSnapshot>;
   refreshBackend(): Promise<BackendStatus>;
@@ -246,6 +262,7 @@ export interface LauncherApi {
   logout(): Promise<void>;
   searchCatalog(query: string, cursor?: string): Promise<CatalogSearchResult>;
   getFeaturedCatalog(): Promise<CatalogSearchResult>;
+  getAccountLibrary(kind: AccountLibraryPage['kind'], cursor?: string, refresh?: boolean): Promise<AccountLibraryPage>;
   startInstall(request: InstallRequest): Promise<string>;
   updateInstalledGame(id: string): Promise<string>;
   cancelDownload(id: string): Promise<void>;

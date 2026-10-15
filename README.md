@@ -19,7 +19,7 @@ for supported games.
 
 ![Xodus Nexus demo](docs/screenshots/demo.gif)
 
-*Demo UI with a sample library and queue; screenshots are not compatibility claims.*
+*Version 0.3.0 demo with a sample account, owned and Game Pass library, and install queue. Screenshots are not compatibility claims.*
 
 ## Install
 
@@ -36,8 +36,8 @@ curl -fsSL https://raw.githubusercontent.com/domsvoboda/xodus-nexus/main/scripts
 Download the AppImage from [Releases](https://github.com/domsvoboda/xodus-nexus/releases), then:
 
 ```sh
-chmod +x Xodus-Nexus-0.2.3-x86_64.AppImage
-./Xodus-Nexus-0.2.3-x86_64.AppImage
+chmod +x Xodus-Nexus-0.3.0-x86_64.AppImage
+./Xodus-Nexus-0.3.0-x86_64.AppImage
 ```
 
 No Rust, Cargo or `protoc` is needed for the prebuilt backend. It requires GTK 3,
@@ -55,6 +55,17 @@ needed; neither component is bundled with the AppImage.
 With a compatible Nexus backend, the account panel shows your Xbox gamertag and
 profile picture. Profile details are cached locally; email and a default avatar
 remain available when Xbox profile data cannot be loaded.
+
+The account sidebar automatically loads verified Game Pass membership from
+Microsoft Store using the existing sign-in, without another login window.
+Unavailable or outdated subscription information does not show a badge.
+
+My Library combines installed games with account-licensed PC games, including
+Game Pass. **Owned** identifies direct or owned-bundle access, separately from
+subscription access. Filter by **Access**, **Play state**, or search by title.
+Account listings require an updated backend and a verified supported PC package;
+add-ons and unsupported packages are excluded. Installed games remain available
+when account information is unavailable. Store remains the full catalog.
 
 Launcher updates appear in the top-right corner. Install them from Settings and
 restart; the previous AppImage is kept for rollback. Backend and runtime updates

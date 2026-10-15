@@ -3,7 +3,10 @@ name: CI
 on:
   push:
     branches: [main, develop]
+    # Approval metadata promotes existing bytes; it must not rebuild the launcher.
+    paths-ignore: [.github/release-validation.json]
   pull_request:
+    paths-ignore: [.github/release-validation.json]
   workflow_dispatch:
 
 permissions:

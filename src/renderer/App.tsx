@@ -5,9 +5,10 @@ import {
   LoaderCircle, LogIn, MoreHorizontal, PackageCheck, Pause, Play, Plus, RefreshCw, Rocket, Search, Settings2,
   Store, Terminal, Trash2, X,
 } from 'lucide-react';
-import type { AppSnapshot, CatalogProduct, CatalogSearchResult, DiagnosticLog, Game, GameLaunchOptions, Page, Settings } from '../shared/types';
+import type { AccountLibraryPage, AppSnapshot, CatalogProduct, CatalogSearchResult, DiagnosticLog, Game, GameLaunchOptions, Page, Settings } from '../shared/types';
 import { estimateTimeRemaining } from '../shared/utils';
 import { runtimeDisplay } from '../shared/runtime-display';
+import { subscriptionBadge } from '../shared/subscription';
 
 const emptySnapshot: AppSnapshot = {
   backend: {
@@ -40,6 +41,10 @@ function StatusDot({ tone = 'green' }: { tone?: 'green' | 'amber' | 'red' }) {
   return <span className={`status-dot ${tone}`} />;
 }
 
+export function GameTitle({ title }: { title: string }) {
+  return <strong title={title}>{title}</strong>;
+}
+
 function NavItem({ active, icon, label, badge, onClick }: {
   active: boolean; icon: React.ReactNode; label: string; badge?: number; onClick: () => void;
 }) {
@@ -52,11 +57,17 @@ export function Sidebar({ data, page, go }: { data: AppSnapshot; page: Page; go:
   const count = data.downloads.filter(task => task.status === 'running' || task.status === 'paused').length;
   const account = data.auth.gamertag ?? data.auth.username ?? (data.auth.stored === true ? 'Microsoft account' : 'Sign in');
   return <aside className="sidebar">
-    <button className="account-summary" onClick={() => go('settings')}><AccountAvatar auth={data.auth} /><span><strong>{account}</strong><small>{data.auth.stored === true ? 'Credentials stored' : data.auth.stored === false ? 'Not signed in' : 'Status unavailable'}</small></span><ChevronRight /></button>
-    <nav><NavItem active={page === 'home'} icon={<Home />} label="Home" onClick={() => go('home')} /><NavItem active={page === 'store'} icon={<Store />} label="Store" onClick={() => go('store')} /><NavItem active={page === 'library'} icon={<Library />} label="My Library" onClick={() => go('library')} /></nav>
-    {data.games.length > 0 ? <div className="recents"><span>Most recent</span>{data.games.slice(0, 5).map(game => <button key={game.id} onClick={() => go('library')}><Cover game={game} /><strong>{game.title}</strong></button>)}</div> : null}
+    <button className="account-summary" onClick={() => go('settings')}><AccountAvatar auth={data.auth} /><span><strong>{account}</strong><AccountMembership auth={data.auth} /></span><ChevronRight /></button>
+    <nav><NavItem active={page === 'home'} icon={<Home />} label="Home" onClick={() => go('home')} /><NavItem active={page === 'library'} icon={<Library />} label="My Library" onClick={() => go('library')} /><NavItem active={page === 'store'} icon={<Store />} label="Store" onClick={() => go('store')} /></nav>
+    {data.games.length > 0 ? <div className="recents"><span>Most recent</span>{data.games.slice(0, 5).map(game => <button key={game.id} onClick={() => go('library')}><Cover game={game} /><GameTitle title={game.title} /></button>)}</div> : null}
     <div className="sidebar-bottom"><NavItem active={page === 'settings'} icon={<Cog />} label="Settings" onClick={() => go('settings')} /><button className={`queue-summary ${page === 'downloads' ? 'active' : ''}`} aria-current={page === 'downloads' ? 'page' : undefined} onClick={() => go('downloads')}><Download /><span><strong>Install Queue{count ? ` · ${count}` : ''}</strong><small>{count ? `${count} active installation${count === 1 ? '' : 's'}` : 'Manage installations'}</small></span></button></div>
   </aside>;
+}
+
+function AccountMembership({ auth }: { auth: AppSnapshot['auth'] }) {
+  const label = auth.stored === true ? subscriptionBadge(auth.subscription) : undefined;
+  if (label) return <small className="account-membership" title={`Subscription verified ${new Date(auth.subscription!.checkedAt).toLocaleString()}`}>{label}</small>;
+  return auth.stored === true ? null : <small>{auth.stored === false ? 'Not signed in' : 'Status unavailable'}</small>;
 }
 
 function AccountAvatar({ auth, large = false }: { auth: AppSnapshot['auth']; large?: boolean }) {
@@ -142,7 +153,7 @@ export function HomePage({ data, go, action }: {
     <SectionTitle title="Recently added" action="See all" onClick={() => go('library')} />
     {data.games.length > 0 ? <div className="poster-row">
       {data.games.slice(0, 6).map((game) => <button className="poster-card" key={game.id} onClick={() => go('library')}>
-        <Cover game={game} /><strong>{game.title}</strong><span>{game.publisher ?? (game.storeId ? 'Microsoft Store installation' : 'Local installation')}</span>
+        <Cover game={game} /><GameTitle title={game.title} /><span>{game.publisher ?? (game.storeId ? 'Microsoft Store installation' : 'Local installation')}</span>
       </button>)}
     </div> : <div className="empty-strip"><Gamepad2 /><div><strong>No games imported</strong><span>Your library is built only from real local manifests.</span></div><button className="secondary" onClick={() => go('library')}>Import folder</button></div>}
 
@@ -234,13 +245,13 @@ function StorePage({ data, toast, go, initialQuery }: { data: AppSnapshot; toast
   const productGrid = (products: CatalogProduct[]) => <div className="catalog-grid">{products.map((product) => {
     const installed = isInstalled(product);
     return <article className={`catalog-card ${selected?.productId === product.productId ? 'selected' : ''}`} key={product.productId}>
-      <button className="catalog-card-main" onClick={() => selectProduct(product)}>{product.posterUrl ? <img src={product.posterUrl} alt={`${product.title} cover`} /> : <div className="catalog-cover-placeholder"><Gamepad2 /></div>}<span className={`catalog-support ${product.installability}`}>{product.installability === 'supported' ? 'PC' : product.installability === 'unknown' ? '?' : 'Unsupported'}</span><div><strong>{product.title}</strong><small>{product.publisher ?? product.productId}</small><span>{product.purchasePrice ?? 'Price unavailable'}{product.includedWith ? ` · ${product.includedWith}` : ''}</span></div></button>
+      <button className="catalog-card-main" onClick={() => selectProduct(product)}>{product.posterUrl ? <img src={product.posterUrl} alt={`${product.title} cover`} /> : <div className="catalog-cover-placeholder"><Gamepad2 /></div>}<span className={`catalog-support ${product.installability}`}>{product.installability === 'supported' ? 'PC' : product.installability === 'unknown' ? '?' : 'Unsupported'}</span><div><GameTitle title={product.title} /><small>{product.publisher ?? product.productId}</small><span>{product.purchasePrice ?? 'Price unavailable'}{product.includedWith ? ` · ${product.includedWith}` : ''}</span></div></button>
       <button className="catalog-card-install" disabled={product.installability !== 'supported' || Boolean(busy) || !data.backend.capabilities.streaming || installed} onClick={() => install(product)}>{busy === product.productId ? <LoaderCircle className="spin" /> : installed ? <Check /> : <Download />}{installed ? 'Installed' : 'Install'}</button>
     </article>;
   })}</div>;
   return <main className="page store-page">
     <header className="page-header"><div><h1>Store</h1></div><span className="catalog-source"><StatusDot />Microsoft Store</span></header>
-    {!catalog ? <section className="featured-catalog"><SectionTitle title="Featured" />{featuredLoading ? <div className="catalog-loading"><LoaderCircle className="spin" /><span>Loading live Store collection…</span></div> : featured?.products.length ? <><div className="featured-rail">{featured.products.slice(0, 3).map((product) => <button className="featured-tile" key={product.productId} onClick={() => selectProduct(product)}>{product.heroUrl || product.posterUrl ? <img src={product.heroUrl ?? product.posterUrl} alt="" /> : <div className="featured-tile-placeholder"><Gamepad2 /></div>}<span className="featured-tile-copy"><strong>{product.title}</strong><small>{product.publisher ?? 'Microsoft Store'} · {product.installability === 'supported' ? 'PC package verified' : 'Check package support'}</small></span></button>)}</div><SectionTitle title="Trending PC games" />{productGrid(featured.products.slice(3))}</> : <div className="catalog-empty"><Store /><h2>Featured games are temporarily unavailable</h2><p>{featuredError ?? 'Search still works with live Microsoft Store data.'}</p></div>}</section> : null}
+    {!catalog ? <section className="featured-catalog"><SectionTitle title="Featured" />{featuredLoading ? <div className="catalog-loading"><LoaderCircle className="spin" /><span>Loading live Store collection…</span></div> : featured?.products.length ? <><div className="featured-rail">{featured.products.slice(0, 3).map((product) => <button className="featured-tile" key={product.productId} onClick={() => selectProduct(product)}>{product.heroUrl || product.posterUrl ? <img src={product.heroUrl ?? product.posterUrl} alt="" /> : <div className="featured-tile-placeholder"><Gamepad2 /></div>}<span className="featured-tile-copy"><GameTitle title={product.title} /><small>{product.publisher ?? 'Microsoft Store'} · {product.installability === 'supported' ? 'PC package verified' : 'Check package support'}</small></span></button>)}</div><SectionTitle title="Trending PC games" />{productGrid(featured.products.slice(3))}</> : <div className="catalog-empty"><Store /><h2>Featured games are temporarily unavailable</h2><p>{featuredError ?? 'Search still works with live Microsoft Store data.'}</p></div>}</section> : null}
 
     {selected ? <section className={`catalog-selection ${selected.heroUrl ? 'has-art' : ''}`} style={selected.heroUrl ? { '--catalog-hero': `url(${selected.heroUrl})` } as React.CSSProperties : undefined}>
       <div className="catalog-selection-copy"><span className="overline">SELECTED PRODUCT</span><h2>{selected.title}</h2><div className="catalog-badges">{selected.purchasePrice ? <span>{selected.purchasePrice}</span> : null}{selected.includedWith ? <span className="pass">Available with {selected.includedWith}</span> : null}<span className={selected.installability}>{selected.installability === 'supported' ? 'PC MSIXVC verified' : selected.installability}</span></div><p>{selected.description}</p><small>{selected.publisher ?? 'Publisher unavailable'} · Store ID {selected.productId}{selected.installProductId ? ` · Package ID ${selected.installProductId}` : ''}</small></div>
@@ -267,6 +278,109 @@ export function GameContextMenu({ x, y, game, options, busy, onBrowse, onSetting
     <button role="menuitem" disabled={busy || game.installState !== 'ready' || !options?.vcInstall} title={options?.vcReason} onClick={onInstallVc}><Download />Install / update VC++</button>
     <button role="menuitem" className="danger" onClick={onRemove}><Trash2 />Remove game…</button>
   </div>;
+}
+
+interface AccountGamesProps {
+  data: AppSnapshot; toast: (value: Toast) => void; selectedId?: string;
+  select?: (game: Game) => void; menu?: (game: Game, x: number, y: number) => void;
+}
+
+export function LibraryPagination({ loading, hasMore, load }: { loading: boolean; hasMore: boolean; load: () => void }) {
+  if (!loading && !hasMore) return null;
+  return <div className="library-pagination">
+    {hasMore ? <button className="secondary" disabled={loading} onClick={load}>
+      {loading ? <><LoaderCircle className="spin" />Loading games…</> : 'Load more games'}
+    </button> : <span className="library-loading" role="status"><LoaderCircle className="spin" />Loading account games…</span>}
+  </div>;
+}
+
+export function AccountGames({ data, toast, selectedId, select, menu }: AccountGamesProps) {
+  const [kind, setKind] = useState<AccountLibraryPage['kind']>('all');
+  const [playState, setPlayState] = useState<'all' | 'installed' | 'installable'>('all');
+  const [query, setQuery] = useState('');
+  const [result, setResult] = useState<AccountLibraryPage>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const [installing, setInstalling] = useState<string>();
+  const identity = `${data.auth.stored}:${data.auth.username}:${data.auth.running}:${data.settings.market}:${data.backend.binaryPath}:${kind}`;
+  const [loadedIdentity, setLoadedIdentity] = useState(identity);
+  const available = data.auth.stored === true && !data.auth.running && data.backend.capabilities.library;
+  useEffect(() => {
+    let cancelled = false;
+    setResult(undefined); setLoadedIdentity(identity); setError(undefined);
+    if (!available) { setBusy(false); return; }
+    setBusy(true);
+    window.launcher.getAccountLibrary(kind).then(value => { if (!cancelled) setResult(value); })
+      .catch(error => { if (!cancelled) setError(errorMessage(error)); })
+      .finally(() => { if (!cancelled) setBusy(false); });
+    return () => { cancelled = true; };
+  }, [identity, available]);
+  // Never display the previous account's cards while the identity effect settles.
+  const visible = loadedIdentity === identity ? result : undefined;
+  const installed = new Set(data.games.flatMap(game => game.storeId?.toUpperCase() ?? []));
+  const queued = new Set(data.downloads.filter(task => ['running', 'queued', 'paused'].includes(task.status)).map(task => task.productId.toUpperCase()));
+  const products = (visible?.products ?? []).filter(product => !installed.has(product.productId) && !installed.has(product.installProductId ?? ''));
+  const access = (game: Game) => game.storeId ? visible?.accessByProductId[game.storeId.toUpperCase()] : undefined;
+  const rows = [
+    ...data.games.filter(game => playState !== 'installable' && (kind === 'all' || access(game) === kind))
+      .map(game => ({ id: game.id, title: game.title, game, product: undefined })),
+    ...products.filter(() => playState !== 'installed').map(product => ({ id: product.productId, title: product.title, product, game: undefined })),
+  ].filter(row => row.title.toLocaleLowerCase().includes(query.toLocaleLowerCase())).sort((a,b) => a.title.localeCompare(b.title));
+  async function load(refresh = false) {
+    setBusy(true); setError(undefined);
+    try {
+      const next = await window.launcher.getAccountLibrary(kind, refresh ? undefined : visible?.cursor, refresh);
+      // This instance is remounted on identity changes, so pending callbacks
+      // cannot publish another account's products into the active component.
+      setResult(old => ({ ...next, products: refresh ? next.products : [...(old?.products ?? []), ...next.products.filter(p => !old?.products.some(old => old.productId === p.productId))] }));
+    } catch (error) { setError(errorMessage(error)); }
+    finally { setBusy(false); }
+  }
+  async function install(product: CatalogProduct) {
+    setInstalling(product.productId);
+    try {
+      const folder = product.title.normalize('NFKD').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 80) || product.productId;
+      await window.launcher.startInstall({ productId: product.installProductId ?? product.productId, title: product.title,
+        destination: `${data.settings.installRoot.replace(/\/+$/, '')}/${folder}` });
+      toast({ kind: 'success', message: `${product.title} added to Install Queue.` });
+    } catch (error) { toast({ kind: 'error', message: errorMessage(error) }); }
+    finally { setInstalling(undefined); }
+  }
+  return <section className="account-games">
+    <div className="library-filters">
+      <label>Access<select aria-label="Access" value={kind} onChange={event => setKind(event.target.value as AccountLibraryPage['kind'])}><option value="all">All games</option><option value="owned">Owned</option><option value="gamepass">In Game Pass</option></select></label>
+      <label>Play state<select aria-label="Play state" value={playState} onChange={event => setPlayState(event.target.value as typeof playState)}><option value="all">All states</option><option value="installed">Installed</option><option value="installable">Ready to install</option></select></label>
+      <label className="library-filter-search">Search<input aria-label="Search library" placeholder="Search your games" value={query} onChange={event => setQuery(event.target.value)} /></label>
+      <button className="secondary" disabled={!available || busy} onClick={() => load(true)}><RefreshCw />Refresh</button>
+    </div>
+    {!available ? <p>{data.auth.stored !== true ? 'Sign in to load your account games. Installed games remain available.' : !data.backend.capabilities.library ? 'Update the Xodus backend to load account licenses.' : 'Wait for sign-in to finish.'}</p> : null}
+      {error ? <div className="alert amber"><CircleAlert /><span>{error}</span></div> : null}
+      <div className="catalog-grid">{rows.map(row => {
+        if (row.game) {
+          const game = row.game;
+          const license = access(game);
+          return <div className="library-card-wrap" key={game.id} onContextMenu={event => { event.preventDefault(); menu?.(game, event.clientX, event.clientY); }}>
+            <button className={`library-card ${selectedId === game.id ? 'selected' : ''}`} onClick={() => select?.(game)} onKeyDown={event => { if (event.key === 'F10' && event.shiftKey) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); menu?.(game, rect.left + 16, rect.top + 16); } }}><Cover game={game} /><GameTitle title={game.title} /><span>{game.publisher ?? 'Local installation'}</span><small className="library-license">{license === 'owned' ? 'Owned · ' : license === 'gamepass' ? 'Game Pass · ' : ''}Installed</small>{data.gameUpdates?.[game.id]?.available ? <b className="game-update-badge">Update available</b> : null}</button>
+            <button className="library-card-menu-button" title={`Options for ${game.title}`} onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); menu?.(game, rect.right, rect.bottom); }}><MoreHorizontal /></button>
+          </div>;
+        }
+        const product = row.product!;
+        const present = installed.has(product.productId) || installed.has(product.installProductId ?? '');
+        const downloading = queued.has(product.productId) || queued.has(product.installProductId ?? '');
+        return <article className="catalog-card" key={product.productId}>
+          <div className="catalog-card-main">{product.posterUrl ? <img src={product.posterUrl} alt={`${product.title} cover`} loading="lazy" /> : <div className="catalog-cover-placeholder"><Gamepad2 /></div>}<span className="catalog-support supported">PC</span><div><GameTitle title={product.title} /><small>{product.publisher ?? product.productId}</small><span>{product.access === 'owned' ? 'Owned' : 'Game Pass'}</span></div></div>
+          <button className="catalog-card-install" disabled={present || downloading || Boolean(installing) || !data.backend.capabilities.streaming} onClick={() => install(product)}>{present ? <Check /> : <Download />}{present ? 'Installed' : downloading ? 'In Install Queue' : installing === product.productId ? 'Preparing…' : 'Install'}</button>
+        </article>;
+      })}</div>
+      {!busy && !error && !rows.length ? <p>{visible?.cursor ? 'No games match these filters in the loaded results. Load more to continue.' : 'No games match these filters.'}</p> : null}
+      <LibraryPagination loading={busy} hasMore={Boolean(visible?.cursor)} load={() => { void load(); }} />
+      <p className="account-library-note">Only licensed games with a verified, supported PC package are listed. Add-ons and unsupported packages are excluded. Installation checks your license again.</p>
+  </section>;
+}
+
+function AccountGamesForUser(props: AccountGamesProps) {
+  const { data } = props;
+  return <AccountGames key={`${data.auth.username}:${data.auth.stored}:${data.auth.running}:${data.settings.market}:${data.backend.binaryPath}`} {...props} />;
 }
 
 export function LibraryPage({ data, toast }: { data: AppSnapshot; toast: (value: Toast) => void }) {
@@ -376,9 +490,9 @@ export function LibraryPage({ data, toast }: { data: AppSnapshot; toast: (value:
   const menuGame = data.games.find((game) => game.id === menu?.id);
   const modalGame = data.games.find((game) => game.id === dialogGame?.id);
   return <main className="page library-page">
-    <header className="page-header"><div><h1>My Library</h1><p>Only games verified from local Xbox manifests are shown.</p></div><div className="button-row"><button className="secondary" disabled={data.auth.stored !== true || gameBusy || Object.values(data.gameUpdates ?? {}).some(update => update.checking)} onClick={() => checkUpdates()}><RefreshCw />Check game updates</button><button className="secondary" onClick={importGame}><Plus />Import game</button></div></header>
-    {data.games.length === 0 ? <div className="empty-state"><div><Library /></div><h2>Your library is empty</h2><p>Select a folder containing MicrosoftGame.config or appxmanifest.xml.</p><button className="primary" onClick={importGame}>Import a game</button></div> : <div className="library-layout">
-      <div className="library-grid">{data.games.map((game) => <div className="library-card-wrap" key={game.id} onContextMenu={(event) => { event.preventDefault(); openMenu(game, event.clientX, event.clientY); }}><button className={`library-card ${selected?.id === game.id ? 'selected' : ''}`} onClick={() => setSelectedId(game.id)} onKeyDown={(event) => { if (event.key === 'F10' && event.shiftKey) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); openMenu(game, rect.left + 16, rect.top + 16); } }}><Cover game={game} /><strong>{game.title}</strong><span>{game.publisher ?? 'Local installation'}</span>{data.gameUpdates?.[game.id]?.available ? <b className="game-update-badge">Update available</b> : null}</button><button className="library-card-menu-button" title={`Options for ${game.title}`} onClick={(event) => { event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); openMenu(game, rect.right, rect.bottom); }}><MoreHorizontal /></button></div>)}</div>
+    <header className="page-header"><div><h1>My Library</h1><p>Your owned games, Game Pass games and local installations.</p></div><div className="button-row"><button className="secondary" disabled={data.auth.stored !== true || gameBusy || Object.values(data.gameUpdates ?? {}).some(update => update.checking)} onClick={() => checkUpdates()}><RefreshCw />Check game updates</button><button className="secondary" onClick={importGame}><Plus />Import game</button></div></header>
+    <div className={`library-layout${data.games.length ? '' : ' account-only'}`}>
+      <AccountGamesForUser data={data} toast={toast} selectedId={selected?.id} select={game => setSelectedId(game.id)} menu={openMenu} />
       {selected ? <aside className="game-detail">
         <div className="detail-art"><Cover game={selected} /><div className="detail-shade" /><div><StatePill game={selected} /><h2>{selected.title}</h2><span>{selected.publisher ?? 'Publisher not provided'}</span></div></div>
         {selected.installMessage ? <div className="alert amber"><CircleAlert /><span>{selected.installMessage}</span></div> : null}
@@ -392,7 +506,7 @@ export function LibraryPage({ data, toast }: { data: AppSnapshot; toast: (value:
         </div>
         {selectedOperation ? <div className={`game-operation ${selectedOperation.status}`}><div><strong>{selectedOperation.kind === 'prerequisite' ? selectedOperation.status === 'failed' ? 'Prerequisite failed' : selectedOperation.status === 'complete' ? 'Prerequisite ready' : 'Installing prerequisite' : selectedOperation.status === 'failed' ? 'Launch failed' : selectedOperation.status === 'complete' ? 'Game exited' : 'Launching game'}</strong><span>{selectedOperation.phase}</span></div>{selectedOperation.log.length > 0 ? <pre>{selectedOperation.log.slice(-12).join('\n')}</pre> : null}{selectedOperation.logPath ? <button className="secondary" onClick={() => openDiagnosticLog(selectedOperation.id)}><FolderOpen />Open diagnostic log</button> : null}</div> : null}
       </aside> : null}
-    </div>}
+    </div>
     {menu && menuGame ? <GameContextMenu x={menu.x} y={menu.y} game={menuGame} options={launchOptions} busy={gameBusy}
       onBrowse={() => { setMenu(undefined); void window.launcher.openPath(menuGame.path).catch((error) => toast({ kind: 'error', message: errorMessage(error) })); }}
       onSettings={() => openDialog(menuGame, 'settings')}
@@ -631,7 +745,7 @@ export default function App() {
     <Sidebar data={data} page={page} go={setPage} />
 
     <section className="content-shell">
-      <header className="topbar"><div className="search-box"><Search /><input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && search.trim().length >= 2) { setSubmittedSearch(search.trim()); setPage('store'); } }} placeholder="Search games, add-ons and your library" />{search ? <button onClick={() => setSearch('')}><X /></button> : null}{searchResults.length > 0 && page !== 'store' ? <div className="search-results">{searchResults.map((game) => <button key={game.id} onClick={() => { setSearch(''); setPage('library'); }}><Cover game={game} /><span><strong>{game.title}</strong><small>{game.storeId ?? game.path}</small></span></button>)}</div> : null}</div><TopStatus data={data} go={setPage} /></header>
+      <header className="topbar"><div className="search-box"><Search /><input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && search.trim().length >= 2) { setSubmittedSearch(search.trim()); setPage('store'); } }} placeholder="Search games, add-ons and your library" />{search ? <button onClick={() => setSearch('')}><X /></button> : null}{searchResults.length > 0 && page !== 'store' ? <div className="search-results">{searchResults.map((game) => <button key={game.id} onClick={() => { setSearch(''); setPage('library'); }}><Cover game={game} /><span><GameTitle title={game.title} /><small>{game.storeId ?? game.path}</small></span></button>)}</div> : null}</div><TopStatus data={data} go={setPage} /></header>
       <div className="page-scroll">{page === 'home' ? <HomePage data={data} go={setPage} action={action} /> : null}{page === 'store' ? <StorePage data={data} toast={setToast} go={setPage} initialQuery={submittedSearch} /> : null}{page === 'library' ? <LibraryPage data={data} toast={setToast} /> : null}{page === 'downloads' ? <DownloadsPage data={data} toast={setToast} /> : null}{page === 'settings' ? <SettingsPage data={data} toast={setToast} /> : null}</div>
     </section>
     {toast ? <div className={`toast ${toast.kind}`}>{toast.kind === 'success' ? <Check /> : toast.kind === 'error' ? <CircleAlert /> : <Terminal />}<span>{toast.message}</span><button onClick={() => setToast(undefined)}><X /></button></div> : null}
