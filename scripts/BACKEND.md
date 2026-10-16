@@ -28,7 +28,6 @@ package authentication/URLs, then restores matching checkpoints.
 
 The launcher probes `streaming --help` before enabling these optional features.
 Older backends can still download without numeric progress or pause controls.
-No terminal emulator, PTY wrapper or host `script`/`util-linux` dependency is used.
 
 `assets/backend-source.lock.json` pins the upstream Git commit, Cargo.lock hash,
 Rust toolchain, backend package version and ordered SHA-256 patch set. Launcher
@@ -103,10 +102,8 @@ the window and child process. Protocol messages are not added to UI logs.
 
 Backend 0.2.3 requires launcher 0.3.2 or newer. The source keeps upstream's native
 WebKit feature for developers, but public packages use one Electron-hosted path.
-Manual sign-in and profile/Game Pass loading were verified on the local Linux
-host and in a SteamOS VM without system dependency installation. This does not
-claim physical Steam Deck, gameplay or all-distribution validation. Use separate
-profiles for additional tests and never replace a validated release artifact.
+Use separate profiles for development and never replace a validated release
+artifact. Game compatibility is listed in the compatibility guide.
 
 The separate `xodus-keyring-activation.patch` handles KDE systems
 that advertise their installed Secret Service under `org.kde.secretservicecompat`
