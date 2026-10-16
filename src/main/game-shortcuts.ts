@@ -38,6 +38,33 @@ export function shortcutArguments(argv: string[]): { gameId?: string; profile?: 
   return result;
 }
 
+/** Chromium reorders switches in second-instance argv. Send the parsed request
+ * through Electron's JSON handoff instead of parsing that transformed argv. */
+export function shortcutInstanceData(request: ReturnType<typeof shortcutArguments>, invalid = false): Record<string, unknown> {
+  return { nexusShortcut: invalid ? { schema: 1, invalid: true } : { schema: 1, request } };
+}
+
+export function shortcutInstanceRequest(data: unknown, currentProfile: string): ReturnType<typeof shortcutArguments> {
+  const object = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
+  if (!object(data) || !object(data.nexusShortcut)) throw Error('Missing Nexus shortcut handoff. Restart Nexus using the updated launcher.');
+  const message = data.nexusShortcut;
+  if (message.schema !== 1 || message.invalid !== undefined || !object(message.request)) throw Error('Invalid Nexus shortcut request.');
+  const request = message.request;
+  if (Object.keys(request).some(key => key !== 'profile' && key !== 'gameId')) throw Error('Invalid Nexus shortcut request.');
+  const argv: string[] = [];
+  if (Object.hasOwn(request, 'profile')) {
+    if (typeof request.profile !== 'string') throw Error('Invalid Nexus profile path.');
+    argv.push('--nexus-profile', request.profile);
+  }
+  if (Object.hasOwn(request, 'gameId')) {
+    if (typeof request.gameId !== 'string') throw Error('Invalid game shortcut ID.');
+    argv.push('--launch-game', request.gameId);
+  }
+  const result = shortcutArguments(argv);
+  if (result.profile && path.resolve(result.profile) !== path.resolve(currentProfile)) throw Error('Shortcut belongs to a different Nexus profile.');
+  return result;
+}
+
 interface Locations { userData: string; desktop: string; applications: string; launcher?: string; icon: string }
 export class GameShortcuts {
   private entry?: string;

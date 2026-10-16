@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fix desktop game shortcuts reporting an invalid profile path when Nexus is already running.
 - Show an installation package picker for Store offers with multiple downloads instead of waiting for terminal input. Requires the updated Nexus backend.
 - Name game shortcut files after the game, with safe handling of duplicate titles.
 - Add per-game MangoHud, gamescope and custom command-prefix settings.
