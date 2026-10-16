@@ -155,7 +155,77 @@ static void helpers( void )
     free(package);
 }
 
-static void actual_runtime( void )
+static void chunk_order( IXPackageImpl *package, const char *id, HRESULT installed )
+{
+    XPackageChunkSelector selectors[4] = {{0}}, before[4], bad = {0};
+    selectors[0].type = XPackageChunkSelectorType_Chunk; selectors[0].chunkId = 123;
+    selectors[1].type = XPackageChunkSelectorType_Language; selectors[1].language = "en-US;fr-FR";
+    selectors[2].type = XPackageChunkSelectorType_Tag; selectors[2].tag = "Campaign";
+    selectors[3].type = XPackageChunkSelectorType_Feature; selectors[3].feature = "Campaign";
+    memcpy(before, selectors, sizeof(before));
+    CHECK("chunks-installed-selection", IXPackageImpl_XPackageChangeChunkInstallOrder(package, id, 4, selectors) == installed);
+    CHECK("chunks-zero-selectors", IXPackageImpl_XPackageChangeChunkInstallOrder(package, id, 0, NULL) == installed);
+    CHECK("chunks-no-input-mutation", !memcmp(before, selectors, sizeof(before)));
+    CHECK("chunks-null-array", IXPackageImpl_XPackageChangeChunkInstallOrder(package, id, 1, NULL) == E_INVALIDARG);
+    CHECK("chunks-null-id", IXPackageImpl_XPackageChangeChunkInstallOrder(package, NULL, 4, selectors) == E_INVALIDARG);
+    CHECK("chunks-empty-id", IXPackageImpl_XPackageChangeChunkInstallOrder(package, "", 3, selectors) == E_INVALIDARG);
+    CHECK("chunks-malformed-id", IXPackageImpl_XPackageChangeChunkInstallOrder(package, "not-a-package", 4, selectors) == E_INVALIDARG);
+    CHECK("chunks-nonhex-id", IXPackageImpl_XPackageChangeChunkInstallOrder(package, "z0000001111122223333444444444444", 4, selectors) == E_INVALIDARG);
+    CHECK("chunks-unknown-id", IXPackageImpl_XPackageChangeChunkInstallOrder(package, "00000099111122223333444444444444", 4, selectors) == E_GAMEPACKAGE_NO_PACKAGE_IDENTIFIER);
+    CHECK("chunks-unrelated-id", IXPackageImpl_XPackageChangeChunkInstallOrder(package, "00000006111122223333444444444444", 4, selectors) == E_GAMEPACKAGE_NO_PACKAGE_IDENTIFIER);
+    bad.type = (XPackageChunkSelectorType)99;
+    CHECK("chunks-invalid-kind", IXPackageImpl_XPackageChangeChunkInstallOrder(package, id, 1, &bad) == E_INVALIDARG);
+    bad.type = XPackageChunkSelectorType_Tag;
+    CHECK("chunks-null-tag", IXPackageImpl_XPackageChangeChunkInstallOrder(package, id, 1, &bad) == E_INVALIDARG);
+    bad.tag = "";
+    CHECK("chunks-empty-tag", IXPackageImpl_XPackageChangeChunkInstallOrder(package, id, 1, &bad) == E_INVALIDARG);
+    bad.type = XPackageChunkSelectorType_Feature; bad.feature = NULL;
+    CHECK("chunks-null-feature", IXPackageImpl_XPackageChangeChunkInstallOrder(package, id, 1, &bad) == E_INVALIDARG);
+    bad.type = XPackageChunkSelectorType_Language;
+    CHECK("chunks-null-language", IXPackageImpl_XPackageChangeChunkInstallOrder(package, id, 1, &bad) == E_INVALIDARG);
+}
+
+static void current_child( const WCHAR *executable, BOOL missing )
+{
+    STARTUPINFOW startup = {0};
+    PROCESS_INFORMATION process = {0};
+    WCHAR command[MAX_PATH + 64];
+    DWORD code = 99, wait;
+    startup.cb = sizeof(startup);
+    swprintf(command, ARRAY_SIZE(command), L"\"%ls\" --chunks-%ls", executable, missing ? L"missing" : L"current");
+    CHECK("chunks-child-start", CreateProcessW(executable, command, NULL, NULL, FALSE, 0, NULL, NULL, &startup, &process));
+    if (!process.hProcess) return;
+    wait = WaitForSingleObject(process.hProcess, 15000);
+    CHECK("chunks-child-finished", wait == WAIT_OBJECT_0);
+    if (wait != WAIT_OBJECT_0) TerminateProcess(process.hProcess, 77);
+    GetExitCodeProcess(process.hProcess, &code);
+    CHECK("chunks-child-pass", code == 0);
+    CloseHandle(process.hProcess); CloseHandle(process.hThread);
+}
+
+static void current_fixtures( void )
+{
+    WCHAR root[MAX_PATH], nested[MAX_PATH], executable[MAX_PATH], original[MAX_PATH], file[MAX_PATH];
+    fixture(L"current-base", "Nexus.Base", "B00000000001", NULL, NULL, 9, TRUE);
+    content_join(folder, L"current-base", root);
+    content_join(root, L"Binaries", nested); CreateDirectoryW(nested, NULL);
+    content_join(nested, L"chunks.exe", executable);
+    CHECK("chunks-self-path", GetModuleFileNameW(NULL, original, MAX_PATH));
+    CHECK("chunks-self-copy", CopyFileW(original, executable, TRUE));
+    current_child(executable, FALSE);
+    content_join(root, L"logo.png", file); DeleteFileW(file);
+    current_child(executable, TRUE);
+    write_text(file, "payload");
+    content_join(root, L"layout_00000009-1111-2222-3333-444444444444.xml", file);
+    write_text(file, "<invalid/>");
+    current_child(executable, TRUE);
+    fixture(L"current-base", "Nexus.Base", "B00000000001", NULL, NULL, 9, TRUE);
+    content_join(root, L"appxmanifest.xml", file);
+    write_text(file, "<Package><Identity Name=\"Wrong\"/></Package>");
+    current_child(executable, TRUE);
+}
+
+static void actual_runtime( const char *child )
 {
     struct options { UINT32 tag; BOOL is_inline; const char *config; } options = {1, TRUE, main_config};
     HMODULE module = LoadLibraryW(L"xgameruntime.dll");
@@ -173,6 +243,25 @@ static void actual_runtime( void )
     CHECK("runtime-initialize", initialize(0, 0, 0, &options) == S_OK);
     CHECK("runtime-query", query(&CLSID_XPackageImpl, &IID_IXPackageImpl, (void **)&package) == S_OK && package);
     if (!package) return;
+    if (child)
+    {
+        chunk_order(package, "00000009111122223333444444444444", !strcmp(child, "--chunks-current") ? S_OK : E_GAMEPACKAGE_NO_PACKAGE_IDENTIFIER);
+        IXPackageImpl_Release(package);
+        return;
+    }
+    chunk_order(package, "00000001111122223333444444444444", S_OK);
+    {
+        WCHAR root[MAX_PATH], file[MAX_PATH];
+        XPackageChunkSelector selector = {0};
+        selector.type = XPackageChunkSelectorType_Chunk;
+        CHECK("chunks-related-installed", IXPackageImpl_XPackageChangeChunkInstallOrder(package, "00000004111122223333444444444444", 1, &selector) == S_OK);
+        selector.chunkId = 0xffffffff;
+        CHECK("chunks-unscheduled-ignored", IXPackageImpl_XPackageChangeChunkInstallOrder(package, "00000001111122223333444444444444", 1, &selector) == S_OK);
+        content_join(folder, L"own-one", root); content_join(root, L"logo.png", file);
+        DeleteFileW(file);
+        CHECK("chunks-content-missing-file", IXPackageImpl_XPackageChangeChunkInstallOrder(package, "00000001111122223333444444444444", 1, &selector) == E_GAMEPACKAGE_NO_PACKAGE_IDENTIFIER);
+        write_text(file, "payload");
+    }
     expected = 2; visits = 0; stop_early = FALSE;
     CHECK("runtime-enumerate", IXPackageImpl_XPackageEnumeratePackages(package, XPackageKind_Content, XPackageEnumerationScope_ThisOnly, NULL, visit) == S_OK);
     CHECK("runtime-content-count", visits == 2);
@@ -195,14 +284,21 @@ static void actual_runtime( void )
     }
 }
 
-int main( void )
+int main( int argc, char **argv )
 {
     WCHAR temporary[MAX_PATH];
+    if (argc == 2 && (!strcmp(argv[1], "--chunks-current") || !strcmp(argv[1], "--chunks-missing")))
+    {
+        actual_runtime(argv[1]);
+        printf("CHUNK CHILD CHECKS %u FAILURES %u\n", checks, failures);
+        return failures ? 1 : 0;
+    }
     GetTempPathW(MAX_PATH, temporary);
     swprintf(folder, MAX_PATH, L"%lsnexus-content-%lu-%lu", temporary, GetCurrentProcessId(), GetTickCount());
     CHECK("fixture-directory", CreateDirectoryW(folder, NULL));
     helpers();
-    actual_runtime();
+    actual_runtime(NULL);
+    current_fixtures();
     printf("CHECKS %u FAILURES %u\n", checks, failures);
     return failures ? 1 : 0;
 }

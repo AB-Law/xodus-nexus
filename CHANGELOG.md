@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Fix games remaining active after a normal exit.
+- Fix games exiting during speech initialization when using the bundled runtime.
+- Support chunk-order requests for verified installed packages in the runtime.
+
 ## 0.3.4
 
 - Fix games failing to launch with a WINEPREFIX error when no custom launch options or overlays are enabled.

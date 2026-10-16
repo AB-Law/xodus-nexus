@@ -71,7 +71,10 @@ but have not been verified and may encounter compatibility issues.
 | --- | --- | --- |
 | Gears of War: E-Day | Yes | Playable online. |
 | Deep Rock Galactic | Yes | Playable online. |
+| Minecraft Dungeons | Yes | Playable online with the unreleased launcher fix. |
 | Minecraft Dungeons II | Yes | Playable online. |
+| Minecraft for Windows | Yes | Playable online. |
+| Minecraft Launcher | Yes | Sign-in, Java download and startup work with the unreleased launcher fix; Java online unverified. |
 | No Man's Sky | Yes | Playable online. |
 | Valor Mortis | Yes | Fully playable. |
 | Forza Horizon 6 | Yes | Playable online. |
@@ -83,6 +86,9 @@ but have not been verified and may encounter compatibility issues.
 | Wolfenstein: The Old Blood | Yes | Playable. |
 | Wasteland Remastered | Yes | Playable. |
 | Danganronpa 2 | Yes | Playable. |
+| Neon Abyss 2 | Yes | Playable. |
+| Hollow Knight: Voidheart Edition | Yes | Playable. |
+| Sea of Thieves | Yes | Playable online; normal exit requires the unreleased runtime fix. |
 | The Witcher 3 | No | Currently crashes on launch. |
 
 [Full compatibility list](https://github.com/domsvoboda/xodus-nexus/wiki/Compatibility)

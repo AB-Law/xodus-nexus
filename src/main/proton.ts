@@ -364,6 +364,9 @@ export async function prepareProtonRunner(
     "export WINEARCH='win64'",
     `export WINEDLLPATH=${shellQuote(wineDllPath)}`,
     `export LD_LIBRARY_PATH=${shellQuote(protonLibraries)}`,
+    // Match Proton's environment: Piper initializes eSpeak even before a
+    // voice is loaded, and missing data can terminate the whole game process.
+    `export ESPEAK_DATA_PATH=${shellQuote(path.join(files, 'share'))}`,
     `export GST_PLUGIN_SYSTEM_PATH_1_0=${shellQuote(gstPlugins)}`,
     "export GST_PLUGIN_PATH_1_0=''",
     `export WINE_GST_REGISTRY_DIR=${shellQuote(path.join(compatibilityDataPath, 'gstreamer-1.0'))}`,
