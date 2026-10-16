@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Name game shortcut files after the game, with safe handling of duplicate titles.
 - Add per-game MangoHud, gamescope and custom command-prefix settings.
 - Align the game details with the library grid and give installed and installable cards matching heights.
 - Use Store covers and wide detail artwork instead of small package icons, with a local-image fallback.
