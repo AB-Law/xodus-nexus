@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { AccountGames, Cover, GameLaunchToolFields, GameTitle, LibraryPagination, Sidebar, type LibraryFilters } from './App';
+import { AccountGames, Cover, GameLaunchToolFields, GameTitle, HomePage, LibraryPagination, Sidebar, type LibraryFilters } from './App';
 import { defaultLaunchTools } from '../shared/launch-tools';
 import { demoSnapshot } from '../shared/demo-data';
 
@@ -41,6 +41,18 @@ it('uses Store box art instead of a package logo and wide artwork for details',(
   expect(renderToStaticMarkup(<Cover game={game} />)).toContain('src="https://store-images.s-microsoft.com/box"');
   expect(renderToStaticMarkup(<Cover game={game} variant="hero" />)).toContain('src="https://store-images.s-microsoft.com/hero"');
   expect(renderToStaticMarkup(<Cover game={{...game, coverUrl:undefined, heroUrl:undefined}} />)).toContain('cover-local');
+});
+
+it('uses wide Store art for the Home banner and never stretches a small package logo',()=>{
+  const data=demoSnapshot();
+  data.games=[{...data.games[0],coverDataUrl:'data:image/png;base64,SMALLLOGO',coverUrl:'https://store-images.s-microsoft.com/box',heroUrl:'https://store-images.s-microsoft.com/hero'}];
+  const banner=()=>{const html=renderToStaticMarkup(<HomePage data={data} go={()=>{}} action={()=>{}} />);return html.slice(html.indexOf('<section class="spotlight'),html.indexOf('<div class="spotlight-copy"'));};
+  expect(banner()).toContain('url(https://store-images.s-microsoft.com/hero)');
+  expect(banner()).not.toContain('SMALLLOGO');
+  data.games[0].heroUrl=undefined;
+  expect(banner()).toContain('url(https://store-images.s-microsoft.com/box)');
+  data.games[0].coverUrl=undefined;
+  expect(banner()).not.toContain('--spotlight-art');
 });
 
 it('gives installed cards a separate status footer and an accessible compact refresh control',()=>{

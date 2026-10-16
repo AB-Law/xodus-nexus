@@ -133,7 +133,7 @@ export function HomePage({ data, go, action }: {
   const active = data.downloads.find((task) => task.status === 'running' || task.status === 'paused');
   const canPlay = Boolean(featured?.installState === 'ready' && data.backend.capabilities.run && (data.settings.winePath || data.runtime.winePath));
   const launchOptions = useGameLaunchOptions(featured, data);
-  const spotlightArt = featured?.coverDataUrl ?? featured?.coverUrl;
+  const spotlightArt = featured?.heroUrl ?? featured?.coverUrl;
 
   return <main className="page home-page">
     <section className={`spotlight ${spotlightArt ? 'has-art' : ''}`} style={spotlightArt ? { '--spotlight-art': `url(${spotlightArt})` } as React.CSSProperties : undefined}>

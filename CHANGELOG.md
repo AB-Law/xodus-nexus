@@ -5,6 +5,7 @@
 - Add per-game MangoHud, gamescope and custom command-prefix settings.
 - Align the game details with the library grid and give installed and installable cards matching heights.
 - Use Store covers and wide detail artwork instead of small package icons, with a local-image fallback.
+- Use wide Store artwork for the Home banner instead of stretching package icons.
 - Make the library refresh control compact and aligned with the filters.
 
 ## 0.3.2
