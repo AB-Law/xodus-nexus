@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { externalFontEnvironment } from './launcher-fonts.js';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { constants, promises as fs } from 'node:fs';
 import { createConnection, createServer, type Server, type Socket } from 'node:net';
@@ -125,7 +126,7 @@ export async function startXodusService(
   await fs.chmod(runtimeDir, 0o700);
   const socketPath = path.join(runtimeDir, 'xodus.sock');
   const child = spawn(binary, [], {
-    env: { ...process.env, XDG_RUNTIME_DIR: runtimeDir, XODUS_LOG: 'error' },
+    env: { ...externalFontEnvironment(), XDG_RUNTIME_DIR: runtimeDir, XODUS_LOG: 'error' },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   let stopped = false;

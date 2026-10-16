@@ -74,11 +74,12 @@ but have not been verified and may encounter compatibility issues.
 | Palworld | Yes | Playable online. |
 | DOOM Eternal | Yes | Playable. |
 | DOOM: The Dark Ages | Yes | Playable (user report). |
-| The Outer Worlds 2 | Yes | Playable (manual report). |
-| Wolfenstein: The Old Blood | Yes | Playable (manual report). |
-| Wasteland Remastered | Yes | Playable (manual report). |
-| Danganronpa 2 | Yes | Playable (manual report). |
-| The Witcher 3 | No | Currently crashes on launch (manual report). |
+| Fallout 76 | Yes | Playable online. |
+| The Outer Worlds 2 | Yes | Playable. |
+| Wolfenstein: The Old Blood | Yes | Playable. |
+| Wasteland Remastered | Yes | Playable. |
+| Danganronpa 2 | Yes | Playable. |
+| The Witcher 3 | No | Currently crashes on launch. |
 
 [Full compatibility list](https://github.com/domsvoboda/xodus-nexus/wiki/Compatibility)
 
