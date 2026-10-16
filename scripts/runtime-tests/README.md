@@ -59,6 +59,11 @@ Never copy a candidate DLL into an active or production prefix.
   scopes, callback stop/reentrancy, deduplication and actual runtime COM enumeration.
   Store-ID lookup checks exact identifiers, ambiguity, unknown/unrelated packages,
   missing current-package metadata and buffer boundaries through the real Store ABI.
+  Chunk reordering checks installed current/related packages, nested executable
+  paths, missing files, invalid layouts/identity, unknown packages and selector
+  validation through the real package ABI. Already-installed chunks need no
+  reordering; empty package identifiers are rejected, not treated as the current
+  package. These checks do not establish a title's startup compatibility.
   Uses only synthetic files in a disposable prefix, without accounts or licensing.
   File presence checks are not a full package-integrity or ownership verification.
 - `playfab-session-probe.c`: pinned threading ABI checks, asynchronous test-only

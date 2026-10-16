@@ -195,12 +195,88 @@ static void race(void)
         IXThreadingImpl_XTaskQueueCloseHandle(api, s.queue);
     }
 }
+/* A bounded regression for the documented Terminate + Dispatch(INFINITE)
+ * drain loop. Exit the disposable probe, never terminate a dispatcher thread. */
+static DWORD WINAPI drain_deadline(void *context)
+{
+    if (WaitForSingleObject(context, 8000) != WAIT_OBJECT_0)
+    {
+        puts("FAIL terminated-infinite-dispatch-hung");
+        fflush(stdout);
+        ExitProcess(77);
+    }
+    return 0;
+}
+static DWORD WINAPI release_later(void *context)
+{
+    Sleep(150);
+    SetEvent(context);
+    return 0;
+}
+static void WINAPI blocking_finish(void *context)
+{
+    struct state *s = context;
+    SetEvent(s->started);
+    WaitForSingleObject(s->release, 5000);
+    InterlockedIncrement(&s->count);
+}
+static void terminated_dispatch(void)
+{
+    HANDLE done = CreateEventW(NULL, TRUE, FALSE, NULL);
+    HANDLE watchdog = CreateThread(NULL, 0, drain_deadline, done, 0, NULL), helper;
+    struct state s = init();
+    XTaskQueueHandle child;
+    XTaskQueuePortHandle work, completion;
+    ULONGLONG start;
+    CHECK(IXThreadingImpl_XTaskQueueCreate(api, XTaskQueueDispatchMode_Manual,
+        XTaskQueueDispatchMode_Manual, &s.queue) == S_OK, "drain-create");
+    CHECK(IXThreadingImpl_XTaskQueueTerminate(api, s.queue, FALSE, NULL, NULL) == S_OK, "drain-terminate-null-callback");
+    CHECK(IXThreadingImpl_XTaskQueueDispatch(api, s.queue, XTaskQueuePort_Completion, INFINITE), "drain-terminal-entry");
+    start = GetTickCount64();
+    CHECK(!IXThreadingImpl_XTaskQueueDispatch(api, s.queue, XTaskQueuePort_Completion, INFINITE), "drain-completion-infinite-ends");
+    CHECK(!IXThreadingImpl_XTaskQueueDispatch(api, s.queue, XTaskQueuePort_Work, INFINITE), "drain-work-infinite-ends");
+    CHECK(GetTickCount64() - start < 1000, "drain-no-timeout-required");
+    IXThreadingImpl_XTaskQueueCloseHandle(api, s.queue);
+
+    /* A terminal callback already dequeued by another dispatcher is not done. */
+    CHECK(IXThreadingImpl_XTaskQueueCreate(api, XTaskQueueDispatchMode_Manual,
+        XTaskQueueDispatchMode_ThreadPool, &s.queue) == S_OK, "drain-blocking-create");
+    CHECK(IXThreadingImpl_XTaskQueueTerminate(api, s.queue, FALSE, &s, blocking_finish) == S_OK, "drain-blocking-terminate");
+    CHECK(WaitForSingleObject(s.started, 2000) == WAIT_OBJECT_0, "drain-terminal-callback-started");
+    helper = CreateThread(NULL, 0, release_later, s.release, 0, NULL);
+    start = GetTickCount64();
+    CHECK(!IXThreadingImpl_XTaskQueueDispatch(api, s.queue, XTaskQueuePort_Work, INFINITE), "drain-waits-for-terminal-callback");
+    CHECK(GetTickCount64() - start >= 100 && s.count == 1, "drain-not-premature");
+    WaitForSingleObject(helper, 2000); CloseHandle(helper);
+    IXThreadingImpl_XTaskQueueCloseHandle(api, s.queue);
+
+    /* Terminating a composite cannot make its live parent return early. */
+    ResetEvent(s.done); s.count = 0;
+    CHECK(IXThreadingImpl_XTaskQueueCreate(api, XTaskQueueDispatchMode_Manual,
+        XTaskQueueDispatchMode_Manual, &s.queue) == S_OK, "drain-parent-create");
+    IXThreadingImpl_XTaskQueueGetPort(api, s.queue, XTaskQueuePort_Work, &work);
+    IXThreadingImpl_XTaskQueueGetPort(api, s.queue, XTaskQueuePort_Completion, &completion);
+    CHECK(IXThreadingImpl_XTaskQueueCreateComposite(api, work, completion, &child) == S_OK, "drain-child-create");
+    CHECK(IXThreadingImpl_XTaskQueueTerminate(api, child, FALSE, NULL, NULL) == S_OK, "drain-child-terminate");
+    CHECK(IXThreadingImpl_XTaskQueueDispatch(api, child, XTaskQueuePort_Completion, INFINITE), "drain-child-terminal-entry");
+    CHECK(!IXThreadingImpl_XTaskQueueDispatch(api, child, XTaskQueuePort_Completion, INFINITE), "drain-child-ends");
+    start = GetTickCount64();
+    CHECK(!IXThreadingImpl_XTaskQueueDispatch(api, s.queue, XTaskQueuePort_Completion, 150), "drain-live-parent-timeout");
+    CHECK(GetTickCount64() - start >= 100, "drain-parent-not-terminated-by-child");
+    CHECK(IXThreadingImpl_XTaskQueueSubmitCallback(api, s.queue, XTaskQueuePort_Completion, &s, once) == S_OK, "drain-parent-still-accepts");
+    CHECK(IXThreadingImpl_XTaskQueueDispatch(api, s.queue, XTaskQueuePort_Completion, 0) && s.count == 1, "drain-parent-still-dispatches");
+    IXThreadingImpl_XTaskQueueCloseHandle(api, child);
+    IXThreadingImpl_XTaskQueueCloseHandle(api, s.queue);
+    destroy(&s);
+    SetEvent(done); WaitForSingleObject(watchdog, 2000);
+    CloseHandle(watchdog); CloseHandle(done);
+}
 int main(void)
 {
     HMODULE dll = LoadLibraryA("xgameruntime.dll");
     HRESULT (WINAPI *query)(const GUID *, REFIID, void **) = (void *)GetProcAddress(dll, "QueryApiImpl");
     if (!query || FAILED(query(&CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&api))) return 2;
-    modes(); monitors(); lifetimes(); race();
+    terminated_dispatch(); modes(); monitors(); lifetimes(); race();
     IXThreadingImpl_Release(api);
     printf("QUEUE CHECKS %ld FAILURES %ld\n", checks, failures);
     return failures ? 1 : 0;
