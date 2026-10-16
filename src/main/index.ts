@@ -36,6 +36,8 @@ import { AccountLibrary } from './account-library.js';
 import { GameContent, type ContentPackage } from './game-content.js';
 import { startAuthTransport } from './auth-transport.js';
 import { authViewFactory } from './auth-window.js';
+import { browserAuthViewFactory } from './auth-browser.js';
+import { fallbackAuthViewFactory } from './auth-fallback.js';
 import { installSelection, readInstallPlan } from './install-plan.js';
 import { adoptLauncherFonts, externalFontEnvironment } from './launcher-fonts.js';
 
@@ -58,6 +60,7 @@ let authState: AppSnapshot['auth'] = {
   stored: null,
   note: 'Checking the Xodus system keychain for a stored Microsoft account…',
 };
+let authJob: Promise<void> | undefined;
 const catalog = new CatalogService();
 const accountLibrary = new AccountLibrary((ids, market) => catalog.licensedProducts(ids, market));
 const demoMode = process.env.XODUS_DEMO === '1';
@@ -206,6 +209,7 @@ function requireBackend(command: keyof typeof backend.current.capabilities): str
 }
 
 function ensureIdle(): void {
+  if (authState.running) throw Error('A sign-in operation is already in progress.');
   if (shutdownStarted) throw Error('The launcher is closing.');
   if (preparingInstall || preparingContent) throw new Error('An installation is being prepared.');
   if (preparingLaunch) throw new Error('A game launch is already being prepared.');
@@ -275,7 +279,6 @@ async function refreshAccount(emit = true): Promise<AuthStatus> {
 
 async function runAuth(command: 'login' | 'logout'): Promise<void> {
   ensureIdle();
-  await accountProfile.select(undefined);
   const binary = requireBackend(command);
   const id = `auth-${randomUUID()}`;
   accountLibrary.reset();
@@ -285,7 +288,11 @@ async function runAuth(command: 'login' | 'logout'): Promise<void> {
     if (command === 'login' && !backend.current.capabilities.externalAuth) {
       throw Error('Update the Nexus backend in Settings before signing in with this launcher.');
     }
-    const tracked = command === 'login' ? startAuthTransport(binary, authViewFactory(mainWindow ?? undefined))
+    const view = fallbackAuthViewFactory(request => authViewFactory(mainWindow ?? undefined, undefined, request), () => browserAuthViewFactory());
+    if (shutdownStarted) throw Error('The launcher is closing.');
+    await accountProfile.select(undefined);
+    if (shutdownStarted) throw Error('The launcher is closing.');
+    const tracked = command === 'login' ? startAuthTransport(binary, view)
       : spawnTracked(binary, [command], { onLine: (line) => emitLog('auth', line) });
     operations.set(id, tracked.child);
     const result = await tracked.result;
@@ -302,6 +309,13 @@ async function runAuth(command: 'login' | 'logout'): Promise<void> {
     authState.running = false;
     emitSnapshot();
   }
+}
+
+function requestAuth(command: 'login' | 'logout'): Promise<void> {
+  if (authJob) return Promise.reject(Error('A sign-in operation is already in progress.'));
+  const job = runAuth(command); authJob = job;
+  const clear = () => { if (authJob === job) authJob = undefined; };
+  void job.then(clear, clear); return job;
 }
 
 async function startInstall(request: InstallRequest, updateGame?: Game): Promise<string> {
@@ -971,8 +985,8 @@ function registerIpc(): void {
     if (!gameOperation?.logPath || gameOperation.id !== id) throw new Error('This diagnostic log is no longer available.');
     return readDiagnosticTail(gameOperation.logPath, path.join(path.dirname(store.settings.runtimeRoot), 'logs'));
   });
-  ipcMain.handle('login', () => runAuth('login'));
-  ipcMain.handle('logout', () => runAuth('logout'));
+  ipcMain.handle('login', () => requestAuth('login'));
+  ipcMain.handle('logout', () => requestAuth('logout'));
   ipcMain.handle('catalog-search', (_event, query: string, cursor?: string) => {
     return catalog.search(query, catalogMarket(), cursor);
   });
@@ -1379,7 +1393,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', (event) => {
   accountLibrary.reset();
   accountProfile?.cancel();
-  if (shutdownStarted || (operations.size === 0 && serviceSessions.size === 0 && !checkingGameUpdates && !launcherUpdater?.state.updating)) return;
+  if (shutdownStarted || (!authJob && operations.size === 0 && serviceSessions.size === 0 && !checkingGameUpdates && !launcherUpdater?.state.updating)) return;
   event.preventDefault();
   shutdownStarted = true;
   void (async () => {
@@ -1399,6 +1413,7 @@ app.on('before-quit', (event) => {
     }
     await store.save();
     for (const [id, child] of operations) if (!gameProcesses.has(id)) child.kill('SIGINT');
+    await authJob?.catch(() => {});
     const runningGames = [...gameProcesses.values()];
     await Promise.all(runningGames.map((process) => process.stop().catch((error) => console.error('Could not stop game on exit:', error))));
     await Promise.race([

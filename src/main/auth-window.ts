@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, session, type Session, type IpcMainEvent } from 'electron';
+import { BrowserWindow, ipcMain, session, type Session, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,7 +7,7 @@ import type { AuthView, AuthViewFactory } from './auth-transport.js';
 const folder = path.dirname(fileURLToPath(import.meta.url));
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; MSAppHost/3.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.26100';
 
-export function authViewFactory(parent?: BrowserWindow, testSession?: Session): AuthViewFactory {
+export function authViewFactory(parent?: BrowserWindow, testSession?: Session, requestBrowser?: () => Promise<void>): AuthViewFactory {
   return (send, cancel, fail): AuthView => {
     // No persist: prefix. Cookies are shared only between this attempt's steps.
     const isolated = testSession ?? session.fromPartition(`nexus-auth-${randomUUID()}`, { cache: false });
@@ -21,6 +21,14 @@ export function authViewFactory(parent?: BrowserWindow, testSession?: Session): 
       send(id, payload);
     };
     ipcMain.on('nexus-auth:notify', notify);
+    let switching = false;
+    const trustedSender = (event: IpcMainInvokeEvent) => !!window && !disposed && id !== undefined && event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame && trustedAuthUrl(event.senderFrame.url) && trustedAuthUrl(window.webContents.getURL());
+    ipcMain.handle('nexus-auth:browser', async (event) => {
+      if (!trustedSender(event) || switching || !requestBrowser) return { ok: false, message: 'Browser sign-in is unavailable.' };
+      switching = true;
+      try { await requestBrowser(); return { ok: true }; }
+      catch { switching = false; return { ok: false, message: 'Could not open browser sign-in. Google Chrome must be installed. You can also choose another sign-in method.' }; }
+    });
     function close() {
       const old = window; window = undefined; id = undefined;
       if (old && !old.isDestroyed()) old.destroy();
@@ -63,7 +71,7 @@ export function authViewFactory(parent?: BrowserWindow, testSession?: Session): 
         const message = JSON.stringify({ type: 'callback', value: { name: 'CloudExperienceHost.getContext', args: ['CloudExperienceHost', 'TokenBroker', 'TokenBroker', '{"PrivatePropertyBag":1,"PasswordlessConnect":1,"PreferAssociate":1,"ChromelessUI":0}'], context } });
         await current.webContents.executeJavaScript(`globalThis["CloudExperienceHost.Bridge.dispatchMessage"](${JSON.stringify(message)})`);
       },
-      async dispose() { disposed = true; close(); ipcMain.removeListener('nexus-auth:notify', notify); await isolated.clearStorageData(); },
+      async dispose() { if (disposed) return; disposed = true; close(); ipcMain.removeListener('nexus-auth:notify', notify); ipcMain.removeHandler('nexus-auth:browser'); await isolated.clearStorageData(); },
     };
   };
 }

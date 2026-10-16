@@ -34,6 +34,10 @@ curl -fsSL https://raw.githubusercontent.com/domsvoboda/xodus-nexus/main/scripts
 In **Settings**, install the **Nexus backend** and **Nexus runtime**, then sign in
 with your Microsoft account. A valid game purchase or subscription is required.
 
+If passkey sign-in gets stuck, choose **Continue in browser** in the sign-in
+window. This option requires Google Chrome installed on the computer; other
+browsers are not supported.
+
 [Setup guide and SteamOS requirements](https://github.com/domsvoboda/xodus-nexus/wiki/Getting-started)
 
 ## Use
