@@ -1,12 +1,12 @@
 {
   "schema": 1,
-  "version": "0.2.2",
+  "version": "0.2.3",
   "repository": "https://github.com/xodus-gaming/xodus.git",
   "commit": "53ea781dcd073e31d7ea68e894134e9c959bff04",
   "rust": "1.99.0",
   "cargoLockSha256": "2259b343e00dadc263018beb7664b12e9d58a0b73bff502ad566f5f8619ce28a",
-  "patchId": "linux-run-v14",
-  "compatibility": "linux-run-v14",
+  "patchId": "linux-run-v15",
+  "compatibility": "linux-run-v15",
   "patches": [
     { "file": "xodus-linux-run.patch", "sha256": "68f260ec2c6e9264c47ed1a650868511f5412a756725d4000a865804f4712e8b" },
     { "file": "xodus-offline-mirror.patch", "sha256": "c865fc2559c43a5b3eb2bc841035c076eae5c42a90fe488f90514384aa916986" },
@@ -20,6 +20,8 @@
     { "file": "xodus-streaming-progress.patch", "sha256": "b5e22d8eb595502776c4d6f2a5451403647e31754fc6358bc4f338cab72642a0" },
     { "file": "xodus-case-insensitive-paths.patch", "sha256": "53dbfd6f734db100fff958e4a311155cad2cb374db456f73544ad76e3799ac8d" },
     { "file": "xodus-account-profile.patch", "sha256": "135166ff0cf9f95af92dad6fd1c958b6c57e939fbb5b398b5a603b730541554a" },
-    { "file": "xodus-subscription-login.patch", "sha256": "6c3f32c905039948b3ff95a0ceaba9b2a09a9417606653bce9b741c8bba43eb0" }
+    { "file": "xodus-subscription-login.patch", "sha256": "6c3f32c905039948b3ff95a0ceaba9b2a09a9417606653bce9b741c8bba43eb0" },
+    { "file": "xodus-external-auth.patch", "sha256": "0a22d5a84d328780e6f13ac07f8e1db6359ec70139ad4262e4c1ee988973e20e" },
+    { "file": "xodus-keyring-activation.patch", "sha256": "8c71928e0b365f4770532ef968322450f1ebab3a1199e7a10d894119c48c925e" }
   ]
 }

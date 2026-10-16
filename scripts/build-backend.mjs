@@ -13,6 +13,8 @@ const output = path.resolve(option('--output', 'backend-release'));
 const target = path.resolve(option('--target-dir', path.join(work, 'target')));
 const lockBytes = await fs.readFile(path.join(root, 'assets/backend-source.lock.json'));
 const lock = JSON.parse(lockBytes);
+const authUi = 'electron';
+const features = ['--no-default-features'];
 if (process.platform !== 'linux' || process.arch !== 'x64') throw Error('Build the backend on Linux x86_64');
 const sha = (data, algorithm = 'sha256') => createHash(algorithm).update(data).digest('hex');
 if (lock.schema !== 1 || !/^\d+\.\d+\.\d+$/.test(lock.version) || !/^[a-f0-9]{40}$/.test(lock.commit)) throw Error('Invalid backend source lock');
@@ -39,14 +41,14 @@ for (const patch of lock.patches) {
 const offline = args.includes('--offline') ? ['--offline'] : [];
 const rustc = command('rustc', ['--version'], true).trim();
 if (!rustc.startsWith(`rustc ${lock.rust} `)) throw Error(`Use the locked Rust toolchain ${lock.rust}`);
-command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-cli', 'commands::run::tests']);
-command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-cli', 'commands::library::tests']);
-command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-cli', 'commands::subscription::tests']);
+command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus-cli']);
 command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-service', 'store_']);
-command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-cli', '-p', 'msixvc', 'streaming_']);
-command('cargo', ['build', '--release', '--locked', ...offline, '-p', 'xodus-cli', '-p', 'xodus-service']);
+command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'msixvc', 'streaming_']);
+command('cargo', ['build', '--release', '--locked', ...offline, ...features, '-p', 'xodus-cli', '-p', 'xodus-service']);
 const cli = path.join(target, 'release/xodus-cli');
 const help = command(cli, ['--help'], true);
+if (authUi === 'electron' && !help.includes('--external-webview-stdio')) throw Error('External sign-in capability missing');
+if (authUi === 'electron' && /lib(?:gtk|webkit|soup|javascriptcore)/i.test(command('readelf', ['-d', cli], true))) throw Error('Headless CLI links a native webview library');
 for (const name of ['account', 'login', 'logout', 'download', 'streaming', 'run']) {
   if (!new RegExp(`^\\s{2}${name}\\s{2,}`, 'm').test(help)) throw Error(`Backend lacks ${name}`);
 }
@@ -79,13 +81,13 @@ for (const patch of lock.patches) await fs.copyFile(path.join(root, 'assets', pa
 await fs.mkdir(path.join(recipe, 'scripts'));
 await fs.copyFile(fileURLToPath(import.meta.url), path.join(recipe, 'scripts/build-backend.mjs'));
 await fs.copyFile(path.join(root, 'scripts/BACKEND.md'), path.join(recipe, 'scripts/BACKEND.md'));
-await fs.writeFile(path.join(recipe, 'BUILD.txt'), `Patched upstream source + vendored dependencies.\nRust ${lock.rust}; cargo build --locked --offline --release -p xodus-cli -p xodus-service from source/.\nNative build dependencies and release policy: scripts/BACKEND.md in the Nexus repository.\nBackend is GPL-3.0; dependency licenses are retained in vendor/.\n`);
+await fs.writeFile(path.join(recipe, 'BUILD.txt'), `Patched upstream source + vendored dependencies.\nRust ${lock.rust}; cargo build --locked --offline --release ${features.join(' ')} -p xodus-cli -p xodus-service from source/.\nAuthentication UI: ${authUi}.\nNative build dependencies and release policy: scripts/BACKEND.md in the Nexus repository.\nBackend is GPL-3.0; dependency licenses are retained in vendor/.\n`);
 command('tar', ['--exclude=.git', '--exclude=target', '-cJf', path.join(output, `${name}-source.tar.xz`), '-C', work, 'source', 'recipe']);
 for (const archive of [`${name}.tar.xz`, `${name}-source.tar.xz`]) {
   await fs.writeFile(path.join(output, archive.replace('.tar.xz', '.sha512sum')), `${sha(await fs.readFile(path.join(output, archive)), 'sha512')}  ${archive}\n`);
 }
 const manifest = {
-  schema: 1, version: lock.version, commit: lock.commit, recipeSha256: sha(lockBytes), compatibility: lock.compatibility,
+  schema: 1, version: lock.version, commit: lock.commit, recipeSha256: sha(lockBytes), compatibility: lock.compatibility, authUi,
   platform: 'linux', arch: 'x64', archive: `${name}.tar.xz`,
   archiveSha512: sha(await fs.readFile(path.join(output, `${name}.tar.xz`)), 'sha512'), files,
   rustc, glibc: command('getconf', ['GNU_LIBC_VERSION'], true).trim(),

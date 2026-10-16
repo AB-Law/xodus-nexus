@@ -19,80 +19,33 @@ for supported games.
 
 ![Xodus Nexus demo](docs/screenshots/demo.gif)
 
-*Version 0.3.0 demo with a sample account, owned and Game Pass library, and install queue. Screenshots are not compatibility claims.*
+*Preview with sample account data.*
 
 ## Install
 
-On x86_64 Linux, the installer sets up system prerequisites, the latest AppImage
-and an application-menu entry:
+Download the latest x86_64 Linux AppImage from [Releases](https://github.com/domsvoboda/xodus-nexus/releases), make it executable and open it.
+
+For an application-menu installation on supported distributions:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/domsvoboda/xodus-nexus/main/scripts/install.sh | bash
 ```
 
-<details>
-<summary>Manual AppImage installation</summary>
+In **Settings**, install the **Nexus backend** and **Nexus runtime**, then sign in
+with your Microsoft account. A valid game purchase or subscription is required.
 
-Download the AppImage from [Releases](https://github.com/domsvoboda/xodus-nexus/releases), then:
+[Setup guide and SteamOS requirements](https://github.com/domsvoboda/xodus-nexus/wiki/Getting-started)
 
-```sh
-chmod +x Xodus-Nexus-0.3.0-x86_64.AppImage
-./Xodus-Nexus-0.3.0-x86_64.AppImage
-```
+## Use
 
-No Rust, Cargo or `protoc` is needed for the prebuilt backend. It requires GTK 3,
-WebKitGTK 4.1 and a desktop secret service for sign-in.
-Distribution-specific runtime prerequisites are listed in the
-[setup guide](https://github.com/domsvoboda/xodus-nexus/wiki).
+- **My Library** combines owned, Game Pass and installed games, with Access, Play state and title filters.
+- **Store** lets you browse and install supported PC games.
+- **Manage content** installs licensed add-ons and campaign packages.
+- **Install Queue** supports pause and resume, including after restarting the launcher.
+- Right-click an installed game for settings, VC++ prerequisites, shortcuts or removal.
+- Update the launcher, backend and runtime in **Settings**.
 
-</details>
-
-On first run, install the prebuilt Nexus backend and Nexus runtime in
-Settings, and sign in to your Microsoft account. Both components are downloaded
-as verified precompiled packages from Nexus Releases. No local compilation is
-needed; neither component is bundled with the AppImage.
-
-With a compatible Nexus backend, the account panel shows your Xbox gamertag and
-profile picture. Profile details are cached locally; email and a default avatar
-remain available when Xbox profile data cannot be loaded.
-
-The account sidebar automatically loads verified Game Pass membership from
-Microsoft Store using the existing sign-in, without another login window.
-Unavailable or outdated subscription information does not show a badge.
-
-My Library combines installed games with account-licensed PC games, including
-Game Pass. **Owned** identifies direct or owned-bundle access, separately from
-subscription access. Filter by **Access**, **Play state**, or search by title.
-Account listings require an updated backend and a verified supported PC package;
-add-ons and unsupported packages are excluded. Installed games remain available
-when account information is unavailable. Store remains the full catalog.
-
-For an installed game, **Manage content** lists its declared related packages
-separately from the game library. With a compatible Nexus runtime, install or
-repair licensed PC content through the normal Install Queue. Content is stored
-separately from the base game; restart the game after installation. Unverified
-licenses, ambiguous packages and unsupported formats cannot be installed here.
-
-Launcher updates appear in the top-right corner. Install them from Settings and
-restart; the previous AppImage is kept for rollback. Backend and runtime updates
-are versioned independently. In My Library, **Check game updates** marks installed
-games with a newer verified package version without changing their files.
-
-The Install Queue supports **Pause / Resume**, including after restarting the
-launcher, with a compatible Nexus backend. Download checkpoints stay in the
-installation folder and are checked against the package before continuing.
-Progress comes directly from the backend; no `script` or `util-linux` package
-is needed for download progress.
-
-Right-click an installed game in My Library to create a desktop shortcut or add
-it to the applications menu. Shortcuts start the game through Nexus with the same
-runtime, account and cloud-save setup as Play, without opening the main window.
-If you move the AppImage manually, open it once from its new location to refresh
-existing shortcuts. Game artwork is cached locally for shortcut icons, with the
-Nexus icon as a fallback. Your desktop may ask you to allow launching a new shortcut.
-
-[Downloads](https://github.com/domsvoboda/xodus-nexus/releases) ·
-[Setup & documentation](https://github.com/domsvoboda/xodus-nexus/wiki) ·
+[Documentation](https://github.com/domsvoboda/xodus-nexus/wiki) ·
 [Report an issue](https://github.com/domsvoboda/xodus-nexus/issues)
 
 ## How it works
@@ -103,13 +56,12 @@ Nexus icon as a fallback. Your desktop may ask you to allow launching a new shor
 | Nexus backend | Patched build of [Xodus](https://github.com/xodus-gaming/xodus) for account sign-in, license checks, package downloads and launch preparation. |
 | Nexus runtime | Built on [Xodus Proton](https://github.com/xodus-gaming/Proton) and [Xodus XGameRuntime](https://github.com/xodus-gaming/xgameruntime), with additional Nexus compatibility patches. |
 
-Every game uses the same launch path and shared runtime. Compatibility fixes
-belong in the backend/runtime, not in title-specific launcher routes.
+Every game uses the same launch path and shared runtime.
 
 ## Compatible games
 
-These games have been manually tested. Other games may work, but have not been
-verified and may encounter compatibility issues.
+These results come from manual testing and user reports. Other games may work,
+but have not been verified and may encounter compatibility issues.
 
 | Game | Playable | Status |
 | --- | --- | --- |
@@ -120,7 +72,12 @@ verified and may encounter compatibility issues.
 | Valor Mortis | Yes | Fully playable. |
 | Forza Horizon 6 | Yes | Playable online. |
 | Palworld | Yes | Playable online. |
-| DOOM Eternal | Partial | Campaign works; Horde and BATTLEMODE unlock with an unreleased runtime fix and the campaign package installed. Paid DLC and online play unverified ([#10](https://github.com/domsvoboda/xodus-nexus/issues/10)). |
+| DOOM Eternal | Yes | Playable. |
+| The Outer Worlds 2 | Yes | Playable (manual report). |
+| Wolfenstein: The Old Blood | Yes | Playable (manual report). |
+| Wasteland Remastered | Yes | Playable (manual report). |
+| Danganronpa 2 | Yes | Playable (manual report). |
+| The Witcher 3 | No | Currently crashes on launch (manual report). |
 
 [Full compatibility list](https://github.com/domsvoboda/xodus-nexus/wiki/Compatibility)
 

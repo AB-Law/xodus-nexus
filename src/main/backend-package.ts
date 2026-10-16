@@ -27,11 +27,12 @@ export interface BackendPackageManifest {
   compatibility: string; platform: string; arch: string;
   archive: string; archiveSha512: string;
   files: Record<string, string>;
+  authUi: 'electron';
 }
 
 export function validateBackendManifest(value: unknown): BackendPackageManifest {
   const item = value as BackendPackageManifest | undefined;
-  if (!item || item.schema !== 1 || !/^\d+\.\d+\.\d+$/.test(item.version ?? '') ||
+  if (!item || item.schema !== 1 || item.authUi !== 'electron' || !/^\d+\.\d+\.\d+$/.test(item.version ?? '') ||
       compareVersions(item.version, minimumBackendVersion) < 0 ||
       !/^[a-f0-9]{40}$/.test(item.commit ?? '') || !/^[a-f0-9]{64}$/.test(item.recipeSha256 ?? '') ||
       typeof item.compatibility !== 'string' || !item.compatibility.trim() ||

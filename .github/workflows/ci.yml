@@ -28,14 +28,22 @@ jobs:
       - run: npm ci
       - name: Install account-free runtime fixture toolchain
         run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
-      - run: npm run build
+      - name: Check source without compiling a distribution candidate
+        if: github.ref != 'refs/heads/main'
+        run: npm run typecheck && npm run test
+      - name: Build and check the main candidate once
+        if: github.ref == 'refs/heads/main'
+        run: npm run build
       - run: npm run test:runtime-tools
       - run: npm run test:ci-tools
       - name: Build launcher candidate (never publish)
+        if: github.ref == 'refs/heads/main'
         run: npx --no-install electron-builder --linux AppImage --publish never
       - name: Bind candidate to source and checksums
+        if: github.ref == 'refs/heads/main'
         run: node scripts/ci/artifact-manifest.mjs write launcher release
       - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main'
         with:
           name: launcher-candidate
           path: |

@@ -25,6 +25,7 @@ export function parseBackendHelp(help: string): BackendCapabilities {
     profile: commands.includes('profile'),
     library: commands.includes('library'),
     login: commands.includes('login'),
+    externalAuth: /(?:^|\s)--external-webview-stdio(?:\s|$)/m.test(help),
     logout: commands.includes('logout'),
     download: commands.includes('download'),
     streaming: commands.includes('streaming'),
