@@ -28,7 +28,7 @@ import { LauncherUpdater } from './launcher-update.js';
 import { readDiagnosticTail } from './diagnostic-log.js';
 import { queryGameUpdate } from './game-updates.js';
 import { DownloadProgress, PROGRESS_PREFIX } from './download-progress.js';
-import { GameShortcuts, shortcutArguments, type ShortcutDestination } from './game-shortcuts.js';
+import { GameShortcuts, shortcutArguments, shortcutInstanceData, shortcutInstanceRequest, type ShortcutDestination } from './game-shortcuts.js';
 import { ShortcutLaunch } from './shortcut-launch.js';
 import { loadShortcutIcon } from './shortcut-icon.js';
 import { AccountProfile } from './account-profile.js';
@@ -85,10 +85,10 @@ try {
   if (startupRequest.profile) app.setPath('userData', startupRequest.profile);
 } catch (error) { startupError = error as Error; }
 // Electron's lock is scoped to userData, so independent profiles stay isolated.
-const primaryInstance = demoMode || app.requestSingleInstanceLock();
+const primaryInstance = demoMode || app.requestSingleInstanceLock(shortcutInstanceData(startupRequest, Boolean(startupError)));
 if (!primaryInstance) app.quit();
-else if (!demoMode) app.on('second-instance', (_event, argv) => {
-  try { receiveLaunchRequest(shortcutArguments(argv.slice(1)).gameId); }
+else if (!demoMode) app.on('second-instance', (_event, _argv, _workingDirectory, additionalData) => {
+  try { receiveLaunchRequest(shortcutInstanceRequest(additionalData, app.getPath('userData')).gameId); }
   catch (error) {
     if (launchReady) void shortcutError(error);
     else pendingShortcutErrors.push(error);

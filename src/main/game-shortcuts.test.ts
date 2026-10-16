@@ -5,7 +5,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
-import { GameShortcuts, desktopArgument, shortcutArguments, shortcutTitleStem } from './game-shortcuts.js';
+import { GameShortcuts, desktopArgument, shortcutArguments, shortcutInstanceData, shortcutInstanceRequest, shortcutTitleStem } from './game-shortcuts.js';
 import { ShortcutLaunch } from './shortcut-launch.js';
 
 const execute = promisify(execFile);
@@ -149,6 +149,30 @@ it('parses only validated shortcut requests and escapes desktop Exec separately 
   for (const argv of [['--launch-game'], ['--launch-game', '../game'], ['--launch-game', id, '--launch-game', id],
     ['--nexus-profile', 'relative'], ['--nexus-profile', '/x\nExec=evil']]) expect(() => shortcutArguments(argv)).toThrow();
   expect(desktopArgument('/a b/100%/"$`\\')).toBe('"/a b/100%%/\\\\"\\\\$\\\\`\\\\\\\\"');
+});
+
+it('hands off the original request independently of Chromium switch reordering', () => {
+  const profile = '/tmp/a profile/žluťoučký';
+  const original = shortcutArguments(['--nexus-profile', profile, '--launch-game', id]);
+  // This is the order observed from the actual second-instance event on Linux.
+  expect(() => shortcutArguments(['--nexus-profile', '--launch-game', '--ozone-platform=wayland', profile, id])).toThrow('Invalid Nexus profile');
+  const data = JSON.parse(JSON.stringify(shortcutInstanceData(original)));
+  expect(shortcutInstanceRequest(data, profile)).toEqual(original);
+  expect(shortcutInstanceRequest(shortcutInstanceData({}), profile)).toEqual({});
+  expect(shortcutInstanceRequest(shortcutInstanceData({ gameId: id }), profile)).toEqual({ gameId: id });
+  expect(() => shortcutInstanceRequest(data, '/tmp/another-profile')).toThrow('different Nexus profile');
+});
+
+it('rejects malformed or failed handoffs instead of converting them into a normal launch', () => {
+  const profile = '/tmp/profile';
+  for (const data of [undefined, null, [], {}, { nexusShortcut: null },
+    { nexusShortcut: { schema: 2, request: {} } }, { nexusShortcut: { schema: 1, request: [] } },
+    shortcutInstanceData({}, true), shortcutInstanceData({ gameId: '../game' }),
+    shortcutInstanceData({ profile: 'relative' }), shortcutInstanceData({ profile: '/tmp/bad\npath' }),
+    { nexusShortcut: { schema: 1, request: { gameId: 42 } } },
+    { nexusShortcut: { schema: 1, request: { profile: null } } },
+    { nexusShortcut: { schema: 1, request: { extra: 'unexpected' } } },
+  ]) expect(() => shortcutInstanceRequest(data, profile)).toThrow();
 });
 
 it('writes a persistent per-game PNG, reuses it offline and keeps Nexus as the fallback', async () => {

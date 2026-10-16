@@ -12,6 +12,8 @@ import { subscriptionBadge } from '../shared/subscription';
 import { defaultLaunchTools, normalizeLaunchTools } from '../shared/launch-tools';
 import type { GameLaunchTools } from '../shared/types';
 import { PackageInstallProvider, usePackageInstall } from './PackageInstall';
+import { defaultLibraryFilters, loadLibraryFilters, saveLibraryFilters, type LibraryFilters } from './library-preferences';
+export type { LibraryFilters } from './library-preferences';
 
 const emptySnapshot: AppSnapshot = {
   backend: {
@@ -285,12 +287,6 @@ export function GameContextMenu({ x, y, game, options, busy, onBrowse, onSetting
   </div>;
 }
 
-export interface LibraryFilters {
-  kind: AccountLibraryPage['kind'];
-  playState: 'all' | 'installed' | 'installable';
-  query: string;
-}
-const defaultLibraryFilters: LibraryFilters = { kind: 'all', playState: 'all', query: '' };
 interface AccountGamesProps {
   data: AppSnapshot; toast: (value: Toast) => void; selectedId?: string;
   select?: (game: Game) => void; menu?: (game: Game, x: number, y: number) => void;
@@ -805,6 +801,26 @@ function FirstRunWizard({ data, toast }: { data: AppSnapshot; toast: (value: Toa
   </div>;
 }
 
+export function GlobalSearch({ games, page, query, change, submit, select }: {
+  games: Game[]; page: Page; query: string; change: (value: string) => void;
+  submit: (value: string) => void; select: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => setOpen(false), [page]);
+  const term = query.trim().toLowerCase();
+  const results = term ? games.filter(game => `${game.title} ${game.storeId ?? ''}`.toLowerCase().includes(term)) : [];
+  const visible = open && page !== 'store' && results.length > 0;
+  return <div className="search-box" onFocus={() => setOpen(true)} onBlur={event => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
+  }}><Search /><input value={query} onChange={event => { change(event.target.value); setOpen(true); }} onKeyDown={event => {
+    if (event.key === 'Escape') setOpen(false);
+    if (event.key === 'Enter' && term.length >= 2) { setOpen(false); submit(query.trim()); }
+  }} aria-expanded={visible} aria-controls={visible ? 'global-search-results' : undefined} placeholder="Search games, add-ons and your library" />
+    {query ? <button aria-label="Clear search" onClick={() => { change(''); setOpen(false); }}><X /></button> : null}
+    {visible ? <div className="search-results" id="global-search-results">{results.map(game => <button key={game.id} onClick={() => { setOpen(false); change(''); select(); }}><Cover game={game} /><span><GameTitle title={game.title} /><small>{game.storeId ?? game.path}</small></span></button>)}</div> : null}
+  </div>;
+}
+
 export default function App() {
   const [page, setPage] = useState<Page>(() => window.location.hash === '#store' ? 'store' : 'home');
   const [data, setData] = useState<AppSnapshot>(emptySnapshot);
@@ -813,7 +829,7 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [submittedSearch, setSubmittedSearch] = useState('');
   // App stays mounted while pages change, unlike LibraryPage/AccountGames.
-  const [libraryFilters, setLibraryFilters] = useState<LibraryFilters>(defaultLibraryFilters);
+  const [libraryFilters, setLibraryFilters] = useState<LibraryFilters>(() => loadLibraryFilters());
 
   useEffect(() => {
     void window.launcher.getSnapshot().then((value) => { setData(value); setLoading(false); }).catch((error) => { setToast({ kind: 'error', message: errorMessage(error) }); setLoading(false); });
@@ -830,7 +846,10 @@ export default function App() {
   }, []);
 
 
-  const searchResults = useMemo(() => search.trim() ? data.games.filter((game) => `${game.title} ${game.storeId ?? ''}`.toLowerCase().includes(search.toLowerCase())) : [], [data.games, search]);
+  function changeLibraryFilters(filters: LibraryFilters) {
+    setLibraryFilters(filters);
+    if (!saveLibraryFilters(filters)) setToast({ kind: 'error', message: 'Library filters could not be saved. They may reset after restarting Nexus.' });
+  }
 
   function action(fn: () => Promise<unknown>, success?: string) { void fn().then(() => success && setToast({ kind: 'success', message: success })).catch((error) => setToast({ kind: 'error', message: errorMessage(error) })); }
 
@@ -840,8 +859,8 @@ export default function App() {
     <Sidebar data={data} page={page} go={setPage} />
 
     <section className="content-shell">
-      <header className="topbar"><div className="search-box"><Search /><input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && search.trim().length >= 2) { setSubmittedSearch(search.trim()); setPage('store'); } }} placeholder="Search games, add-ons and your library" />{search ? <button onClick={() => setSearch('')}><X /></button> : null}{searchResults.length > 0 && page !== 'store' ? <div className="search-results">{searchResults.map((game) => <button key={game.id} onClick={() => { setSearch(''); setPage('library'); }}><Cover game={game} /><span><GameTitle title={game.title} /><small>{game.storeId ?? game.path}</small></span></button>)}</div> : null}</div><TopStatus data={data} go={setPage} /></header>
-      <div className="page-scroll">{page === 'home' ? <HomePage data={data} go={setPage} action={action} /> : null}{page === 'store' ? <StorePage data={data} toast={setToast} go={setPage} initialQuery={submittedSearch} /> : null}{page === 'library' ? <LibraryPage data={data} toast={setToast} filters={libraryFilters} onFiltersChange={setLibraryFilters} /> : null}{page === 'downloads' ? <DownloadsPage data={data} toast={setToast} /> : null}{page === 'settings' ? <SettingsPage data={data} toast={setToast} /> : null}</div>
+      <header className="topbar"><GlobalSearch games={data.games} page={page} query={search} change={setSearch} submit={value => { setSubmittedSearch(value); setPage('store'); }} select={() => setPage('library')} /><TopStatus data={data} go={setPage} /></header>
+      <div className="page-scroll">{page === 'home' ? <HomePage data={data} go={setPage} action={action} /> : null}{page === 'store' ? <StorePage data={data} toast={setToast} go={setPage} initialQuery={submittedSearch} /> : null}{page === 'library' ? <LibraryPage data={data} toast={setToast} filters={libraryFilters} onFiltersChange={changeLibraryFilters} /> : null}{page === 'downloads' ? <DownloadsPage data={data} toast={setToast} /> : null}{page === 'settings' ? <SettingsPage data={data} toast={setToast} /> : null}</div>
     </section>
     {toast ? <div className={`toast ${toast.kind}`}>{toast.kind === 'success' ? <Check /> : toast.kind === 'error' ? <CircleAlert /> : <Terminal />}<span>{toast.message}</span><button onClick={() => setToast(undefined)}><X /></button></div> : null}
   </div></PackageInstallProvider>;
