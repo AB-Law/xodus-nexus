@@ -5,6 +5,7 @@ import { runtimeDisplay } from './runtime-display';
 describe('runtimeDisplay', () => {
   it('uses the installed Nexus version, not an available update', () => {
     const runtime = demoSnapshot().runtime;
+    runtime.name = 'xodus-nexus-runtime-11.0-20261011-g3fd4ae10';
     runtime.nexusVersion = 'runtime-11.0-newer';
     expect(runtimeDisplay(runtime)).toEqual({ title: 'Nexus runtime', source: 'Nexus runtime', version: '11.0-20261011-g3fd4ae10' });
   });

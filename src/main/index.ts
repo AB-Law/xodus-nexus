@@ -7,7 +7,8 @@ import { randomUUID } from 'node:crypto';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { AppSnapshot, AuthStatus, DownloadTask, Game, GameLaunchOptions, GameOperation, GameUpdate, InstallRequest, Settings } from '../shared/types.js';
 import { downloadFailure, safeProductId } from '../shared/utils.js';
-import { demoAccountLibrary, demoAccountProducts, demoDownloads, demoGames, demoLaunchOptions, demoLocales, demoSnapshot } from '../shared/demo-data.js';
+import { demoAccountLibrary, demoAccountProducts, demoDownloads, demoGames, demoLaunchOptions, demoLocales, demoSnapshot, type DemoArtwork } from '../shared/demo-data.js';
+import { backendLock } from './backend-package.js';
 import { BackendManager } from './backend.js';
 import { run, spawnTracked } from './process.js';
 import { inspectGameDirectory, StateStore } from './store.js';
@@ -21,7 +22,7 @@ import { validateGameTrashTarget } from './game-removal.js';
 import { spawnGameProcess, type GameProcess } from './game-process.js';
 import { gameLocaleEnvironment, manifestLocales, manifestTitleId, supportedGameLocale } from './game-locale.js';
 import { antiCheatEnvironment } from './anti-cheat.js';
-import { gameLaunchArguments } from './game-launch.js';
+import { gameLaunchArguments, preparedGameWine } from './game-launch.js';
 import { prepareGameWrapper, type GameWrapper } from './game-wrapper.js';
 import { normalizeLaunchTools } from '../shared/launch-tools.js';
 import { LauncherUpdater } from './launcher-update.js';
@@ -64,7 +65,7 @@ let authJob: Promise<void> | undefined;
 const catalog = new CatalogService();
 const accountLibrary = new AccountLibrary((ids, market) => catalog.licensedProducts(ids, market));
 const demoMode = process.env.XODUS_DEMO === '1';
-const demoCoverUrls = new Map<string, string>();
+const demoArtwork = new Map<string, DemoArtwork>();
 let launcherUpdater: LauncherUpdater;
 const gameUpdates: Record<string, GameUpdate> = {};
 let checkingGameUpdates = false;
@@ -134,7 +135,8 @@ function receiveLaunchRequest(id?: string): void {
 }
 
 function snapshot(): AppSnapshot {
-  if (demoMode) return demoSnapshot(demoCoverUrls);
+  if (demoMode) return demoSnapshot({ launcher: app.getVersion(), backend: backendLock.version,
+    backendCommit: backendLock.commit, backendCompatibility: backendLock.compatibility }, demoArtwork);
   return {
     backend: backend.current,
     runtime: runtime.current,
@@ -652,7 +654,7 @@ async function prepareGameLaunch(id: string): Promise<void> {
     launchWrapper = await prepareGameWrapper(wine, game.launchTools, path.join(dataRoot, 'launch-wrappers'), process.env, game.path);
     const protonRunner = await prepareProtonRunner(wine, compatibilityDataPath, steamRoot, launchWrapper.command);
     const wineCommand = protonRunner?.command ?? wine;
-    args[2] = protonRunner?.launchCommand ?? launchWrapper.command;
+    args[2] = preparedGameWine(protonRunner, launchWrapper.command);
     if (inspected.vcRedistEncrypted) {
       if (!protonRunner) throw new Error('This encrypted VC++ prerequisite requires a Proton prefix. Select Xodus Runtime in Settings.');
       const installed = await installedVcRuntimeVersion(path.join(compatibilityDataPath, 'pfx'));
@@ -871,7 +873,7 @@ async function loadDemoCovers(): Promise<void> {
     ...demoDownloads.flatMap((task) => (task.productId ? [task.productId] : [])),
     ...demoAccountProducts.map(product => product.productId),
   ])];
-  for (const [id, url] of await catalog.posters(ids, demoSnapshot().settings.market)) demoCoverUrls.set(id, url);
+  for (const [id, images] of await catalog.artwork(ids, snapshot().settings.market)) demoArtwork.set(id, images);
 }
 
 // XODUS_DEMO=1 serves sample state without touching the real backend,
@@ -900,7 +902,7 @@ function registerDemoIpc(catalogMarket: () => string): void {
   ipcMain.handle('logout', () => {});
   ipcMain.handle('catalog-search', (_event, query: string, cursor?: string) => catalog.search(query, catalogMarket(), cursor));
   ipcMain.handle('catalog-featured', () => catalog.featured(catalogMarket()));
-  ipcMain.handle('account-library', (_event, kind: 'all' | 'owned' | 'gamepass') => demoAccountLibrary(kind, demoCoverUrls));
+  ipcMain.handle('account-library', (_event, kind: 'all' | 'owned' | 'gamepass') => demoAccountLibrary(kind, demoArtwork));
   ipcMain.handle('start-install', () => 'demo-download');
   ipcMain.handle('install-plan', () => { throw Error('Package selection is unavailable in demo mode.'); });
   ipcMain.handle('game-content', (_event, id: string) => ({ gameId: id, checkedAt: new Date().toISOString(), items: [] }));
@@ -921,7 +923,7 @@ function registerDemoIpc(catalogMarket: () => string): void {
   ipcMain.handle('create-game-shortcut', () => { throw new Error('Shortcuts are unavailable in demo mode.'); });
   ipcMain.handle('install-game-vc-runtime', () => {});
   ipcMain.handle('cancel-game', () => {});
-  ipcMain.handle('update-settings', (_event, patch: Partial<Settings>) => ({ ...demoSnapshot().settings, ...patch }));
+  ipcMain.handle('update-settings', (_event, patch: Partial<Settings>) => ({ ...snapshot().settings, ...patch }));
   ipcMain.handle('choose-directory', () => null);
   ipcMain.handle('choose-file', () => null);
   ipcMain.handle('open-path', () => {});
@@ -1260,14 +1262,39 @@ async function createWindow(): Promise<void> {
   if (process.env.VITE_DEV_SERVER_URL) await mainWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}${smokeStore ? '#store' : ''}`);
   else await mainWindow.loadFile(path.join(__dirname, '..', '..', 'dist', 'index.html'), smokeStore ? { hash: 'store' } : undefined);
   if (demoCaptureDir) {
-    // Demo screenshot capture: with XODUS_DEMO=1 and XODUS_DEMO_TOUR=1 the
-    // renderer cycles pages every 7s; grab one shot per page just before
-    // each switch, offscreen, without real account data. Store artwork/catalog
-    // are fetched live; the library and queue are explicitly sample fixtures.
+    // Navigate explicitly so slow image requests cannot move a capture onto
+    // the next tour page. Only sample state and public Store data are used.
     await fs.mkdir(demoCaptureDir, { recursive: true });
+    await mainWindow.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+      const deadline = Date.now() + 5000;
+      const timer = setInterval(() => {
+        if (document.querySelectorAll('.sidebar .nav-item').length >= 4 && document.querySelector('.sidebar .queue-summary')) { clearInterval(timer); resolve(); }
+        else if (Date.now() > deadline) { clearInterval(timer); reject(new Error('Demo navigation did not load')); }
+      }, 50);
+    })`);
+    const artworkUrls = [...new Set([...demoArtwork.values()].flatMap(images => [images.coverUrl, images.heroUrl]).filter(Boolean))];
+    await mainWindow.webContents.executeJavaScript(`Promise.all(${JSON.stringify(artworkUrls)}.map(url => {
+      const image = new Image(); image.src = url; return image.decode();
+    }))`);
     const pages = ['home', 'library', 'store', 'downloads', 'settings'];
+    const labels = ['Home', 'My Library', 'Store', 'Install Queue', 'Settings'];
     for (let index = 0; index < pages.length; index++) {
-      await new Promise((resolve) => setTimeout(resolve, index === 0 ? 6000 : 7000));
+      await mainWindow.webContents.executeJavaScript(`(() => {
+        const button = ${JSON.stringify(pages[index])} === 'downloads' ? document.querySelector('.sidebar .queue-summary')
+          : [...document.querySelectorAll('.sidebar .nav-item')].find(button => button.querySelector('span')?.textContent === ${JSON.stringify(labels[index])});
+        if (!button) throw new Error('Demo navigation is not ready');
+        button.click();
+      })()`);
+      await new Promise((resolve) => setTimeout(resolve, 6000));
+      await mainWindow.webContents.executeJavaScript(`(async () => {
+        await document.fonts.ready;
+        await Promise.race([
+          Promise.all([...document.images].map(image => image.decode().catch(() => {}))),
+          new Promise(resolve => setTimeout(resolve, 5000))
+        ]);
+        const broken = [...document.images].filter(image => !image.complete || image.naturalWidth === 0);
+        if (broken.length) throw new Error('Demo artwork did not finish loading');
+      })()`);
       const image = await mainWindow.webContents.capturePage();
       await fs.writeFile(path.join(demoCaptureDir, `demo-${pages[index]}.png`), image.toPNG());
     }
@@ -1329,7 +1356,11 @@ app.whenReady().then(async () => {
     // Start the cover fetch before createWindow because a demo capture
     // keeps createWindow busy until the tour finishes.
     registerIpc();
-    void loadDemoCovers().then(() => emitSnapshot(), () => { /* Covers are optional. */ });
+    if (process.env.XODUS_DEMO_CAPTURE_DIR) {
+      await loadDemoCovers();
+      if (!snapshot().games[0]?.heroUrl) throw new Error('Wide demo artwork is unavailable; capture cancelled.');
+    }
+    else void loadDemoCovers().then(() => emitSnapshot(), () => { /* Covers are optional. */ });
     await createWindow();
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) void createWindow(); });
     return;
