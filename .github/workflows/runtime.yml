@@ -2,8 +2,7 @@ name: Nexus runtime build
 
 on:
   push:
-    branches: [main, develop]
-  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -16,6 +15,7 @@ concurrency:
 
 jobs:
   changes:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     outputs:
       needed: ${{ steps.diff.outputs.needed }}

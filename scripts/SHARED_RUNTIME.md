@@ -7,7 +7,7 @@ Nexus compatibility patches. It is not an independent Wine implementation.
 
 This recipe reconstructs the single shared **development** runtime from clean,
 pinned Git checkouts. It includes the PR #28/cloud-save line, subsequent
-XUser/Store/license/receipt work, Mistral's package/network/event/system API
+XUser/Store/license/receipt work, package/network/event/system API
 additions, the queue and XAsync fixes, HTTP/2 WinHTTP, nghttp2, WinRT JSON,
 and the Mono path-bounds fix. No game-specific runtime selection is introduced.
 It also includes initial connectivity notifications, HTTPS/WSS security queries,

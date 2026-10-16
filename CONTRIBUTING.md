@@ -3,6 +3,10 @@
 Use feature/fix branches and PRs targeting `develop`. Reviewed integration goes
 to `main` through a separate PR; pushes and green checks are not releases.
 
+Keep user documentation concise and current. README and wiki explain setup,
+usage and limitations; release notes describe changes. Do not publish internal
+work logs or debugging narratives in user guides.
+
 The launcher uses semantic versioning (`major.minor.patch`), starting at `0.1.0`.
 Use patch releases for compatible fixes and minor releases for new features;
 before `1.0.0`, breaking changes may arrive in a minor release. Runtime builds
@@ -20,7 +24,10 @@ game installation, saves or Xodus checkout. Keep credentials, raw diagnostics,
 prefixes and agent handoffs outside Git. Include redacted reproduction steps,
 versions and actual test results in bug reports and PRs.
 
-CI builds candidates. Stable publication requires explicit maintainer approval
+Develop and pull requests run source checks without distribution builds. Only
+main builds launcher/backend/runtime candidates, once per relevant source change.
+Promotion reuses those exact files without rebuilding.
+Stable publication requires explicit maintainer approval
 for the exact tested artifact, with no rebuild after validation. The approval
 record is [release-validation.json](.github/release-validation.json).
 
