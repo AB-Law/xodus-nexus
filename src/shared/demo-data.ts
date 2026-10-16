@@ -44,7 +44,7 @@ export function demoSnapshot(coverUrls: ReadonlyMap<string, string> = new Map())
   return {
     backend: {
       available: true, source: 'managed', binaryPath: '/home/demo/.config/xodus-nexus/xodus-backends/current', commit: '53ea781dcd073e31d7ea68e894134e9c959bff04', upstreamCommit: '53ea781dcd073e31d7ea68e894134e9c959bff04', updateAvailable: false, checking: false, updating: false, externalRoot: '',
-      capabilities: { commands: ['login', 'logout', 'download', 'streaming', 'run', 'license', 'extract', 'profile', 'library'], account: true, profile: true, library: true, login: true, logout: true, download: true, streaming: true, streamingProgressJson: true, streamingControls: true, run: true, version: '0.5.0' },
+      capabilities: { commands: ['login', 'logout', 'download', 'streaming', 'run', 'license', 'extract', 'profile', 'library'], account: true, profile: true, library: true, login: true, externalAuth: true, logout: true, download: true, streaming: true, streamingProgressJson: true, streamingControls: true, run: true, version: '0.5.0' },
       prerequisites: { git: true, cargo: true, rustc: true, protoc: true },
       linuxRunPatch: 'linux-run-v14',
       version: '0.2.2', delivery: 'release', releaseAvailable: true, releaseVersion: '0.2.2',

@@ -394,8 +394,12 @@ button.primary svg, button.secondary svg { width: 17px; height: 17px; }
 .wizard-field small { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--faint); }
 .wizard-account { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 15px; background: var(--surface); border: 1px solid var(--line); border-radius: 5px; }
 .wizard-account small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+.wizard { max-height: 94vh; overflow-y: auto; }
 .wizard-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .wizard-actions > span { color: var(--faint); font-size: 9px; max-width: 250px; }
+.passkey-sign-in-notice { margin: 12px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.wizard-actions { flex-wrap: wrap; }
+.wizard-actions > .passkey-sign-in-notice { flex: 0 0 100%; margin: 0 0 4px; }
 .process-mode { margin: 0 0 14px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 16px; background: #222529; border: 1px solid var(--line); font-size: 11px; }
 .process-mode > span { font-weight: 700; }
 .process-mode label { display: flex; align-items: center; gap: 9px; color: #d2d6d9; cursor: pointer; }
