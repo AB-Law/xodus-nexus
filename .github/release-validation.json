@@ -3,6 +3,24 @@
   "approvals": [
     {
       "kind": "launcher",
+      "runId": "38946435932",
+      "commit": "13fdd3e1c004008c0008a101ab12f44097a3f88f",
+      "manifestSha256": "2dc26036570dde3544867fc9cf4dead9351a7372a6a913fae3fcc349ef91c531",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit publication authorization 2026-10-16 after acceptance of the local passkey browser fallback and first-run interface. Main CI 38946435932 succeeded with 314 source tests, 25 runtime-tool checks and 22 CI-tool checks. Exact launcher 0.3.3 candidate identity and SHA-256/SHA-512 verified; unchanged AppImage opened, rendered sample-only UI and exited successfully with the normal Electron sandbox in an isolated profile. Actual iPhone passkey and complete implemented token categories previously passed in the separate Chrome prototype; the final switching UI passed native offline handoff checks. No real account, game or cloud operation on these exact CI bytes. Publish the existing artifact without rebuilding or production activation."
+    },
+    {
+      "kind": "backend",
+      "runId": "38894614667",
+      "commit": "e9302d6541798e569f01d69f60d4bd5c02e8d677",
+      "manifestSha256": "c7c06c872c8ca4bc6a897f048ef874cf267433c433d6c96078cdf28cbbea4c38",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit publication authorization 2026-10-16 for all pending components. Reuse successful main backend 0.2.4 candidate 38894614667 without recompiling its unchanged linux-run-v16 recipe. Exact archive, corresponding source, metadata, candidate identity and SHA-256/SHA-512 verified. Candidate recipe is byte-identical to current main; build script and ordered patch inputs are unchanged. Packaged CLI resolve-package and login help succeeded without account access; native dependencies resolve without GTK/WebKit. Matching package-picker implementation was previously exercised locally. No additional real account, game or cloud operation on these exact CI bytes. Publish unchanged files with the original candidate commit as tag target, retain the unchanged runtime."
+    },
+    {
+      "kind": "launcher",
       "runId": "38876936037",
       "commit": "054755f657e97af0305b69a7fba881223bff9883",
       "manifestSha256": "791291955ebfbf97df9f1e26514f0cdbc52f3d0681e0acf4392333bda78fc58b",
