@@ -13,9 +13,9 @@ vi.mock('./process.js', async importOriginal => {
   return { ...actual, run: vi.fn(async (cmd: string, args: string[], options: object) => {
     if (cmd.endsWith('/xodus-cli')) {
       const marker = (await fs.readFile(cmd))[63];
-      return { code: 0, output: args[0] === 'streaming' ? (marker === 3 ? '--progress-json\n--control-stdin\n' : '') : args[0] === 'run' ? (marker === 2 ? '--unsupported' : '--materialize-chain') :
+      return { code: 0, output: args[0] === 'streaming' ? '--selected-content-id\n' + (marker === 3 ? '--progress-json\n--control-stdin\n' : '') : args[0] === 'run' ? (marker === 2 ? '--unsupported' : '--materialize-chain') :
         (marker === 1 ? 'xodus-cli 0.1.0\n  login    Login\n  streaming    Streaming\n' :
-        'xodus-cli 0.1.0\n  account    Account\n  login    Login\n  logout    Logout\n  download    Download\n  streaming    Streaming\n  run    Run\n' + (marker === 4 ? '' : '\nOptions:\n  --external-webview-stdio  External UI\n')) };
+        'xodus-cli 0.1.0\n  account    Account\n  login    Login\n  logout    Logout\n  download    Download\n  streaming    Streaming\n  run    Run\n  resolve-package    Resolve packages\n' + (marker === 4 ? '' : '\nOptions:\n  --external-webview-stdio  External UI\n')) };
     }
     if (cmd.endsWith('/xodus-service')) throw new Error('Service must never be started by installer tests');
     if (['git', 'cargo', 'rustc', 'protoc'].includes(cmd)) return { code: 1, output: 'Build tool intentionally absent' };
@@ -40,6 +40,7 @@ describe('prebuilt backend', () => {
       const status = await manager.refresh();
       expect(status.capabilities.streamingProgressJson).toBe(supported);
       expect(status.capabilities.streamingControls).toBe(supported);
+      expect(status.capabilities.packageSelection).toBe(true);
     } finally { await fs.rm(root, { recursive: true, force: true }); }
   });
   it.each(['valid', 'archive-digest', 'recipe', 'binary-digest', 'symlink', 'hardlink', 'missing-service', 'bad-elf', 'bad-service-elf', 'missing-capability', 'missing-auth-ui', 'missing-launch-chain', 'busy-after-download'])('verifies install and preserves the old pointer on failure: %s', async scenario => {

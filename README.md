@@ -73,6 +73,7 @@ but have not been verified and may encounter compatibility issues.
 | Forza Horizon 6 | Yes | Playable online. |
 | Palworld | Yes | Playable online. |
 | DOOM Eternal | Yes | Playable. |
+| DOOM: The Dark Ages | Yes | Playable (user report). |
 | The Outer Worlds 2 | Yes | Playable (manual report). |
 | Wolfenstein: The Old Blood | Yes | Playable (manual report). |
 | Wasteland Remastered | Yes | Playable (manual report). |

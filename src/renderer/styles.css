@@ -178,15 +178,19 @@ button.primary svg, button.secondary svg { width: 17px; height: 17px; }
 .library-loading { color: var(--muted); font-size: 12px; }
 .library-pagination svg { width: 16px; height: 16px; color: var(--green); }
 .library-layout.account-only { grid-template-columns: minmax(0, 1fr); }
-.library-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+.library-layout > .account-games { display: contents; }
+.account-games-results { min-width: 0; grid-column: 1; }
+.library-filters { grid-column: 1 / -1; display: flex; align-items: end; flex-wrap: wrap; gap: 10px; }
 .library-filters label { display: grid; gap: 5px; color: #b8bec6; font-size: 11px; }
-.library-filters select, .library-filters input { min-height: 34px; background: #292e35; color: #f1f3f5; border: 1px solid #4b515b; border-radius: 6px; padding: 7px 10px; }
+.library-filters select, .library-filters input { height: 36px; background: #292e35; color: #f1f3f5; border: 1px solid #4b515b; border-radius: 6px; padding: 7px 10px; }
+.library-filters .library-refresh { flex: 0 0 36px; width: 36px; min-height: 36px; height: 36px; padding: 0; display: grid; place-items: center; }
+.library-refresh svg { width: 17px; height: 17px; }
 .library-filter-search { flex: 1; min-width: 150px; }
 .library-filter-search input { width: 100%; }
 .library-license { display: block; margin: 8px 10px 0; color: #b8bec6; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .account-library-note { color: #9da2a8; font-size: 11px; line-height: 1.5; margin-top: 20px; }
 .catalog-card { min-width: 0; position: relative; padding-bottom: 10px; overflow: hidden; border: 1px solid transparent; background: transparent; }
-.catalog-card:hover, .catalog-card.selected { background: #24272b; border-color: #50555b; }
+.catalog-card:hover, .catalog-card.selected { border-color: #50555b; }
 .catalog-card.selected { outline: 1px solid rgba(255,255,255,.4); }
 .catalog-card-main { width: 100%; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
 .catalog-card-main > img, .catalog-cover-placeholder { width: 100%; aspect-ratio: 1/1; display: grid; place-items: center; object-fit: cover; background: #2c3035; }
@@ -247,7 +251,7 @@ button.primary svg, button.secondary svg { width: 17px; height: 17px; }
 .verified-row small { color: var(--muted); font: 9px monospace; }
 .verified-row svg { width: 15px; color: #8d9298; }
 
-.library-layout { display: grid; grid-template-columns: minmax(0,1fr) 390px; gap: 22px; }
+.library-layout { display: grid; grid-template-columns: minmax(0,1fr) 390px; align-items: start; gap: 20px 22px; }
 .library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); align-content: start; gap: 16px; }
 .library-card-wrap { position: relative; min-width: 0; }
 .library-card { min-width: 0; padding: 0 0 10px; border: 1px solid transparent; background: transparent; border-radius: 4px; text-align: left; cursor: pointer; overflow: hidden; }
@@ -261,7 +265,7 @@ button.primary svg, button.secondary svg { width: 17px; height: 17px; }
 .game-context-menu button.danger { color: #ffaaaa; }
 .game-context-menu svg { width: 16px; height: 16px; }
 .dialog-backdrop { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 20px; background: rgba(0,0,0,.7); }
-.game-dialog { width: min(520px, 100%); padding: 26px; background: #292d33; border: 1px solid #636971; border-radius: 6px; box-shadow: 0 24px 70px rgba(0,0,0,.55); }
+.game-dialog { width: min(520px, 100%); max-height: calc(100vh - 40px); overflow-y: auto; padding: 26px; background: #292d33; border: 1px solid #636971; border-radius: 6px; box-shadow: 0 24px 70px rgba(0,0,0,.55); }
 .game-dialog h2 { margin: 0 0 13px; font-size: 21px; }
 .game-dialog p { color: var(--muted); font-size: 12px; line-height: 1.5; }
 .remove-path { display: block; padding: 10px; background: #1c1f23; color: #dce0e3; font-size: 11px; overflow-wrap: anywhere; }
@@ -269,22 +273,39 @@ button.primary svg, button.secondary svg { width: 17px; height: 17px; }
 .game-dialog label { display: grid; gap: 6px; font-size: 11px; color: #d8dce0; }
 .game-dialog input, .game-dialog select { width: 100%; height: 39px; padding: 0 10px; border: 1px solid #5b626b; border-radius: 4px; background: #1c1f23; color: #f4f4f4; font-size: 12px; }
 .game-dialog .input-action input { border: 0; }
+.game-launch-tools { display: grid; gap: 12px; min-width: 0; margin: 0; padding: 15px; border: 1px solid var(--line); border-radius: 5px; }
+.game-launch-tools legend { padding: 0 5px; font-size: 12px; font-weight: 600; }
+.game-launch-tools .tool-checkbox { display: flex; align-items: center; gap: 9px; cursor: pointer; }
+.game-launch-tools input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: #388e35; }
+.game-launch-tools small { color: var(--muted); font-size: 10px; line-height: 1.5; }
+.game-launch-tools textarea { width: 100%; min-height: 72px; resize: vertical; padding: 9px 10px; border: 1px solid #5b626b; border-radius: 4px; background: #1c1f23; color: #f4f4f4; font: 11px/1.5 monospace; }
+.game-launch-tools summary { font-size: 11px; cursor: pointer; }
+.game-launch-tools details[open] summary { margin-bottom: 12px; }
 .dialog-actions { margin-top: 24px; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .dialog-actions button { min-height: 36px; }
+.package-dialog { width: min(720px, 100%); }
+.package-choices { display: grid; gap: 10px; }
+.game-dialog .package-choice { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 1px solid #515860; border-radius: 4px; cursor: pointer; }
+.game-dialog .package-choice:has(input:checked) { border-color: #75be55; background: #283526; }
+.game-dialog .package-choice input { flex: 0 0 18px; width: 18px; height: 18px; padding: 0; margin: 2px 0 0; accent-color: #75be55; }
+.package-choice span { min-width: 0; display: grid; gap: 5px; }
+.package-choice strong { font-size: 14px; }
+.package-choice small { color: var(--muted); overflow-wrap: anywhere; }
+.package-choice.unsupported { opacity: .55; cursor: default; }
+.package-content-id { font-family: monospace; }
 .library-card:hover, .library-card.selected { background: #24272b; border-color: #5a5f66; }
 .library-card.selected { outline: 2px solid rgba(255,255,255,.45); }
 .library-card .game-cover, .library-card .cover-placeholder { aspect-ratio: 1/1; }
 .library-card strong, .library-card > span { display: block; margin: 9px 10px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .library-card strong { font-size: 11px; }
 .library-card > span { color: var(--muted); font-size: 9px; margin-top: 4px; }
-.game-detail { align-self: start; background: #222529; border: 1px solid var(--line); }
-.detail-art { height: 250px; position: relative; overflow: hidden; }
+.game-detail { grid-column: 2; grid-row: 2; align-self: start; background: #222529; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.detail-art { aspect-ratio: 16/9; position: relative; overflow: hidden; }
 .detail-art > .game-cover, .detail-art > .cover-placeholder { width: 100%; height: 100%; object-fit: cover; }
 .detail-art > .game-cover.cover-local { object-fit: contain; }
-.detail-shade { position: absolute; inset: 0; background: linear-gradient(0deg, #222529 1%, transparent 72%); }
-.detail-art > div:last-child { position: absolute; left: 20px; right: 20px; bottom: 14px; }
-.detail-art h2 { margin: 8px 0 3px; font-size: 23px; line-height: 1.05; }
-.detail-art div > span:last-child { color: #c0c3c7; font-size: 9px; }
+.detail-copy { padding: 18px 20px 8px; }
+.detail-copy h2 { margin: 9px 0 5px; font-size: 23px; line-height: 1.2; overflow-wrap: anywhere; }
+.detail-copy > span:last-child { color: #c0c3c7; font-size: 11px; }
 .state-pill { width: fit-content; display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px; background: rgba(139,216,10,.14); color: var(--green); font-size: 8px; font-weight: 700; text-transform: uppercase; }
 .state-pill svg { width: 11px; height: 11px; }
 .state-pill.offline, .state-pill.incomplete { color: #e1b653; background: rgba(225,182,83,.12); }
@@ -460,6 +481,16 @@ button.primary, button.secondary { border-radius: 5px; min-height: 40px; font-si
 .catalog-card-main strong { font-size: 13px; }
 .catalog-card-main small, .catalog-card-main div > span { font-size: 10px; }
 .catalog-card-install { border-radius: 5px; font-size: 11px; }
+.account-games-results .catalog-card { display: flex; flex-direction: column; }
+.account-games-results .catalog-card-main { flex: 1; display: block; cursor: default; }
+.account-games-results .library-card { padding: 0; border: 0; background: transparent; border-radius: 0; cursor: pointer; }
+.account-games-results .library-card strong { margin: 0; font-size: 13px; }
+.account-games-results .catalog-card-main > div:last-child { min-height: 71px; }
+.account-games-results .catalog-card-install, .catalog-card-status { align-self: flex-start; height: 34px; min-height: 34px; }
+.catalog-card-status { display: flex; align-items: center; gap: 6px; margin: 0 10px; padding: 0 1px; font-size: 11px; color: #b8bec6; }
+.catalog-card-status svg { width: 14px; height: 14px; }
+.account-games-results .game-cover, .account-games-results .cover-placeholder { display: block; width: 100%; aspect-ratio: 1/1; }
+.account-games-results .cover-placeholder { display: grid; }
 .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 13px; }
 .featured-catalog > .section-title:first-child { margin-top: 5px; }
 .featured-rail { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
@@ -502,7 +533,8 @@ button.primary, button.secondary { border-radius: 5px; min-height: 40px; font-si
   .catalog-install-box { margin-top: 0; }
   .install-form { border-left: 0; border-top: 1px solid var(--line); }
   .quick-grid { grid-template-columns: 1fr; }
-  .game-detail { order: -1; }
+  .game-detail { grid-column: 1; grid-row: 2; }
+  .account-games-results { grid-row: 3; }
   .form-grid { grid-template-columns: 1fr; }
   .form-grid label { grid-column: auto !important; }
   .meta-grid { grid-template-columns: 1fr; }

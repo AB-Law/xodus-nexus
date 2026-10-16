@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { AccountGames, GameTitle, LibraryPagination, Sidebar, type LibraryFilters } from './App';
+import { AccountGames, Cover, GameLaunchToolFields, GameTitle, HomePage, LibraryPagination, Sidebar, type LibraryFilters } from './App';
+import { defaultLaunchTools } from '../shared/launch-tools';
 import { demoSnapshot } from '../shared/demo-data';
 
 it('keeps one My Library and Store navigation, no separate Game Pass page',()=>{
@@ -35,6 +36,33 @@ it('preserves full edition names in native hover tooltips and escapes special ch
   expect(html).toContain('title="A Long Game Name: &quot;Complete&quot; &amp; Deluxe Edition (PC)"');
 });
 
+it('uses Store box art instead of a package logo and wide artwork for details',()=>{
+  const game={ ...demoSnapshot().games[0], coverDataUrl:'data:image/png;base64,AAAA', coverUrl:'https://store-images.s-microsoft.com/box', heroUrl:'https://store-images.s-microsoft.com/hero' };
+  expect(renderToStaticMarkup(<Cover game={game} />)).toContain('src="https://store-images.s-microsoft.com/box"');
+  expect(renderToStaticMarkup(<Cover game={game} variant="hero" />)).toContain('src="https://store-images.s-microsoft.com/hero"');
+  expect(renderToStaticMarkup(<Cover game={{...game, coverUrl:undefined, heroUrl:undefined}} />)).toContain('cover-local');
+});
+
+it('uses wide Store art for the Home banner and never stretches a small package logo',()=>{
+  const data=demoSnapshot();
+  data.games=[{...data.games[0],coverDataUrl:'data:image/png;base64,SMALLLOGO',coverUrl:'https://store-images.s-microsoft.com/box',heroUrl:'https://store-images.s-microsoft.com/hero'}];
+  const banner=()=>{const html=renderToStaticMarkup(<HomePage data={data} go={()=>{}} action={()=>{}} />);return html.slice(html.indexOf('<section class="spotlight'),html.indexOf('<div class="spotlight-copy"'));};
+  expect(banner()).toContain('url(https://store-images.s-microsoft.com/hero)');
+  expect(banner()).not.toContain('SMALLLOGO');
+  data.games[0].heroUrl=undefined;
+  expect(banner()).toContain('url(https://store-images.s-microsoft.com/box)');
+  data.games[0].coverUrl=undefined;
+  expect(banner()).not.toContain('--spotlight-art');
+});
+
+it('gives installed cards a separate status footer and an accessible compact refresh control',()=>{
+  const html=renderToStaticMarkup(<AccountGames data={demoSnapshot()} toast={()=>{}} />);
+  expect(html).toContain('class="catalog-card-status"');
+  expect(html).toContain('aria-label="Refresh library"');
+  expect(html).toContain('class="account-games-results"');
+  expect(html).not.toContain('class="library-license"');
+});
+
 it('keeps pagination loading inside the button, without the oversized Store loading panel',()=>{
   const more=renderToStaticMarkup(<LibraryPagination loading={true} hasMore={true} load={()=>{}} />);
   expect(more).toContain('disabled'); expect(more).toContain('Loading games');
@@ -42,4 +70,12 @@ it('keeps pagination loading inside the button, without the oversized Store load
   const initial=renderToStaticMarkup(<LibraryPagination loading={true} hasMore={false} load={()=>{}} />);
   expect(initial).toContain('role="status"'); expect(initial).not.toContain('catalog-loading');
   expect(renderToStaticMarkup(<LibraryPagination loading={false} hasMore={false} load={()=>{}} />)).toBe('');
+});
+
+it('offers saved per-game overlay options and Steam-style environment and arguments',()=>{
+  const html=renderToStaticMarkup(<GameLaunchToolFields value={{...defaultLaunchTools,mangoHud:true,gamescope:true,launchOptions:'PROTON_ENABLE_WAYLAND=1 %command% --launcher-skip'}} change={()=>{}} />);
+  expect(html).toContain('Enable MangoHud'); expect(html).toContain('Run in gamescope');
+  expect(html).toContain('Gamescope options'); expect(html).toContain('requires mangoapp');
+  expect(html).toContain('Launch options'); expect(html).toContain('PROTON_ENABLE_WAYLAND=1 %command% --launcher-skip');
+  expect(html).toContain('checked');
 });

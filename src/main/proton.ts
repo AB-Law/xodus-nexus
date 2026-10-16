@@ -10,6 +10,7 @@ function shellQuote(value: string): string {
 
 export interface ProtonRunner {
   command: string;
+  launchCommand?: string;
   compatibilityDataPath: string;
   stopPrefix: { command: string; args: string[] };
 }
@@ -267,6 +268,7 @@ export async function prepareProtonRunner(
   winePath: string,
   compatibilityDataPath: string,
   steamRoot: string,
+  gameWineCommand = winePath,
 ): Promise<ProtonRunner | undefined> {
   const protonRoot = path.resolve(path.dirname(winePath), '..', '..');
   const proton = path.join(protonRoot, 'proton');
@@ -356,7 +358,7 @@ export async function prepareProtonRunner(
   const eacRuntime = await installedEacRuntime(steamRoot);
   const runner = path.join(compatibilityDataPath, 'xodus-proton-wine');
   const temporary = `${runner}.tmp-${process.pid}`;
-  const script = [
+  const makeScript = (launchWine: string) => [
     '#!/bin/sh',
     `export WINEPREFIX=${shellQuote(path.join(compatibilityDataPath, 'pfx'))}`,
     "export WINEARCH='win64'",
@@ -388,18 +390,26 @@ export async function prepareProtonRunner(
     // Keep Xodus and its temporary launch view/account service alive until
     // the isolated game prefix has no remaining Wine processes.
     `if [ ! -x ${shellQuote(path.join(files, 'bin', 'wineserver'))} ]; then`,
-    `  exec ${shellQuote(winePath)} "$@"`,
+    `  exec ${shellQuote(launchWine)} "$@"`,
     'fi',
     'launch_status=0',
-    `${shellQuote(winePath)} "$@" || launch_status=$?`,
+    `${shellQuote(launchWine)} "$@" || launch_status=$?`,
     'wait_status=0',
     `${shellQuote(path.join(files, 'bin', 'wineserver'))} -w || wait_status=$?`,
     'if [ "$launch_status" -ne 0 ]; then exit "$launch_status"; fi',
     'exit "$wait_status"',
     '',
   ].join('\n');
-  await fs.writeFile(temporary, script, { mode: 0o700 });
+  await fs.writeFile(temporary, makeScript(winePath), { mode: 0o700 });
   await fs.rename(temporary, runner);
   await fs.chmod(runner, 0o700);
-  return { command: runner, compatibilityDataPath, stopPrefix: { command: runner, args: ['--nexus-stop-prefix'] } };
+  let launchCommand: string | undefined;
+  if (gameWineCommand !== winePath) {
+    launchCommand = path.join(compatibilityDataPath, 'xodus-proton-game');
+    const temporaryLaunch = `${launchCommand}.tmp-${process.pid}`;
+    await fs.writeFile(temporaryLaunch, makeScript(gameWineCommand), { mode: 0o700 });
+    await fs.rename(temporaryLaunch, launchCommand);
+    await fs.chmod(launchCommand, 0o700);
+  }
+  return { command: runner, ...(launchCommand ? { launchCommand } : {}), compatibilityDataPath, stopPrefix: { command: runner, args: ['--nexus-stop-prefix'] } };
 }

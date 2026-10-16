@@ -61,7 +61,7 @@ try {
   command('gh', ['release', 'create', tag, '--repo', repo, '--target', run.head_sha,
     ...manifest.files.map(file => path.join(directory, file.name)), path.join(directory, 'candidate.json'),
     ...(kind === 'launcher' ? [] : ['--latest=false']),
-    '--title', `Xodus Nexus ${kind} ${tag}`, '--notes',
+    '--title', `Xodus Nexus ${kind} ${kind === 'backend' ? tag.slice('backend-v'.length) : tag}`, '--notes',
     // Runtime notes may be finalized in the metadata-only approval commit.
     // Artifact identity/recipe checks above still bind to the original run.
     command('git', ['show', `${kind === 'runtime' ? 'HEAD' : run.head_sha}:.github/release-notes/${kind === 'runtime' ? 'runtime-signin-updates.md' : `${kind}-${kind === 'launcher' ? tag.slice(1) : tag.slice('backend-v'.length)}.md`}`])]);

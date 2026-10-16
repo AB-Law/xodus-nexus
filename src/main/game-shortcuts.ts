@@ -10,6 +10,17 @@ const desktopValue = (value: string) => value.replace(/\\/g, '\\\\').replace(/\n
 // Desktop Exec is NOT a shell command. Escape both the value and Exec layers.
 export const desktopArgument = (value: string) => desktopValue(`"${value.replace(/%/g, '%%').replace(/["`$\\]/g, '\\$&')}"`);
 
+export function shortcutTitleStem(title: string): string {
+  const clean = title.normalize('NFC').replace(/[<>:"/\\|?*\x00-\x1f\x7f-\x9f]/g, ' ').replace(/\s+/g, ' ').replace(/^[. ]+|[. ]+$/g, '');
+  let stem = '', escapedBytes = 0;
+  for (const char of clean) {
+    const cost = /^[A-Za-z0-9_.]$/.test(char) ? 1 : Buffer.byteLength(char) * 4;
+    if (escapedBytes + cost > 150 || Buffer.byteLength(stem + char) > 120) break;
+    stem += char; escapedBytes += cost;
+  }
+  return stem.trimEnd() || 'Xodus Nexus game';
+}
+
 export function shortcutArguments(argv: string[]): { gameId?: string; profile?: string } {
   const result: { gameId?: string; profile?: string } = {};
   for (let index = 0; index < argv.length; index++) {
@@ -45,11 +56,13 @@ export class GameShortcuts {
     if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid?.() || (stat.mode & 0o022))
       throw new Error('Shortcut directory must be owned by your user and not writable by others.');
   }
-  private async write(file: string, bytes: string | Buffer, mode: number, marker?: string): Promise<void> {
+  private async write(file: string, bytes: string | Buffer, mode: number, marker?: string | string[]): Promise<void> {
     try {
       const stat = await fs.lstat(file);
+      const markers = marker ? (Array.isArray(marker) ? marker : [marker]) : [];
+      const lines = markers.length && stat.isFile() ? (await fs.readFile(file, 'utf8')).split('\n') : [];
       if (!stat.isFile() || stat.uid !== process.getuid?.() || (stat.mode & 0o022) ||
-          (marker && !(await fs.readFile(file, 'utf8')).split('\n').includes(marker)))
+          !markers.every(value => lines.includes(value)))
         throw new Error('Refusing to replace an unrelated or unsafe shortcut file.');
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     const temporary = `${file}.${randomUUID()}`;
@@ -73,17 +86,59 @@ export class GameShortcuts {
     await this.write(icon, await fs.readFile(this.locations.icon), 0o600);
     this.entry = entry; this.icon = icon;
   }
-  private filename(id: string): string {
+  private legacyFilename(id: string): string {
     if (!validId(id)) throw new Error('Invalid game shortcut ID.');
     return `xodus-nexus-${this.profileId}-${id}.desktop`;
+  }
+  private gameMarker(id: string): string { return `X-Xodus-Nexus-Game=${id}`; }
+  private async owns(file: string, id: string): Promise<boolean> {
+    try {
+      const stat = await fs.lstat(file);
+      if (!stat.isFile() || stat.uid !== process.getuid?.() || (stat.mode & 0o022) || stat.size > 128 * 1024) return false;
+      const lines = (await fs.readFile(file, 'utf8')).split('\n');
+      return lines.includes(this.marker) && (lines.includes(this.gameMarker(id)) || path.basename(file) === this.legacyFilename(id));
+    } catch (error) { if (['ENOENT', 'EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '')) return false; throw error; }
+  }
+  private async ownedFiles(directory: string, id: string): Promise<string[]> {
+    try {
+      const stat = await fs.lstat(directory);
+      if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid?.() || (stat.mode & 0o022)) throw Error('Unsafe shortcut directory.');
+      const files: string[] = [];
+      for (const name of await fs.readdir(directory)) {
+        const file = path.join(directory, name);
+        if (name.endsWith('.desktop') && await this.owns(file, id)) files.push(file);
+      }
+      return files;
+    } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []; throw error; }
+  }
+  private async writeEntry(directory: string, stem: string, id: string, body: string, mode: number): Promise<string> {
+    const temporary = path.join(directory, `.nexus-${randomUUID()}`);
+    await fs.writeFile(temporary, body, { flag: 'wx', mode });
+    try {
+      for (let index = 0; index < 100; index++) {
+        const suffix = index === 0 ? '' : index === 1 ? ` (${id.slice(0, 8)})` : ` (${id.slice(0, 8)}-${this.profileId.slice(0, 6)}${index > 2 ? `-${index}` : ''})`;
+        const target = path.join(directory, `${stem}${suffix}.desktop`);
+        try {
+          // Atomic no-clobber publication, even when two games share a title.
+          await fs.link(temporary, target);
+          return target;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+          if (!await this.owns(target, id)) continue;
+          await this.write(target, body, mode, [this.marker, this.gameMarker(id)]);
+          return target;
+        }
+      }
+      throw Error('No free shortcut filename could be found for this game.');
+    } finally { await fs.rm(temporary, { force: true }); }
   }
   async create(game: Pick<Game, 'id' | 'title' | 'installState'>, destination: ShortcutDestination, png?: Buffer): Promise<string> {
     if (!this.entry || !this.icon) throw new Error(this.reason);
     if (destination !== 'desktop' && destination !== 'applications') throw new Error('Invalid shortcut destination.');
     if (game.installState !== 'ready') throw new Error('Only installed, ready games can have launch shortcuts.');
+    if (!validId(game.id)) throw new Error('Invalid game shortcut ID.');
     const directory = this.locations[destination];
     await this.directory(directory);
-    const target = path.join(directory, this.filename(game.id));
     const iconDirectory = path.join(this.locations.userData, 'shortcuts', 'icons');
     const gameIcon = path.join(iconDirectory, `${game.id}.png`);
     let icon = this.icon;
@@ -101,18 +156,16 @@ export class GameShortcuts {
     const title = game.title.replace(/[\0\r\n\t]/g, ' ').trim() || 'Xodus Nexus game';
     // Keep the executable field constant: desktop loaders may check it before
     // expanding %% in arguments. /bin/sh runs a file, never a shell -c string.
-    const body = `[Desktop Entry]\nType=Application\nVersion=1.0\nName=${desktopValue(title)}\nComment=Play with Xodus Nexus\nExec=/bin/sh ${desktopArgument(this.entry)} ${desktopArgument(game.id)}\nIcon=${desktopValue(icon)}\nTerminal=false\nCategories=Game;\nStartupNotify=false\n${this.marker}\n`;
-    await this.write(target, body, destination === 'desktop' ? 0o755 : 0o644, this.marker);
+    const body = `[Desktop Entry]\nType=Application\nVersion=1.0\nName=${desktopValue(title)}\nComment=Play with Xodus Nexus\nExec=/bin/sh ${desktopArgument(this.entry)} ${desktopArgument(game.id)}\nIcon=${desktopValue(icon)}\nTerminal=false\nCategories=Game;\nStartupNotify=false\n${this.marker}\n${this.gameMarker(game.id)}\n`;
+    const target = await this.writeEntry(directory, shortcutTitleStem(title), game.id, body, destination === 'desktop' ? 0o755 : 0o644);
+    // Migrate only this game's managed entries, after the replacement is safe.
+    for (const old of await this.ownedFiles(directory, game.id)) if (old !== target && await this.owns(old, game.id)) await fs.unlink(old);
     return target;
   }
   async remove(id: string): Promise<void> {
+    if (!validId(id)) throw new Error('Invalid game shortcut ID.');
     for (const directory of [this.locations.desktop, this.locations.applications]) {
-      const target = path.join(directory, this.filename(id));
-      try {
-        const stat = await fs.lstat(target);
-        if (stat.isFile() && stat.uid === process.getuid?.() && !(stat.mode & 0o022) &&
-            (await fs.readFile(target, 'utf8')).split('\n').includes(this.marker)) await fs.unlink(target);
-      } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+      for (const target of await this.ownedFiles(directory, id)) if (await this.owns(target, id)) await fs.unlink(target);
     }
   }
 }

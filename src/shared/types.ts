@@ -12,6 +12,7 @@ export interface BackendCapabilities {
   streaming: boolean;
   streamingProgressJson?: boolean;
   streamingControls?: boolean;
+  packageSelection?: boolean;
   run: boolean;
   version?: string;
 }
@@ -79,6 +80,13 @@ export interface RuntimeStatus {
   error?: string;
 }
 
+export interface GameLaunchTools {
+  mangoHud: boolean;
+  gamescope: boolean;
+  gamescopeArgs: string;
+  launchOptions: string;
+}
+
 export interface Game {
   id: string;
   title: string;
@@ -90,9 +98,11 @@ export interface Game {
   executable?: string;
   winePath?: string; // Legacy saved field; ignored for launch. The runtime is global.
   launchArgs?: string;
+  launchTools?: GameLaunchTools;
   locale?: string;
   coverDataUrl?: string;
-  coverUrl?: string; // Store artwork from the Microsoft display catalog, used when the installation ships no local logo.
+  coverUrl?: string; // Store box art, preferred over the installation's small logo.
+  heroUrl?: string; // Wide Store artwork for the game detail panel.
   installState: 'ready' | 'incomplete' | 'imported';
   installMessage?: string;
   vcRedistEncrypted?: boolean;
@@ -117,6 +127,8 @@ export interface DownloadTask {
   gameId?: string;
   title: string;
   productId: string;
+  selectedContentId?: string;
+  selectionMarket?: string;
   destination: string;
   status: 'queued' | 'running' | 'paused' | 'complete' | 'failed' | 'cancelled';
   canPause?: boolean;
@@ -201,6 +213,26 @@ export interface InstallRequest {
   productId: string;
   title: string;
   destination: string;
+  selectedContentId?: string;
+  selectionMarket?: string;
+}
+
+export interface InstallChoice {
+  productId: string;
+  contentId: string;
+  title: string;
+  platform: string;
+  packageFormat: string;
+  kind: string;
+  supported: boolean;
+}
+
+export interface InstallPlan {
+  schema: 1;
+  rootProductId: string;
+  market: string;
+  status: 'ready' | 'choice' | 'unavailable';
+  choices: InstallChoice[];
 }
 
 export interface GameContentItem {
@@ -281,6 +313,7 @@ export interface LauncherApi {
   getFeaturedCatalog(): Promise<CatalogSearchResult>;
   getAccountLibrary(kind: AccountLibraryPage['kind'], cursor?: string, refresh?: boolean): Promise<AccountLibraryPage>;
   startInstall(request: InstallRequest): Promise<string>;
+  getInstallPlan(productId: string): Promise<InstallPlan>;
   getGameContent(id: string): Promise<GameContentPlan>;
   installGameContent(id: string, productId: string): Promise<string>;
   updateInstalledGame(id: string): Promise<string>;
@@ -290,7 +323,7 @@ export interface LauncherApi {
   removeDownload(id: string): Promise<void>;
   clearFinishedDownloads(): Promise<void>;
   importGame(path?: string): Promise<Game | null>;
-  updateGame(id: string, patch: Partial<Pick<Game, 'title' | 'executable' | 'launchArgs' | 'locale'>>): Promise<Game>;
+  updateGame(id: string, patch: Partial<Pick<Game, 'title' | 'executable' | 'launchArgs' | 'locale' | 'launchTools'>>): Promise<Game>;
   getGameLocales(id: string): Promise<string[]>;
   removeGame(id: string, mode: 'library' | 'trash-files'): Promise<void>;
   getGameLaunchOptions(id: string): Promise<GameLaunchOptions>;

@@ -65,6 +65,7 @@ export class BackendManager {
         const streaming = await run(binaryPath, ['streaming', '--help'], { maxOutput: 100_000 });
         capabilities.streamingProgressJson = streaming.code === 0 && /(?:^|\s)--progress-json(?:\s|$)/m.test(streaming.output);
         capabilities.streamingControls = Boolean(capabilities.streamingProgressJson && /(?:^|\s)--control-stdin(?:\s|$)/m.test(streaming.output));
+        capabilities.packageSelection = streaming.code === 0 && capabilities.commands.includes('resolve-package') && /(?:^|\s)--selected-content-id(?:\s|$)/m.test(streaming.output);
       }
       return capabilities.login && capabilities.streaming ? capabilities : null;
     } catch { return null; }
@@ -168,7 +169,7 @@ export class BackendManager {
       this.artifact = await discoverBackend(this.fetcher);
       const binaryPath = await installBackend(this.managedRoot, this.artifact, this.fetcher, async cli => {
         const caps = await this.validate(cli);
-        if (!caps?.account || !caps.run || !caps.streaming || !caps.login || !caps.logout || !caps.download || !caps.externalAuth) {
+        if (!caps?.account || !caps.run || !caps.streaming || !caps.login || !caps.logout || !caps.download || !caps.externalAuth || !caps.packageSelection) {
           throw new Error('Backend validation failed. The prebuilt build requires glibc 2.35 or newer, OpenSSL 3 and D-Bus runtime libraries.');
         }
         const help = await run(cli, ['run', '--help'], { maxOutput: 100_000 });
@@ -235,7 +236,7 @@ export class BackendManager {
       if (result.code !== 0) throw new Error(`cargo build exited with code ${result.code}`);
       const builtCli = path.join(target, 'release', 'xodus-cli');
       const capabilities = await this.validate(builtCli);
-      if (!capabilities?.login || !capabilities.streaming || !capabilities.account || !capabilities.externalAuth) throw new Error('The built backend failed command validation.');
+      if (!capabilities?.login || !capabilities.streaming || !capabilities.account || !capabilities.externalAuth || !capabilities.packageSelection) throw new Error('The built backend failed command validation.');
       const runHelp = await run(builtCli, ['run', '--help'], { maxOutput: 100_000 });
       if (runHelp.code !== 0 || !runHelp.output.includes('--materialize-chain')) throw new Error('The built backend lacks launch-chain support.');
       await this.assertUpdateAllowed();

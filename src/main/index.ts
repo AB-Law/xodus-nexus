@@ -22,6 +22,8 @@ import { spawnGameProcess, type GameProcess } from './game-process.js';
 import { gameLocaleEnvironment, manifestLocales, manifestTitleId, supportedGameLocale } from './game-locale.js';
 import { antiCheatEnvironment } from './anti-cheat.js';
 import { gameLaunchArguments } from './game-launch.js';
+import { prepareGameWrapper, type GameWrapper } from './game-wrapper.js';
+import { normalizeLaunchTools } from '../shared/launch-tools.js';
 import { LauncherUpdater } from './launcher-update.js';
 import { readDiagnosticTail } from './diagnostic-log.js';
 import { queryGameUpdate } from './game-updates.js';
@@ -34,6 +36,7 @@ import { AccountLibrary } from './account-library.js';
 import { GameContent, type ContentPackage } from './game-content.js';
 import { startAuthTransport } from './auth-transport.js';
 import { authViewFactory } from './auth-window.js';
+import { installSelection, readInstallPlan } from './install-plan.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -338,6 +341,19 @@ async function installGameContent(id: string, productId: string): Promise<string
 async function prepareInstall(request: InstallRequest, updateGame?: Game, content?: { game: Game; pkg: ContentPackage; manager: GameContent }): Promise<string> {
   const binary = requireBackend('streaming');
   const productId = safeProductId(request.productId);
+  const market = currentMarket();
+  let selectedContentId: string | undefined;
+  if (!content) {
+    if (!backend.current.capabilities.packageSelection) throw Error('Update the Xodus backend in Settings before installing games.');
+    if (request.selectionMarket !== undefined && request.selectionMarket !== market) throw Error('Store market changed. Choose the installation package again.');
+    if (request.selectedContentId !== undefined) {
+      if (request.selectionMarket !== market || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(request.selectedContentId)) throw Error('Invalid installation package selection.');
+      // Streaming re-resolves membership before license/download. Do not make
+      // a redundant third catalog round trip here after the dialog preflight.
+      selectedContentId = request.selectedContentId;
+    } else selectedContentId = installSelection(await readInstallPlan(binary, productId, market));
+    if (binary !== backend.current.binaryPath || market !== currentMarket()) throw Error('Backend or Store market changed. Try installing again.');
+  }
   const destination = path.resolve(request.destination.trim());
   if (!path.isAbsolute(destination)) throw new Error('The destination must be an absolute path.');
   if (updateGame) {
@@ -360,6 +376,8 @@ async function prepareInstall(request: InstallRequest, updateGame?: Game, conten
     gameId: content?.game.id ?? updateGame?.id,
     title: request.title.trim() || productId,
     productId,
+    selectedContentId,
+    selectionMarket: selectedContentId ? market : undefined,
     destination,
     status: 'running',
     progress: null,
@@ -381,7 +399,8 @@ async function prepareInstall(request: InstallRequest, updateGame?: Game, conten
   }, () => { /* Covers are optional. */ });
 
   const args = ['streaming', content?.pkg.contentId ?? productId, destination, '--parallel', String(store.settings.parallelDownloads)];
-  if (store.settings.market) args.push('--market', store.settings.market);
+  args.push('--market', market);
+  if (selectedContentId) args.push('--selected-content-id', selectedContentId);
   if (structured) args.push('--progress-json');
   if (controllable) args.push('--control-stdin');
   const progressTracker = new DownloadProgress();
@@ -469,6 +488,7 @@ async function prepareInstall(request: InstallRequest, updateGame?: Game, conten
     }
     operations.delete(id);
     emitSnapshot();
+    if (task.status === 'complete' && !content) void enrichLibraryCovers().then(() => emitSnapshot(), () => { /* Artwork is optional. */ });
   }).catch(async (error) => {
     finishControls();
     operations.delete(id);
@@ -491,9 +511,9 @@ async function importGame(input?: string): Promise<Game | null> {
     directory = result.filePaths[0];
   }
   const game = await inspectGameDirectory(path.resolve(directory));
-  if (!game.coverDataUrl && game.storeId) {
-    const posters = await catalog.posters([game.storeId], currentMarket());
-    game.coverUrl = posters.get(game.storeId);
+  if (game.storeId) {
+    const artwork = (await catalog.artwork([game.storeId], currentMarket())).get(game.storeId.toUpperCase());
+    if (artwork) Object.assign(game, artwork);
   }
   await store.upsertGame(game);
   emitSnapshot();
@@ -603,13 +623,15 @@ async function prepareGameLaunch(id: string): Promise<void> {
   writeLaunchLog(`Wine: ${wine}`);
   emitSnapshot();
   let serviceSession: XodusServiceSession | undefined;
+  let launchWrapper: GameWrapper | undefined;
   try {
     const legacyPrefixRoot = path.join(dataRoot, 'prefixes', game.id);
     const compatibilityDataPath = path.join(dataRoot, 'compatdata', game.id);
     const steamRoot = path.join(app.getPath('home'), '.steam', 'root');
-    const protonRunner = await prepareProtonRunner(wine, compatibilityDataPath, steamRoot);
+    launchWrapper = await prepareGameWrapper(wine, game.launchTools, path.join(dataRoot, 'launch-wrappers'), process.env, game.path);
+    const protonRunner = await prepareProtonRunner(wine, compatibilityDataPath, steamRoot, launchWrapper.command);
     const wineCommand = protonRunner?.command ?? wine;
-    args[2] = wineCommand;
+    args[2] = protonRunner?.launchCommand ?? launchWrapper.command;
     if (inspected.vcRedistEncrypted) {
       if (!protonRunner) throw new Error('This encrypted VC++ prerequisite requires a Proton prefix. Select Xodus Runtime in Settings.');
       const installed = await installedVcRuntimeVersion(path.join(compatibilityDataPath, 'pfx'));
@@ -683,6 +705,7 @@ async function prepareGameLaunch(id: string): Promise<void> {
           serviceSessions.delete(operationId);
         }
         await tracked.cleanup().catch((error) => console.error('Game service cleanup failed:', error));
+        await launchWrapper?.cleanup().catch((error) => console.error('Game wrapper cleanup failed:', error));
         gameLog.flush();
         launchLog.end();
         emitSnapshot();
@@ -690,6 +713,7 @@ async function prepareGameLaunch(id: string): Promise<void> {
       } finally { finalizingGame = false; finishShortcutSession(); }
     });
   } catch (error) {
+    await launchWrapper?.cleanup().catch(() => undefined);
     if (serviceSession) {
       await serviceSession.stop().catch(() => undefined);
       serviceSessions.delete(operationId);
@@ -807,16 +831,16 @@ function currentMarket(): string {
   return configured.toLowerCase() === 'neutral' ? app.getLocaleCountryCode() || 'US' : configured;
 }
 
-// Library covers for games whose installation ships no local artwork:
-// the same public display catalog that enriches Store results provides the
-// published poster by the game's real Store Product ID.
+// Fetch real covers and wide art even when an installation has a small logo.
 async function enrichLibraryCovers(): Promise<void> {
-  const missing = store.games.filter((game) => game.storeId && !game.coverDataUrl && !game.coverUrl);
+  const missing = store.games.filter((game) => game.storeId && (!game.coverUrl || !game.heroUrl));
   if (missing.length === 0) return;
-  const posters = await catalog.posters(missing.map((game) => game.storeId!), currentMarket());
+  const artwork = await catalog.artwork(missing.map((game) => game.storeId!), currentMarket());
   for (const game of missing) {
-    const coverUrl = posters.get(game.storeId!);
-    if (coverUrl) await store.patchGame(game.id, { coverUrl });
+    const images = artwork.get(game.storeId!.toUpperCase());
+    if (images) await store.patchGame(game.id, {
+      coverUrl: images.coverUrl ?? game.coverUrl, heroUrl: images.heroUrl ?? game.heroUrl,
+    });
   }
 }
 
@@ -857,6 +881,7 @@ function registerDemoIpc(catalogMarket: () => string): void {
   ipcMain.handle('catalog-featured', () => catalog.featured(catalogMarket()));
   ipcMain.handle('account-library', (_event, kind: 'all' | 'owned' | 'gamepass') => demoAccountLibrary(kind, demoCoverUrls));
   ipcMain.handle('start-install', () => 'demo-download');
+  ipcMain.handle('install-plan', () => { throw Error('Package selection is unavailable in demo mode.'); });
   ipcMain.handle('game-content', (_event, id: string) => ({ gameId: id, checkedAt: new Date().toISOString(), items: [] }));
   ipcMain.handle('install-game-content', () => { throw Error('Content installation is unavailable in demo mode.'); });
   ipcMain.handle('update-installed-game', (_event, id: string) => id);
@@ -948,6 +973,14 @@ function registerIpc(): void {
   });
   ipcMain.handle('catalog-featured', () => catalog.featured(catalogMarket()));
   ipcMain.handle('start-install', (_event, request: InstallRequest) => startInstall(request));
+  ipcMain.handle('install-plan', async (_event, raw: string) => {
+    const binary = requireBackend('streaming');
+    if (!backend.current.capabilities.packageSelection) throw Error('Update the Xodus backend in Settings to choose installation packages.');
+    const productId = safeProductId(raw), market = currentMarket();
+    const plan = await readInstallPlan(binary, productId, market);
+    if (binary !== backend.current.binaryPath || market !== currentMarket()) throw Error('Backend or Store market changed. Try again.');
+    return plan;
+  });
   ipcMain.handle('game-content', async (_event, id: string) => (await gameContent(id)).plan);
   ipcMain.handle('install-game-content', (_event, id: string, productId: string) => installGameContent(id, productId));
   ipcMain.handle('update-installed-game', async (_event, id: string) => {
@@ -988,7 +1021,7 @@ function registerIpc(): void {
           if (task.kind === 'content') {
             if (!task.gameId) throw Error('Content download has no parent game.');
             await installGameContent(task.gameId, task.productId);
-          } else await startInstall({ productId: task.productId, title: task.title, destination: task.destination }, game);
+          } else await startInstall({ productId: task.productId, title: task.title, destination: task.destination, selectedContentId: task.selectedContentId, selectionMarket: task.selectionMarket }, game);
           await store.removeDownload(id);
         } catch (error) { task.status = 'paused'; throw error; }
         finally { emitSnapshot(); }
@@ -1007,6 +1040,7 @@ function registerIpc(): void {
   ipcMain.handle('update-game', async (_event, id: string, patch: Partial<Game>) => {
     const allowed: Partial<Game> = {};
     for (const key of ['title', 'executable', 'launchArgs'] as const) if (typeof patch[key] === 'string') allowed[key] = patch[key];
+    if ('launchTools' in patch) allowed.launchTools = normalizeLaunchTools(patch.launchTools);
     if (typeof patch.locale === 'string') {
       const game = store.games.find((entry) => entry.id === id);
       if (!game) throw new Error('Game not found.');
