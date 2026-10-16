@@ -62,7 +62,7 @@ const api: LauncherApi = {
     ipcRenderer.on('operation-log', listener);
     return () => ipcRenderer.removeListener('operation-log', listener);
   },
-  isDemoTour: () => process.env.XODUS_DEMO_TOUR === '1',
+  isDemoTour: () => process.env.XODUS_DEMO_TOUR === '1' && !process.env.XODUS_DEMO_CAPTURE_DIR,
 };
 
 contextBridge.exposeInMainWorld('launcher', api);

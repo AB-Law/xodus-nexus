@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { gameLaunchArguments } from './game-launch.js';
+import { gameLaunchArguments, preparedGameWine } from './game-launch.js';
 import { LINUX_RUN_PATCH } from './backend.js';
 
 describe('generic package launch', () => {
+  it('keeps the prepared Proton prefix runner when no launch tools are enabled', () => {
+    const wine = preparedGameWine({ command: '/compat/pfx-runner' }, '/runtime/wine');
+    expect(gameLaunchArguments({ path: '/package', executable: 'Dungeons.exe' }, wine, '', LINUX_RUN_PATCH)[2])
+      .toBe('/compat/pfx-runner');
+  });
+  it('uses the prepared game runner for tools and the configured wrapper without Proton', () => {
+    expect(preparedGameWine({ command: '/compat/pfx-runner', launchCommand: '/compat/game-runner' }, '/tools/wrapper'))
+      .toBe('/compat/game-runner');
+    expect(preparedGameWine(undefined, '/tools/wrapper')).toBe('/tools/wrapper');
+  });
   it.each(['start_protected_game.exe', 'Dungeons.exe', 'FSD/Binaries/WinGDK/Shipping.exe', 'Game.exe'])(
     'uses the manifest entry and the same launch policy for %s', (executable) => {
       const args = gameLaunchArguments({ path: '/package', executable }, '/runtime/wine', 'US', LINUX_RUN_PATCH);

@@ -5,6 +5,14 @@
 // the real Product IDs below. No real credentials, tokens or account data.
 import type { AccountLibraryPage, AppSnapshot, Game, GameLaunchOptions } from './types.js';
 
+export interface DemoArtwork { coverUrl?: string; heroUrl?: string }
+export interface DemoVersions {
+  launcher: string;
+  backend: string;
+  backendCommit: string;
+  backendCompatibility: string;
+}
+
 // Product IDs are real Microsoft Store products so display-catalog lookups
 // return the genuine published artwork.
 export const demoGames: Game[] = [
@@ -29,37 +37,39 @@ export const demoAccountProducts = [
   { productId: '9NPKGVXPFRSX', title: 'Age of Mythology: Retold', publisher: 'Xbox Game Studios', access: 'gamepass' as const },
 ];
 
-export function demoAccountLibrary(kind: AccountLibraryPage['kind'], covers: ReadonlyMap<string, string>): AccountLibraryPage {
+export function demoAccountLibrary(kind: AccountLibraryPage['kind'], artwork: ReadonlyMap<string, DemoArtwork>): AccountLibraryPage {
   const accessByProductId: AccountLibraryPage['accessByProductId'] = {};
   for (const [index, game] of demoGames.entries()) if (game.storeId) accessByProductId[game.storeId] = index === 1 ? 'owned' : 'gamepass';
   for (const product of demoAccountProducts) accessByProductId[product.productId] = product.access;
   return { kind, checkedAt: new Date().toISOString(), accessByProductId,
     products: demoAccountProducts.filter(product => kind === 'all' || product.access === kind).map(product => ({
       ...product, description: 'Sample library entry for the account-free demo.', categories: [],
-      posterUrl: covers.get(product.productId), installability: 'supported', supportNote: 'Demo data only.',
+      posterUrl: artwork.get(product.productId)?.coverUrl, heroUrl: artwork.get(product.productId)?.heroUrl,
+      installability: 'supported', supportNote: 'Demo data only.',
     })) };
 }
 
-export function demoSnapshot(coverUrls: ReadonlyMap<string, string> = new Map()): AppSnapshot {
+export function demoSnapshot(versions: DemoVersions = { launcher: '0.0.0', backend: '0.0.0',
+  backendCommit: '0'.repeat(40), backendCompatibility: 'demo' }, artwork: ReadonlyMap<string, DemoArtwork> = new Map()): AppSnapshot {
   return {
     backend: {
-      available: true, source: 'managed', binaryPath: '/home/demo/.config/xodus-nexus/xodus-backends/current', commit: '53ea781dcd073e31d7ea68e894134e9c959bff04', upstreamCommit: '53ea781dcd073e31d7ea68e894134e9c959bff04', updateAvailable: false, checking: false, updating: false, externalRoot: '',
+      available: true, source: 'managed', binaryPath: '/home/demo/.config/xodus-nexus/xodus-backends/current', commit: versions.backendCommit, upstreamCommit: versions.backendCommit, updateAvailable: false, checking: false, updating: false, externalRoot: '',
       capabilities: { commands: ['login', 'logout', 'download', 'streaming', 'run', 'license', 'extract', 'profile', 'library'], account: true, profile: true, library: true, login: true, externalAuth: true, logout: true, download: true, streaming: true, streamingProgressJson: true, streamingControls: true, run: true, version: '0.5.0' },
       prerequisites: { git: true, cargo: true, rustc: true, protoc: true },
-      linuxRunPatch: 'linux-run-v14',
-      version: '0.2.2', delivery: 'release', releaseAvailable: true, releaseVersion: '0.2.2',
+      linuxRunPatch: versions.backendCompatibility,
+      version: versions.backend, delivery: 'release', releaseAvailable: true, releaseVersion: versions.backend,
     },
     runtime: {
-      installed: true, checking: false, updating: false, runtimeRoot: '/home/demo/.local/share/xodus-nexus/runtimes', name: 'xodus-nexus-runtime-11.0-20261011-g3fd4ae10', winePath: '/home/demo/.local/share/xodus-nexus/runtimes/releases/xodus-nexus-runtime-11.0-20261011-g3fd4ae10/files/bin/wine', commit: 'af521bf321581c78072a147a74bb9527750a109a', nexusAvailable: true, nexusName: 'xodus-nexus-runtime-11.0-20261011-g3fd4ae10-x86_64.tar.xz', nexusVersion: 'runtime-11.0-20261011-g3fd4ae10', artifactAvailable: false,
+      installed: true, checking: false, updating: false, runtimeRoot: '/home/demo/.local/share/xodus-nexus/runtimes', name: 'xodus-nexus-runtime-demo', winePath: '/home/demo/.local/share/xodus-nexus/runtimes/demo/files/bin/wine', artifactAvailable: false,
       prerequisites: { gh: true, authenticated: true, tar: true, sha512sum: true },
     },
-    games: structuredClone([...demoGames.slice(1, 2), ...demoGames.slice(0, 1), ...demoGames.slice(2)]).map((game) => ({ ...game, coverUrl: game.storeId ? coverUrls.get(game.storeId) : undefined })),
-    downloads: structuredClone(demoDownloads).map((task) => ({ ...task, coverUrl: task.productId ? coverUrls.get(task.productId) : undefined })),
+    games: structuredClone([...demoGames.slice(1, 2), ...demoGames.slice(0, 1), ...demoGames.slice(2)]).map((game) => ({ ...game, ...(game.storeId ? artwork.get(game.storeId) : undefined) })),
+    downloads: structuredClone(demoDownloads).map((task) => ({ ...task, coverUrl: task.productId ? artwork.get(task.productId)?.coverUrl : undefined })),
     settings: { installRoot: '/home/demo/Games/Xodus Nexus', market: 'US', parallelDownloads: 4, winePath: '', externalXodusRoot: '', runtimeRoot: '', verboseLogs: false, firstRunCompleted: true },
     auth: { running: false, stored: true, username: 'sample@example.test', gamertag: 'NexusPlayer',
       subscription: { status: 'active', productIds: ['CFQ7TTC0KGQ8'], checkedAt: new Date().toISOString() },
       lastResult: 'success', note: 'Demo mode: sample data only. Store pages show the live Microsoft Store catalog.' },
-    launcherUpdate: { currentVersion: '0.3.0', checking: false, checkedAt: new Date().toISOString() },
+    launcherUpdate: { currentVersion: versions.launcher, checking: false, checkedAt: new Date().toISOString() },
   };
 }
 

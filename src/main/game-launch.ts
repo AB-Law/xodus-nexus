@@ -1,6 +1,11 @@
 import type { Game } from '../shared/types.js';
 import { LINUX_RUN_PATCH } from './backend.js';
 
+/** The prepared runner owns WINEPREFIX and runtime libraries, even without tools. */
+export function preparedGameWine(runner: { command: string; launchCommand?: string } | undefined, fallback: string): string {
+  return runner?.launchCommand ?? runner?.command ?? fallback;
+}
+
 /** One package launch policy. Runtime/backend, never title names, own compatibility. */
 export function gameLaunchArguments(
   game: Pick<Game, 'path' | 'executable'>,
