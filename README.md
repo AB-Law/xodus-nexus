@@ -88,6 +88,7 @@ but have not been verified and may encounter compatibility issues.
 | Danganronpa 2 | Yes | Playable. |
 | Neon Abyss 2 | Yes | Playable. |
 | Hollow Knight: Voidheart Edition | Yes | Playable. |
+| Avowed | Yes | Playable. |
 | Sea of Thieves | Yes | Playable online; normal exit requires the unreleased runtime fix. |
 | The Witcher 3 | No | Currently crashes on launch. |
 
