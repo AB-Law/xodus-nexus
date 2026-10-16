@@ -47,9 +47,12 @@
       "dist/**/*",
       "dist-electron/**/*",
       "assets/**/*",
+      "!assets/fonts/**/*",
       "package.json",
       "LICENSE"
     ],
+    "extraResources": [{ "from": "assets/fonts", "to": "fonts" }],
+    "afterPack": "scripts/launcher-fonts-after-pack.cjs",
     "linux": {
       "category": "Game",
       "icon": "assets/icon.png",

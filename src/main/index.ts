@@ -37,6 +37,7 @@ import { GameContent, type ContentPackage } from './game-content.js';
 import { startAuthTransport } from './auth-transport.js';
 import { authViewFactory } from './auth-window.js';
 import { installSelection, readInstallPlan } from './install-plan.js';
+import { adoptLauncherFonts, externalFontEnvironment } from './launcher-fonts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -84,6 +85,12 @@ try {
   startupRequest = shortcutArguments(process.argv.slice(1));
   if (startupRequest.profile) app.setPath('userData', startupRequest.profile);
 } catch (error) { startupError = error as Error; }
+if (process.platform === 'linux') {
+  try {
+    const fonts = adoptLauncherFonts();
+    if (fonts) app.once('will-quit', () => fonts.dispose());
+  } catch (error) { console.warn('Launcher fallback font unavailable:', (error as Error).message); }
+}
 // Electron's lock is scoped to userData, so independent profiles stay isolated.
 const primaryInstance = demoMode || app.requestSingleInstanceLock(shortcutInstanceData(startupRequest, Boolean(startupError)));
 if (!primaryInstance) app.quit();
@@ -950,6 +957,9 @@ function registerIpc(): void {
     if (!launcherUpdater.state.restartRequired || !launcherUpdater.targetPath) throw new Error('No launcher restart is pending.');
     // AppImage sets these again for the new mount. Do not reuse the old mount.
     for (const key of ['APPIMAGE', 'APPDIR', 'ARGV0', 'OWD']) delete process.env[key];
+    const fontEnvironment = externalFontEnvironment();
+    if (fontEnvironment.FONTCONFIG_FILE === undefined) delete process.env.FONTCONFIG_FILE;
+    else process.env.FONTCONFIG_FILE = fontEnvironment.FONTCONFIG_FILE;
     app.relaunch({ execPath: launcherUpdater.targetPath, args: [] }); app.quit();
   });
   ipcMain.handle('check-game-updates', (_event, id?: string) => {
@@ -1293,7 +1303,8 @@ app.whenReady().then(async () => {
   const dataHome = process.env.XDG_DATA_HOME && path.isAbsolute(process.env.XDG_DATA_HOME)
     ? process.env.XDG_DATA_HOME : path.join(os.homedir(), '.local', 'share');
   const appImage = app.isPackaged ? process.env.APPIMAGE : undefined;
-  const persistentBinary = app.isPackaged && !process.env.APPDIR && !process.execPath.includes('/.mount_') ? process.execPath : undefined;
+  const persistentBinary = app.isPackaged && !process.env.APPDIR && !process.execPath.includes('/.mount_')
+    ? (path.basename(process.execPath) === 'xodus-nexus.bin' ? path.join(path.dirname(process.execPath), 'xodus-nexus') : process.execPath) : undefined;
   shortcuts = new GameShortcuts({ userData: app.getPath('userData'), desktop: app.getPath('desktop'),
     applications: path.join(dataHome, 'applications'), launcher: appImage ?? persistentBinary,
     icon: fileURLToPath(new URL('../../assets/icon.png', import.meta.url)) });

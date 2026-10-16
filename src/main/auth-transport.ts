@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { AUTH_FRAME_LIMIT, authFrame, type AuthFrame } from './auth-protocol.js';
+import { externalFontEnvironment } from './launcher-fonts.js';
 export interface AuthView {
   open(frame: Extract<AuthFrame, { type: 'open' }>): Promise<void>;
   close(session: number): void;
@@ -15,7 +16,7 @@ export function startAuthTransport(binary: string, createView: AuthViewFactory, 
   // This explicit flag is absent in the native backend. Never fall back to an
   // incompatible handshake, and never expose a local listening port.
   const child = spawn(binary, ['--external-webview-stdio', 'login'], {
-    env: { ...environment, XODUS_LOG: 'off', RUST_LOG: 'off' }, stdio: ['pipe', 'pipe', 'pipe'], shell: false,
+    env: { ...externalFontEnvironment(environment), XODUS_LOG: 'off', RUST_LOG: 'off' }, stdio: ['pipe', 'pipe', 'pipe'], shell: false,
   });
   let ready = false, active: number | undefined, latest = 0, stopped = false, cancelled = false;
   let failure: Error | undefined, line = '', total = 0, queue = Promise.resolve();
