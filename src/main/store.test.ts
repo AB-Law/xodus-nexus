@@ -24,6 +24,17 @@ async function makeEacGame(targetHeader: Buffer, eacDirectory = 'EasyAntiCheat')
 }
 
 describe('inspectGameDirectory anti-cheat support', () => {
+  it('keeps per-game launch tools after saving, reopening and refreshing installed metadata', async () => {
+    const root=await mkdtemp(path.join(tmpdir(),'nexus-game-tool-state-')); created.push(root);
+    const store=new StateStore(root);
+    const game={id:'test-tools',title:'Synthetic game',path:'/sample/game',installState:'ready' as const,addedAt:'2026-10-16T00:00:00Z'};
+    const launchTools={mangoHud:true,gamescope:false,gamescopeArgs:'',launchOptions:'DXVK_HUD=fps %command% --launcher-skip'};
+    await store.upsertGame(game); await store.patchGame(game.id,{launchTools});
+    const reopened=new StateStore(root); await reopened.load();
+    expect(reopened.games[0].launchTools).toEqual(launchTools);
+    await reopened.upsertGame({...game,publisher:'Updated metadata'});
+    expect(reopened.games[0].launchTools).toEqual(launchTools);
+  });
   it('detects an encrypted EAC chain without declaring online play unsupported', async () => {
     const game = await inspectGameDirectory(await makeEacGame(Buffer.from([0x01, 0x02, 0x03])));
     expect(game.installState).toBe('ready');

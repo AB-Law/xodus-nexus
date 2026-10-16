@@ -1,5 +1,22 @@
 # Shared Nexus backend
 
+## Package selection
+
+`resolve-package PRODUCT --json --market US` reads public Store metadata without
+keyring access or sign-in. Schema 1 returns the root product, market, `status`
+(`ready`, `choice`, `unavailable`) and package choices with title, Product ID,
+Content ID, platform, package format, kind and support status. A plan is not a
+license. Resolution has bounded depth, product count, response size and time;
+circular or incomplete graphs fail without guessing a package.
+
+For an unambiguous PC base game, Nexus selects automatically. Otherwise it asks
+the user to choose a supported package. `streaming PRODUCT DESTINATION
+--selected-content-id UUID --market US` verifies the choice against fresh Store
+metadata before requesting the normal authenticated package and license. It
+never reads package selection from stdin, which remains reserved for download
+controls. Resume preserves the chosen package and market. Update the backend
+in Settings if package selection is unavailable.
+
 ## Structured downloads
 
 `streaming --progress-json --control-stdin` enables Nexus progress protocol v1.

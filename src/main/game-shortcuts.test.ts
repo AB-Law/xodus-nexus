@@ -3,8 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
-import { GameShortcuts, desktopArgument, shortcutArguments } from './game-shortcuts.js';
+import { GameShortcuts, desktopArgument, shortcutArguments, shortcutTitleStem } from './game-shortcuts.js';
 import { ShortcutLaunch } from './shortcut-launch.js';
 
 const execute = promisify(execFile);
@@ -63,16 +64,83 @@ it('rejects invalid IDs, unsupported installs, unsafe directories and unrelated 
     await expect(f.shortcuts.create(game, '../elsewhere' as 'desktop')).rejects.toThrow('destination');
     const target = await f.shortcuts.create(game, 'desktop');
     await fs.writeFile(target, 'unrelated user file');
-    await expect(f.shortcuts.create(game, 'desktop')).rejects.toThrow('unrelated');
+    const collision = await f.shortcuts.create(game, 'desktop');
+    expect(collision).not.toBe(target);
+    expect(await fs.readFile(target, 'utf8')).toBe('unrelated user file');
     await f.shortcuts.remove(id);
     expect(await fs.readFile(target, 'utf8')).toBe('unrelated user file');
     await fs.unlink(target); await fs.symlink(f.locations.icon, target);
-    await expect(f.shortcuts.create(game, 'desktop')).rejects.toThrow('unsafe');
+    expect(await f.shortcuts.create(game, 'desktop')).not.toBe(target);
     expect(await fs.readFile(f.locations.icon, 'utf8')).toBe('fixture icon');
     await fs.chmod(f.locations.applications, 0o777).catch(() => {});
     await fs.mkdir(f.locations.applications, { recursive: true }); await fs.chmod(f.locations.applications, 0o777);
     await expect(f.shortcuts.create(game, 'applications')).rejects.toThrow('directory');
   } finally { await fs.rm(f.root, { recursive: true, force: true }); }
+});
+
+it('names files by game title and safely separates games and profiles with identical titles', async () => {
+  const f=await fixture();
+  try {
+    await f.shortcuts.initialize();
+    const named={...game,title:'Shift At Midnight'};
+    const first=await f.shortcuts.create(named,'desktop');
+    expect(path.basename(first)).toBe('Shift At Midnight.desktop');
+    expect(await f.shortcuts.create(named,'desktop')).toBe(first);
+    const second=await f.shortcuts.create({...named,id:'fedcba9876543210'},'desktop');
+    expect(path.basename(second)).toBe('Shift At Midnight (fedcba98).desktop');
+    expect(await fs.readFile(first,'utf8')).toContain(`X-Xodus-Nexus-Game=${id}\n`);
+    const other=new GameShortcuts({...f.locations,userData:path.join(f.root,'other-profile')});
+    await other.initialize();
+    const third=await other.create(named,'desktop');
+    expect(third).not.toBe(first); expect(third).not.toBe(second);
+    await f.shortcuts.remove(id);
+    await expect(fs.stat(first)).rejects.toThrow();
+    expect((await fs.stat(second)).isFile()).toBe(true);
+    expect((await fs.stat(third)).isFile()).toBe(true);
+  } finally { await fs.rm(f.root,{recursive:true,force:true}); }
+});
+
+it('migrates a legacy hash entry and removes only its own old title after explicit recreation', async () => {
+  const f=await fixture();
+  try {
+    await f.shortcuts.initialize();
+    const named={...game,title:'Old title'};
+    const first=await f.shortcuts.create(named,'desktop');
+    const profile=createHash('sha256').update(path.resolve(f.locations.userData)).digest('hex').slice(0,12);
+    const legacy=path.join(f.locations.desktop,`xodus-nexus-${profile}-${id}.desktop`);
+    await fs.rename(first,legacy);
+    await fs.writeFile(legacy,(await fs.readFile(legacy,'utf8')).replace(`X-Xodus-Nexus-Game=${id}\n`,''));
+    const renamed=await f.shortcuts.create({...named,title:'Shift At Midnight'},'desktop');
+    expect(path.basename(renamed)).toBe('Shift At Midnight.desktop');
+    await expect(fs.stat(legacy)).rejects.toThrow();
+    const newer=await f.shortcuts.create({...named,title:'New title'},'desktop');
+    await expect(fs.stat(renamed)).rejects.toThrow();
+    await f.shortcuts.remove(id); await expect(fs.stat(newer)).rejects.toThrow();
+  } finally { await fs.rm(f.root,{recursive:true,force:true}); }
+});
+
+it('sanitizes path separators, controls and reserved punctuation and bounds UTF8 filenames', () => {
+  expect(shortcutTitleStem('Shift At Midnight')).toBe('Shift At Midnight');
+  expect(shortcutTitleStem('../../Game: A/B\\C?\n')).toBe('Game A B C');
+  expect(shortcutTitleStem('../\0')).toBe('Xodus Nexus game');
+  expect(shortcutTitleStem('Příliš žluťoučký kůň')).toBe('Příliš žluťoučký kůň');
+  for(const title of ['A'.repeat(1000),'猫'.repeat(1000),'é'.repeat(1000)]) {
+    const stem=shortcutTitleStem(title);
+    expect(Buffer.byteLength(stem)).toBeLessThanOrEqual(120);
+    expect(stem).not.toContain('\ufffd');
+  }
+});
+
+it('atomically creates colliding titles without overwriting either entry', async () => {
+  const f=await fixture();
+  try {
+    await f.shortcuts.initialize();
+    const paths=await Promise.all([game,{...game,id:'fedcba9876543210'}].map(entry=>f.shortcuts.create({...entry,title:'Same title'},'desktop')));
+    expect(new Set(paths).size).toBe(2);
+    const bodies=await Promise.all(paths.map(file=>fs.readFile(file,'utf8')));
+    expect(bodies[0]).toContain(`X-Xodus-Nexus-Game=${id}`);
+    expect(bodies[1]).toContain('X-Xodus-Nexus-Game=fedcba9876543210');
+  } finally { await fs.rm(f.root,{recursive:true,force:true}); }
 });
 
 it('parses only validated shortcut requests and escapes desktop Exec separately from shell quoting', () => {
