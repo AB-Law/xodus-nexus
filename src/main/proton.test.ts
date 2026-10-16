@@ -20,19 +20,22 @@ afterEach(async () => {
 describe('prepareProtonRunner', () => {
   it.each([false, true])('keeps the prefix and applies game tools only to Play (tools enabled: %s)', async (withTools) => {
     const root=await mkdtemp(path.join(tmpdir(),'nexus-proton-game-tools-')); created.push(root);
-    const runtime=path.join(root,'runtime'), wine=path.join(runtime,'files/bin/wine'), compat=path.join(root,'compat');
+    const runtime=path.join(root,"runtime's directory"), wine=path.join(runtime,'files/bin/wine'), compat=path.join(root,'compat');
     await mkdir(path.dirname(wine),{recursive:true}); await mkdir(path.join(runtime,'files/share/default_pfx'),{recursive:true});
     const system32=path.join(compat,'pfx/drive_c/windows/system32'); await mkdir(system32,{recursive:true});
     for(const name of ['libvkd3d-utils-1.dll','dxgi.dll','d3d12.dll']) await writeFile(path.join(system32,name),'ready');
     await writeFile(path.join(runtime,'proton'),'#!/bin/sh\nexit 0\n'); await chmod(path.join(runtime,'proton'),0o700);
-    await writeFile(wine,'#!/bin/sh\nprintf "%s\\n" "$WINEDLLOVERRIDES" "$DXVK_HUD" "$WINEPREFIX"; printf "<%s>\\n" "$@"\n'); await chmod(wine,0o700);
+    await writeFile(wine,'#!/bin/sh\nprintf "%s\\n" "$WINEDLLOVERRIDES" "$DXVK_HUD" "$WINEPREFIX" "$ESPEAK_DATA_PATH"; printf "<%s>\\n" "$@"\n'); await chmod(wine,0o700);
     await writeFile(path.join(runtime,'files/bin/wineserver'),'#!/bin/sh\nexit 0\n'); await chmod(path.join(runtime,'files/bin/wineserver'),0o700);
     const wrapper=await prepareGameWrapper(wine,withTools ? {...defaultLaunchTools,launchOptions:'WINEDLLOVERRIDES="dxgi=n,b;winhttp=b" DXVK_HUD=fps %command% --launcher-skip'} : undefined,path.join(root,'wrappers'));
     const runner=(await prepareProtonRunner(wine,compat,path.join(root,'steam'),wrapper.command))!;
     const setup=await execFile(runner.command,['setup']);
     expect(setup.stdout).not.toContain('fps'); expect(setup.stdout).not.toContain('--launcher-skip');
-    const game=await execFile(preparedGameWine(runner, wrapper.command),['actual game.exe'], { env: { ...process.env, WINEPREFIX: '' } });
+    expect(setup.stdout.split('\n')).toContain(path.join(runtime,'files/share'));
+    const game=await execFile(preparedGameWine(runner, wrapper.command),['actual game.exe'], { env: { ...process.env, WINEPREFIX: '', ESPEAK_DATA_PATH: '/wrong/host/data' } });
     expect(game.stdout).toContain(path.join(compat,'pfx'));
+    expect(game.stdout.split('\n')).toContain(path.join(runtime,'files/share'));
+    expect(game.stdout).not.toContain('/wrong/host/data');
     if (withTools) {
       expect(game.stdout).toContain(`dxgi=n,b;winhttp=b\nfps\n${path.join(compat,'pfx')}`);
       expect(game.stdout).toContain('<actual game.exe>\n<--launcher-skip>');
