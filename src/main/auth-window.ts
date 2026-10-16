@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { trustedAuthUrl, type AuthFrame } from './auth-protocol.js';
 import type { AuthView, AuthViewFactory } from './auth-transport.js';
+import { AuthBrowserNotFoundError } from './auth-browser.js';
 const folder = path.dirname(fileURLToPath(import.meta.url));
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; MSAppHost/3.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.26100';
 
@@ -27,7 +28,7 @@ export function authViewFactory(parent?: BrowserWindow, testSession?: Session, r
       if (!trustedSender(event) || switching || !requestBrowser) return { ok: false, message: 'Browser sign-in is unavailable.' };
       switching = true;
       try { await requestBrowser(); return { ok: true }; }
-      catch { switching = false; return { ok: false, message: 'Could not open browser sign-in. Google Chrome must be installed. You can also choose another sign-in method.' }; }
+      catch (error) { switching = false; return { ok: false, message: error instanceof AuthBrowserNotFoundError ? error.message : 'Could not start Google Chrome for browser sign-in. Try again or choose another sign-in method.' }; }
     });
     function close() {
       const old = window; window = undefined; id = undefined;

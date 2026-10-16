@@ -112,6 +112,10 @@
     {
       "file": "assets/xgameruntime-package-chunk-order.patch",
       "sha256": "5f61165dfd8ed5beb604b45a587a4e517982358850cf503a50802384123ec3c7"
+    },
+    {
+      "file": "assets/xgameruntime-game-license-events.patch",
+      "sha256": "a97084c5ca22cf14d35538e9add8a2d820388f4133dbe158c74160034fe3be83"
     }
   ],
   "expectedXgameruntimeSources": {
@@ -131,8 +135,8 @@
     "dlls/xgameruntime/xpackage_content.h": "d3addb58053e44848bfb2be29d3568019196568ad98b605544b3506c03ed1c2f",
     "dlls/xgameruntime/xpackage.idl": "afb602c0f76a97f6358950baf48e7a49df61e150134989b676879e7001a60108",
     "dlls/xgameruntime/xpersistentlocalstorage.c": "48111212dcfe4ef328fa482dc8b426ef853b7c961d575aefeaa3b559788809b2",
-    "dlls/xgameruntime/xstore.c": "82ec008d15d426f3b6404fbfed8532d17e64455bed880faf6c465ca2836a9421",
-    "dlls/xgameruntime/xstore_entitled.h": "59b738caacfb682abe4837725e8dd828b050e0cc5434cc9b92d37d8b7311f68b",
+    "dlls/xgameruntime/xstore.c": "323183e6c7b6f627888dcd6c7d9be90bc1bf43cb8677b3be4fb06a1539947a5b",
+    "dlls/xgameruntime/xstore_entitled.h": "cae87da7943d625664c94b7179b47f1eedf2cd3dfd3192f99bd1a252b273e289",
     "dlls/xgameruntime/xstore_receipts.h": "637cc315d72bb1ad20ce5529dfb6be4ef01ae8fd08a321aa5e852c1557c1d280",
     "dlls/xgameruntime/xstore_package_license.h": "678f109e0a0af3f5e87951666f7c891af3999658f8698eb8855387ea355e2a31",
     "dlls/xgameruntime/xsystem.c": "974c83fe2e1b97e6b2c86e95a558b31d2effe6b9d2b3166c2c4d1882a4341058",
@@ -142,7 +146,8 @@
     "dlls/xgameruntime/util.c": "aebf1a7ebef0dff89d3a1683bc40e16c821eaeb5cc1160ce474b905d14d7cb5c",
     "dlls/xgameruntime/util.h": "b739dba8a69a36103e72afc8dcaeaf324470d9ed47a5a7dd81b18e4e511ae69a",
     "dlls/xgameruntime/userprovider.idl": "66fb09670b7dabfc55257475094239018ea9a19ec2be348e56cf2b17ef615d7a",
-    "dlls/xgameruntime/xgamesavefiles.h": "5f21c809107e8c67659899a43f98143a4cbba744be5731cc5c68c177fdc7956a"
+    "dlls/xgameruntime/xgamesavefiles.h": "5f21c809107e8c67659899a43f98143a4cbba744be5731cc5c68c177fdc7956a",
+    "dlls/xgameruntime/xstore_game_license.h": "8bcc2fd256c3e08ba59d9d5211ffb6f70e01a95cef6d0272ddf61bb8d284bffb"
   },
   "runtimeCompatibilitySources": {
     "scripts/runtime-compat/build.mjs": "ac150747020a3a29d1d436c2e2af879e66ea2fe9104d4d330534d6128ba3ea19",
@@ -160,6 +165,7 @@
     "Entitled-product queries verify fresh signed Store receipts for the current game and config-declared related products, with public catalog metadata. Online access is required; other Store queries, purchase/download APIs and consumable quantities are not supplied by this increment.",
     "Installed Content discovery supports extracted PC packages with matching config/Appx identity, dependency, allowed parent and layout/file presence. It checks nearby installation directories and optional XODUS_CONTENT_ROOTS paths, not an OS-wide registry or full payload integrity. PublisherContent and content mounting remain unsupported; disk metadata never grants a license.",
     "Package license acquire/result/valid/close requires fresh verified signed proof for an installed current/related nontrial Durable package. Handles are bounded by proof/SKU expiry; lost callbacks report expiry only, not account, network or concurrency revocations. Other acquisition variants and mounting remain unsupported.",
+    "Game-license change callbacks support registration, queue dispatch and safe unregistration/close. Events reflect changed verified current-title SKU receipts observed during entitlement refresh, not an OS purchase/revocation feed; initial, failed, missing or filtered observations emit no event.",
     "Incomplete XAsync cancellation/resource reclamation",
     "Partial package/event/privilege APIs are not complete GDK implementations",
     "Single HTTP/2 stream per connection; chunked uploads and proxy/client-certificate transport gaps",
