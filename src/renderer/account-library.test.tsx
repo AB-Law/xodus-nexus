@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { AccountGames, GameTitle, LibraryPagination, Sidebar, type LibraryFilters } from './App';
+import { AccountGames, Cover, GameTitle, LibraryPagination, Sidebar, type LibraryFilters } from './App';
 import { demoSnapshot } from '../shared/demo-data';
 
 it('keeps one My Library and Store navigation, no separate Game Pass page',()=>{
@@ -33,6 +33,21 @@ it('offers Access and Play state filters without cloud streaming, preserving ins
 it('preserves full edition names in native hover tooltips and escapes special characters',()=>{
   const html=renderToStaticMarkup(<GameTitle title={'A Long Game Name: "Complete" & Deluxe Edition (PC)'} />);
   expect(html).toContain('title="A Long Game Name: &quot;Complete&quot; &amp; Deluxe Edition (PC)"');
+});
+
+it('uses Store box art instead of a package logo and wide artwork for details',()=>{
+  const game={ ...demoSnapshot().games[0], coverDataUrl:'data:image/png;base64,AAAA', coverUrl:'https://store-images.s-microsoft.com/box', heroUrl:'https://store-images.s-microsoft.com/hero' };
+  expect(renderToStaticMarkup(<Cover game={game} />)).toContain('src="https://store-images.s-microsoft.com/box"');
+  expect(renderToStaticMarkup(<Cover game={game} variant="hero" />)).toContain('src="https://store-images.s-microsoft.com/hero"');
+  expect(renderToStaticMarkup(<Cover game={{...game, coverUrl:undefined, heroUrl:undefined}} />)).toContain('cover-local');
+});
+
+it('gives installed cards a separate status footer and an accessible compact refresh control',()=>{
+  const html=renderToStaticMarkup(<AccountGames data={demoSnapshot()} toast={()=>{}} />);
+  expect(html).toContain('class="catalog-card-status"');
+  expect(html).toContain('aria-label="Refresh library"');
+  expect(html).toContain('class="account-games-results"');
+  expect(html).not.toContain('class="library-license"');
 });
 
 it('keeps pagination loading inside the button, without the oversized Store loading panel',()=>{

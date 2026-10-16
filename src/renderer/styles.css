@@ -178,9 +178,13 @@ button.primary svg, button.secondary svg { width: 17px; height: 17px; }
 .library-loading { color: var(--muted); font-size: 12px; }
 .library-pagination svg { width: 16px; height: 16px; color: var(--green); }
 .library-layout.account-only { grid-template-columns: minmax(0, 1fr); }
-.library-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+.library-layout > .account-games { display: contents; }
+.account-games-results { min-width: 0; grid-column: 1; }
+.library-filters { grid-column: 1 / -1; display: flex; align-items: end; flex-wrap: wrap; gap: 10px; }
 .library-filters label { display: grid; gap: 5px; color: #b8bec6; font-size: 11px; }
-.library-filters select, .library-filters input { min-height: 34px; background: #292e35; color: #f1f3f5; border: 1px solid #4b515b; border-radius: 6px; padding: 7px 10px; }
+.library-filters select, .library-filters input { height: 36px; background: #292e35; color: #f1f3f5; border: 1px solid #4b515b; border-radius: 6px; padding: 7px 10px; }
+.library-filters .library-refresh { flex: 0 0 36px; width: 36px; min-height: 36px; height: 36px; padding: 0; display: grid; place-items: center; }
+.library-refresh svg { width: 17px; height: 17px; }
 .library-filter-search { flex: 1; min-width: 150px; }
 .library-filter-search input { width: 100%; }
 .library-license { display: block; margin: 8px 10px 0; color: #b8bec6; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -247,7 +251,7 @@ button.primary svg, button.secondary svg { width: 17px; height: 17px; }
 .verified-row small { color: var(--muted); font: 9px monospace; }
 .verified-row svg { width: 15px; color: #8d9298; }
 
-.library-layout { display: grid; grid-template-columns: minmax(0,1fr) 390px; gap: 22px; }
+.library-layout { display: grid; grid-template-columns: minmax(0,1fr) 390px; align-items: start; gap: 20px 22px; }
 .library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); align-content: start; gap: 16px; }
 .library-card-wrap { position: relative; min-width: 0; }
 .library-card { min-width: 0; padding: 0 0 10px; border: 1px solid transparent; background: transparent; border-radius: 4px; text-align: left; cursor: pointer; overflow: hidden; }
@@ -277,14 +281,13 @@ button.primary svg, button.secondary svg { width: 17px; height: 17px; }
 .library-card strong, .library-card > span { display: block; margin: 9px 10px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .library-card strong { font-size: 11px; }
 .library-card > span { color: var(--muted); font-size: 9px; margin-top: 4px; }
-.game-detail { align-self: start; background: #222529; border: 1px solid var(--line); }
-.detail-art { height: 250px; position: relative; overflow: hidden; }
+.game-detail { grid-column: 2; grid-row: 2; align-self: start; background: #222529; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.detail-art { aspect-ratio: 16/9; position: relative; overflow: hidden; }
 .detail-art > .game-cover, .detail-art > .cover-placeholder { width: 100%; height: 100%; object-fit: cover; }
 .detail-art > .game-cover.cover-local { object-fit: contain; }
-.detail-shade { position: absolute; inset: 0; background: linear-gradient(0deg, #222529 1%, transparent 72%); }
-.detail-art > div:last-child { position: absolute; left: 20px; right: 20px; bottom: 14px; }
-.detail-art h2 { margin: 8px 0 3px; font-size: 23px; line-height: 1.05; }
-.detail-art div > span:last-child { color: #c0c3c7; font-size: 9px; }
+.detail-copy { padding: 18px 20px 8px; }
+.detail-copy h2 { margin: 9px 0 5px; font-size: 23px; line-height: 1.2; overflow-wrap: anywhere; }
+.detail-copy > span:last-child { color: #c0c3c7; font-size: 11px; }
 .state-pill { width: fit-content; display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px; background: rgba(139,216,10,.14); color: var(--green); font-size: 8px; font-weight: 700; text-transform: uppercase; }
 .state-pill svg { width: 11px; height: 11px; }
 .state-pill.offline, .state-pill.incomplete { color: #e1b653; background: rgba(225,182,83,.12); }
@@ -460,6 +463,16 @@ button.primary, button.secondary { border-radius: 5px; min-height: 40px; font-si
 .catalog-card-main strong { font-size: 13px; }
 .catalog-card-main small, .catalog-card-main div > span { font-size: 10px; }
 .catalog-card-install { border-radius: 5px; font-size: 11px; }
+.account-games-results .catalog-card { display: flex; flex-direction: column; }
+.account-games-results .catalog-card-main { flex: 1; display: block; cursor: default; }
+.account-games-results .library-card { padding: 0; border: 0; background: transparent; border-radius: 0; cursor: pointer; }
+.account-games-results .library-card strong { margin: 0; font-size: 13px; }
+.account-games-results .catalog-card-main > div:last-child { min-height: 71px; }
+.account-games-results .catalog-card-install, .catalog-card-status { align-self: flex-start; height: 34px; min-height: 34px; }
+.catalog-card-status { display: flex; align-items: center; gap: 6px; margin: 0 10px; padding: 0 1px; font-size: 11px; color: #b8bec6; }
+.catalog-card-status svg { width: 14px; height: 14px; }
+.account-games-results .game-cover, .account-games-results .cover-placeholder { display: block; width: 100%; aspect-ratio: 1/1; }
+.account-games-results .cover-placeholder { display: grid; }
 .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 13px; }
 .featured-catalog > .section-title:first-child { margin-top: 5px; }
 .featured-rail { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
@@ -502,7 +515,8 @@ button.primary, button.secondary { border-radius: 5px; min-height: 40px; font-si
   .catalog-install-box { margin-top: 0; }
   .install-form { border-left: 0; border-top: 1px solid var(--line); }
   .quick-grid { grid-template-columns: 1fr; }
-  .game-detail { order: -1; }
+  .game-detail { grid-column: 1; grid-row: 2; }
+  .account-games-results { grid-row: 3; }
   .form-grid { grid-template-columns: 1fr; }
   .form-grid label { grid-column: auto !important; }
   .meta-grid { grid-template-columns: 1fr; }

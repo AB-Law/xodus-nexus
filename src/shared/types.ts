@@ -92,7 +92,8 @@ export interface Game {
   launchArgs?: string;
   locale?: string;
   coverDataUrl?: string;
-  coverUrl?: string; // Store artwork from the Microsoft display catalog, used when the installation ships no local logo.
+  coverUrl?: string; // Store box art, preferred over the installation's small logo.
+  heroUrl?: string; // Wide Store artwork for the game detail panel.
   installState: 'ready' | 'incomplete' | 'imported';
   installMessage?: string;
   vcRedistEncrypted?: boolean;

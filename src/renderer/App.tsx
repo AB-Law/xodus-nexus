@@ -89,12 +89,13 @@ export function DiagnosticDialog({ log, close }: { log: DiagnosticLog; close: ()
   return <div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}><section className="game-dialog diagnostic-dialog" role="dialog" aria-modal="true" aria-label="Diagnostic log"><h2>{log.name}</h2><p>Private diagnostic log — review before sharing.{log.truncated ? ' Showing the most recent 512 KiB.' : ''}</p><pre>{log.content || 'The log is empty.'}</pre><div className="dialog-actions"><button className="secondary" onClick={close}>Close</button></div></section></div>;
 }
 
-function Cover({ game, className = '' }: { game: Game; className?: string }) {
-  const local = game.coverDataUrl;
-  const art = local ?? game.coverUrl;
-  // Local package logos and Store cover art are both square, so they fill
-  // the square tiles without cropping; odd-sized local art stays letterboxed.
-  if (art) return <img className={`game-cover ${local ? 'cover-local' : 'cover-store'} ${className}`} src={art} alt={`${game.title} artwork`} />;
+export function Cover({ game, className = '', variant = 'cover' }: { game: Game; className?: string; variant?: 'cover' | 'hero' }) {
+  const sources = [...new Set([variant === 'hero' ? game.heroUrl : undefined, game.coverUrl, game.coverDataUrl].filter((url): url is string => Boolean(url)))];
+  const key = sources.join('\n');
+  const [failure, setFailure] = useState({ key: '', index: 0 });
+  const index = failure.key === key ? failure.index : 0;
+  const art = sources[index];
+  if (art) return <img className={`game-cover ${art === game.coverDataUrl ? 'cover-local' : 'cover-store'} ${className}`} src={art} alt={`${game.title} artwork`} onError={() => setFailure({ key, index: index + 1 })} />;
   return <div className={`cover-placeholder ${className}`}><Gamepad2 /></div>;
 }
 
@@ -362,16 +363,18 @@ export function AccountGames({ data, toast, selectedId, select, menu, filters, o
       <label>Access<select aria-label="Access" value={kind} onChange={event => setKind(event.target.value as AccountLibraryPage['kind'])}><option value="all">All games</option><option value="owned">Owned</option><option value="gamepass">In Game Pass</option></select></label>
       <label>Play state<select aria-label="Play state" value={playState} onChange={event => setPlayState(event.target.value as typeof playState)}><option value="all">All states</option><option value="installed">Installed</option><option value="installable">Ready to install</option></select></label>
       <label className="library-filter-search">Search<input aria-label="Search library" placeholder="Search your games" value={query} onChange={event => setQuery(event.target.value)} /></label>
-      <button className="secondary" disabled={!available || busy} onClick={() => load(true)}><RefreshCw />Refresh</button>
+      <button className="secondary library-refresh" aria-label="Refresh library" title="Refresh library" disabled={!available || busy} onClick={() => load(true)}>{busy ? <LoaderCircle className="spin" /> : <RefreshCw />}</button>
     </div>
+    <div className="account-games-results">
     {!available ? <p>{data.auth.stored !== true ? 'Sign in to load your account games. Installed games remain available.' : !data.backend.capabilities.library ? 'Update the Xodus backend to load account licenses.' : 'Wait for sign-in to finish.'}</p> : null}
       {error ? <div className="alert amber"><CircleAlert /><span>{error}</span></div> : null}
       <div className="catalog-grid">{rows.map(row => {
         if (row.game) {
           const game = row.game;
           const license = access(game);
-          return <div className="library-card-wrap" key={game.id} onContextMenu={event => { event.preventDefault(); menu?.(game, event.clientX, event.clientY); }}>
-            <button className={`library-card ${selectedId === game.id ? 'selected' : ''}`} onClick={() => select?.(game)} onKeyDown={event => { if (event.key === 'F10' && event.shiftKey) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); menu?.(game, rect.left + 16, rect.top + 16); } }}><Cover game={game} /><GameTitle title={game.title} /><span>{game.publisher ?? 'Local installation'}</span><small className="library-license">{license === 'owned' ? 'Owned · ' : license === 'gamepass' ? 'Game Pass · ' : ''}Installed</small>{data.gameUpdates?.[game.id]?.available ? <b className="game-update-badge">Update available</b> : null}</button>
+          return <div className={`library-card-wrap catalog-card ${selectedId === game.id ? 'selected' : ''}`} key={game.id} onContextMenu={event => { event.preventDefault(); menu?.(game, event.clientX, event.clientY); }}>
+            <button className="library-card catalog-card-main" onClick={() => select?.(game)} onKeyDown={event => { if (event.key === 'F10' && event.shiftKey) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); menu?.(game, rect.left + 16, rect.top + 16); } }}><Cover game={game} /><div><GameTitle title={game.title} /><small>{game.publisher ?? 'Local installation'}</small><span>{license === 'owned' ? 'Owned' : license === 'gamepass' ? 'Game Pass' : 'Local installation'}</span></div></button>
+            <span className="catalog-card-status"><Check />{data.gameUpdates?.[game.id]?.available ? 'Update available' : 'Installed'}</span>
             <button className="library-card-menu-button" title={`Options for ${game.title}`} onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); menu?.(game, rect.right, rect.bottom); }}><MoreHorizontal /></button>
           </div>;
         }
@@ -386,6 +389,7 @@ export function AccountGames({ data, toast, selectedId, select, menu, filters, o
       {!busy && !error && !rows.length ? <p>{visible?.cursor ? 'No games match these filters in the loaded results. Load more to continue.' : 'No games match these filters.'}</p> : null}
       <LibraryPagination loading={busy} hasMore={Boolean(visible?.cursor)} load={() => { void load(); }} />
       <p className="account-library-note">Only licensed games with a verified, supported PC package are listed. Add-ons and unsupported packages are excluded. Installation checks your license again.</p>
+    </div>
   </section>;
 }
 
@@ -550,7 +554,8 @@ export function LibraryPage({ data, toast, filters, onFiltersChange }: Pick<Acco
     <div className={`library-layout${data.games.length ? '' : ' account-only'}`}>
       <AccountGamesForUser data={data} toast={toast} filters={filters} onFiltersChange={onFiltersChange} selectedId={selected?.id} select={game => setSelectedId(game.id)} menu={openMenu} />
       {selected ? <aside className="game-detail">
-        <div className="detail-art"><Cover game={selected} /><div className="detail-shade" /><div><StatePill game={selected} /><h2>{selected.title}</h2><span>{selected.publisher ?? 'Publisher not provided'}</span></div></div>
+        <div className="detail-art"><Cover game={selected} variant="hero" /></div>
+        <div className="detail-copy"><StatePill game={selected} /><h2>{selected.title}</h2><span>{selected.publisher ?? 'Publisher not provided'}</span></div>
         {selected.installMessage ? <div className="alert amber"><CircleAlert /><span>{selected.installMessage}</span></div> : null}
 <div className="game-update-status">{data.gameUpdates?.[selected.id]?.available ? <p className="success-text">Update available · {selected.installedVersion ?? 'Installed version'} → {data.gameUpdates[selected.id].latestVersion}</p> : data.gameUpdates?.[selected.id]?.available === false ? <p>Up to date · {data.gameUpdates[selected.id].latestVersion}</p> : null}{data.gameUpdates?.[selected.id]?.error ? <p className="error-text">{data.gameUpdates[selected.id].error}</p> : null}</div>
         <dl><div><dt>Store ID</dt><dd>{selected.storeId ?? 'Not found'}</dd></div><div><dt>Executable</dt><dd>{selected.executable ?? 'Not found'}</dd></div><div><dt>Location</dt><dd title={selected.path}>{selected.path}</dd></div></dl>

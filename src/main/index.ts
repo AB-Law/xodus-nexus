@@ -469,6 +469,7 @@ async function prepareInstall(request: InstallRequest, updateGame?: Game, conten
     }
     operations.delete(id);
     emitSnapshot();
+    if (task.status === 'complete' && !content) void enrichLibraryCovers().then(() => emitSnapshot(), () => { /* Artwork is optional. */ });
   }).catch(async (error) => {
     finishControls();
     operations.delete(id);
@@ -491,9 +492,9 @@ async function importGame(input?: string): Promise<Game | null> {
     directory = result.filePaths[0];
   }
   const game = await inspectGameDirectory(path.resolve(directory));
-  if (!game.coverDataUrl && game.storeId) {
-    const posters = await catalog.posters([game.storeId], currentMarket());
-    game.coverUrl = posters.get(game.storeId);
+  if (game.storeId) {
+    const artwork = (await catalog.artwork([game.storeId], currentMarket())).get(game.storeId.toUpperCase());
+    if (artwork) Object.assign(game, artwork);
   }
   await store.upsertGame(game);
   emitSnapshot();
@@ -807,16 +808,16 @@ function currentMarket(): string {
   return configured.toLowerCase() === 'neutral' ? app.getLocaleCountryCode() || 'US' : configured;
 }
 
-// Library covers for games whose installation ships no local artwork:
-// the same public display catalog that enriches Store results provides the
-// published poster by the game's real Store Product ID.
+// Fetch real covers and wide art even when an installation has a small logo.
 async function enrichLibraryCovers(): Promise<void> {
-  const missing = store.games.filter((game) => game.storeId && !game.coverDataUrl && !game.coverUrl);
+  const missing = store.games.filter((game) => game.storeId && (!game.coverUrl || !game.heroUrl));
   if (missing.length === 0) return;
-  const posters = await catalog.posters(missing.map((game) => game.storeId!), currentMarket());
+  const artwork = await catalog.artwork(missing.map((game) => game.storeId!), currentMarket());
   for (const game of missing) {
-    const coverUrl = posters.get(game.storeId!);
-    if (coverUrl) await store.patchGame(game.id, { coverUrl });
+    const images = artwork.get(game.storeId!.toUpperCase());
+    if (images) await store.patchGame(game.id, {
+      coverUrl: images.coverUrl ?? game.coverUrl, heroUrl: images.heroUrl ?? game.heroUrl,
+    });
   }
 }
 

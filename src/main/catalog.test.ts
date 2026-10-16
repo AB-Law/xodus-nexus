@@ -171,4 +171,29 @@ describe('CatalogService', () => {
     expect(posters.get('9GAME123')).toBe('https://store-images.s-microsoft.com/image/boxart');
     expect(posters.has('9FOREIGN')).toBe(false);
   });
+
+  it('selects separate branded tile and wide artwork, skipping unsafe images and unrelated products', async () => {
+    const fetcher = (async () => new Response(JSON.stringify({ Products: [
+      { ProductId: '9GAME123', LocalizedProperties: [{ Images: [
+        { ImagePurpose: 'Logo', Uri: '//store-images.s-microsoft.com/logo' },
+        { ImagePurpose: 'BoxArt', Uri: '//foreign.example/box' },
+        { ImagePurpose: 'BoxArt', Uri: '//store-images.s-microsoft.com/box' },
+        { ImagePurpose: 'SuperHeroArt', Uri: '//store-images.s-microsoft.com/hero' },
+        { ImagePurpose: 'TitledHeroArt', Uri: '//store-images.s-microsoft.com/titled-hero' },
+      ] }] },
+      { ProductId: '9OTHER', LocalizedProperties: [{ Images: [{ ImagePurpose: 'BoxArt', Uri: '//store-images.s-microsoft.com/other' }] }] },
+    ] }), { headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+    const artwork = await new CatalogService(fetcher).artwork(['9game123'], 'US');
+    expect(artwork.get('9GAME123')).toEqual({ coverUrl: 'https://store-images.s-microsoft.com/box', heroUrl: 'https://store-images.s-microsoft.com/titled-hero' });
+    expect(artwork.has('9OTHER')).toBe(false);
+  });
+
+  it('keeps artwork optional when the catalog is offline or has only a package logo', async () => {
+    const offline = (async () => { throw Error('Offline'); }) as typeof fetch;
+    expect((await new CatalogService(offline).artwork(['9GAME123'], 'US')).size).toBe(0);
+    const logo = (async () => new Response(JSON.stringify({ Products: [{ ProductId: '9GAME123', LocalizedProperties: [{ Images: [
+      { ImagePurpose: 'Logo', Uri: '//store-images.s-microsoft.com/logo' },
+    ] }] }] }))) as typeof fetch;
+    expect((await new CatalogService(logo).artwork(['9GAME123'], 'US')).size).toBe(0);
+  });
 });

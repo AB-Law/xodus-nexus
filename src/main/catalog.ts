@@ -58,7 +58,19 @@ const STORE_HOSTS = new Set(['www.xbox.com', 'xbox.com', 'apps.microsoft.com']);
 const CACHE_TTL_MS = 10 * 60 * 1000;
 // Box art is square and carries the game's title branding, matching the
 // square library tiles; promotional square art is the textless fallback.
-const POSTER_PURPOSES = ['BoxArt', 'FeaturePromotionalSquareArt', 'Poster', 'TitledPoster'];
+const POSTER_PURPOSES = ['BoxArt', 'TitledPoster', 'Poster', 'FeaturePromotionalSquareArt'];
+const HERO_PURPOSES = ['TitledHeroArt', 'SuperHeroArt', 'Hero', 'Screenshot'];
+export interface CatalogArtwork { coverUrl?: string; heroUrl?: string }
+
+function displayImage(images: DisplayCatalogImage[], purposes: string[]): string | undefined {
+  for (const purpose of purposes) {
+    for (const image of images.filter(image => image.ImagePurpose === purpose)) {
+      const uri = string(image.Uri);
+      const url = safeUrl(uri?.startsWith('//') ? `https:${uri}` : uri, IMAGE_HOSTS);
+      if (url) return url;
+    }
+  }
+}
 
 function object(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
@@ -368,15 +380,20 @@ export class CatalogService {
     return structuredClone(value);
   }
 
-  // Cover artwork for installed games, looked up by real Store Product IDs
-  // in the same public display catalog used for package enrichment.
   async posters(ids: string[], rawMarket: string): Promise<Map<string, string>> {
+    const artwork = await this.artwork(ids, rawMarket);
+    return new Map([...artwork].flatMap(([id, images]) => images.coverUrl ? [[id, images.coverUrl] as const] : []));
+  }
+
+  // Installed package logos are not covers. Fetch separate tile and landscape
+  // images by genuine product ID, preserving the local logo as an offline fallback.
+  async artwork(ids: string[], rawMarket: string): Promise<Map<string, CatalogArtwork>> {
     const market = normalizeMarket(rawMarket);
     const unique = ids
       .map((id) => id.trim().toUpperCase())
       .filter((id) => /^[A-Z0-9]{4,30}$/.test(id))
       .filter((id, index, values) => values.indexOf(id) === index);
-    const posters = new Map<string, string>();
+    const artwork = new Map<string, CatalogArtwork>();
     for (let offset = 0; offset < unique.length; offset += 25) {
       const batch = unique.slice(offset, offset + 25);
       const detailsUrl = new URL('https://displaycatalog.mp.microsoft.com/v7.0/products');
@@ -390,19 +407,18 @@ export class CatalogService {
         for (const entry of Array.isArray(catalog.Products) ? catalog.Products : []) {
           const record = object(entry);
           const id = string(record?.ProductId)?.toUpperCase();
-          if (!id || !record) continue;
+          if (!id || !record || !batch.includes(id)) continue;
           const localized = Array.isArray(record.LocalizedProperties) ? record.LocalizedProperties : [];
           const first = object(localized[0]);
           const images = Array.isArray(first?.Images) ? first.Images as DisplayCatalogImage[] : [];
-          const purpose = POSTER_PURPOSES.flatMap((name) => images.filter((image) => string(image.ImagePurpose) === name))[0];
-          const uri = string(purpose?.Uri);
-          const url = uri?.startsWith('//') ? safeUrl(`https:${uri}`, IMAGE_HOSTS) : safeUrl(uri, IMAGE_HOSTS);
-          if (url) posters.set(id, url);
+          const coverUrl = displayImage(images, POSTER_PURPOSES);
+          const heroUrl = displayImage(images, HERO_PURPOSES);
+          if (coverUrl || heroUrl) artwork.set(id, { coverUrl, heroUrl });
         }
       } catch {
         // Covers stay hidden when the display catalog is unavailable.
       }
     }
-    return posters;
+    return artwork;
   }
 }
