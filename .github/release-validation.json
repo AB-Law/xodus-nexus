@@ -3,6 +3,24 @@
   "approvals": [
     {
       "kind": "launcher",
+      "runId": "38876936037",
+      "commit": "054755f657e97af0305b69a7fba881223bff9883",
+      "manifestSha256": "791291955ebfbf97df9f1e26514f0cdbc52f3d0681e0acf4392333bda78fc58b",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit promote authorization 2026-10-16 after accepted local host sign-in and SteamOS reboot checks of the matching Electron authentication implementation. Main CI 38876936037 succeeded. Exact AppImage and candidate identity passed SHA-256/SHA-512 verification; the unchanged CI AppImage opened and exited successfully in an isolated sample-data-only profile with the normal Electron sandbox. Library filter source regression checks passed in main CI. No real account, game or cloud test on these exact CI bytes, no physical Steam Deck claim and no production activation. Publish existing main artifacts without another compilation or repeated account test."
+    },
+    {
+      "kind": "backend",
+      "runId": "38876936077",
+      "commit": "054755f657e97af0305b69a7fba881223bff9883",
+      "manifestSha256": "70d95b5337c76815b428769ce767997bdf1c17bde939ee32ac74fbf1c80501fb",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit promote authorization 2026-10-16 for backend 0.2.3 requiring launcher 0.3.2. Successful main CI 38876936077 built and tested the pinned linux-run-v15 recipe. Exact binaries, corresponding source, candidate identity and SHA-256/SHA-512 verified; packaged metadata recipe hash matches the source lock and declares Electron authentication. Exact CLI login help exits successfully and its dynamic dependencies have no GTK/WebKit requirement. Matching patched source was manually exercised for host sign-in and automatic KDE keyring activation after a SteamOS guest reboot. No real account, game or cloud operation on these exact CI bytes and no physical Steam Deck claim. Publish unchanged artifacts, retain the existing unchanged runtime release."
+    },
+    {
+      "kind": "launcher",
       "runId": "38272422874",
       "commit": "3d2f7339b0328ea21bdc416edb76f0ddbdb250fa",
       "manifestSha256": "920ccd9222e00b071374ec5f1a95f614f793610bbb69c781ff6cfd68c00d24bf",
