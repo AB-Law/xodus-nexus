@@ -6,6 +6,7 @@ export interface BackendCapabilities {
   profile?: boolean;
   library?: boolean;
   login: boolean;
+  externalAuth?: boolean;
   logout: boolean;
   download: boolean;
   streaming: boolean;

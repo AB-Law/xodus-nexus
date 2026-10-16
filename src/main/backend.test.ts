@@ -15,7 +15,7 @@ vi.mock('./process.js', async importOriginal => {
       const marker = (await fs.readFile(cmd))[63];
       return { code: 0, output: args[0] === 'streaming' ? (marker === 3 ? '--progress-json\n--control-stdin\n' : '') : args[0] === 'run' ? (marker === 2 ? '--unsupported' : '--materialize-chain') :
         (marker === 1 ? 'xodus-cli 0.1.0\n  login    Login\n  streaming    Streaming\n' :
-        'xodus-cli 0.1.0\n  account    Account\n  login    Login\n  logout    Logout\n  download    Download\n  streaming    Streaming\n  run    Run\n') };
+        'xodus-cli 0.1.0\n  account    Account\n  login    Login\n  logout    Logout\n  download    Download\n  streaming    Streaming\n  run    Run\n' + (marker === 4 ? '' : '\nOptions:\n  --external-webview-stdio  External UI\n')) };
     }
     if (cmd.endsWith('/xodus-service')) throw new Error('Service must never be started by installer tests');
     if (['git', 'cargo', 'rustc', 'protoc'].includes(cmd)) return { code: 1, output: 'Build tool intentionally absent' };
@@ -42,7 +42,7 @@ describe('prebuilt backend', () => {
       expect(status.capabilities.streamingControls).toBe(supported);
     } finally { await fs.rm(root, { recursive: true, force: true }); }
   });
-  it.each(['valid', 'archive-digest', 'recipe', 'binary-digest', 'symlink', 'hardlink', 'missing-service', 'bad-elf', 'bad-service-elf', 'missing-capability', 'missing-launch-chain', 'busy-after-download'])('verifies install and preserves the old pointer on failure: %s', async scenario => {
+  it.each(['valid', 'archive-digest', 'recipe', 'binary-digest', 'symlink', 'hardlink', 'missing-service', 'bad-elf', 'bad-service-elf', 'missing-capability', 'missing-auth-ui', 'missing-launch-chain', 'busy-after-download'])('verifies install and preserves the old pointer on failure: %s', async scenario => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-backend-test-'));
     try {
       const build = path.join(root, 'build');
@@ -51,6 +51,7 @@ describe('prebuilt backend', () => {
       const cli = elf();
       if (scenario === 'missing-capability') cli[63] = 1;
       if (scenario === 'missing-launch-chain') cli[63] = 2;
+      if (scenario === 'missing-auth-ui') cli[63] = 4;
       await fs.writeFile(path.join(bundle, 'xodus-cli'), scenario === 'bad-elf' ? 'not an ELF' : cli);
       await fs.writeFile(path.join(bundle, 'xodus-service'), scenario === 'bad-service-elf' ? 'not an ELF' : elf());
       await fs.writeFile(path.join(bundle, 'LICENSE'), 'synthetic license fixture');
@@ -66,7 +67,7 @@ describe('prebuilt backend', () => {
       const archive = `${backendPackageName(backendLock.version)}.tar.xz`;
       expect((await run('tar', ['-cJf', path.join(build, archive), '-C', build, backendPackageName(backendLock.version)])).code).toBe(0);
       const data = await fs.readFile(path.join(build, archive));
-      const manifest = { schema: 1, version: backendLock.version, commit: backendLock.commit, compatibility: backendLock.compatibility,
+      const manifest = { schema: 1, authUi: 'electron', version: backendLock.version, commit: backendLock.commit, compatibility: backendLock.compatibility,
         recipeSha256: scenario === 'recipe' ? 'not-a-valid-hash' : backendRecipeSha256, platform: 'linux', arch: 'x64', archive,
         archiveSha512: scenario === 'archive-digest' ? '0'.repeat(128) : sha(data, 'sha512'), files };
       const assets = [archive, `${backendPackageName(backendLock.version)}.manifest.json`, `${backendPackageName(backendLock.version)}.sha512sum`, `${backendPackageName(backendLock.version)}-source.tar.xz`, `${backendPackageName(backendLock.version)}-source.sha512sum`];
@@ -135,7 +136,7 @@ describe('prebuilt backend', () => {
   it('discovers the newest stable backend release above the launcher minimum, ignoring older ones', async () => {
     const newest = `backend-v9.9.9`;
     const name = (version: string, suffix: string) => `xodus-nexus-backend-${version}-linux-x86_64${suffix}`;
-    const manifest = { schema: 1, version: '9.9.9', commit: 'a'.repeat(40), recipeSha256: 'b'.repeat(64), compatibility: 'linux-run-fixture',
+    const manifest = { schema: 1, authUi: 'electron', version: '9.9.9', commit: 'a'.repeat(40), recipeSha256: 'b'.repeat(64), compatibility: 'linux-run-fixture',
       platform: 'linux', arch: 'x64', archive: name('9.9.9', '.tar.xz'), archiveSha512: 'c'.repeat(128),
       files: { 'xodus-cli': 'd'.repeat(64), 'xodus-service': 'e'.repeat(64), LICENSE: 'f'.repeat(64) } };
     const newestUrl = (asset: string) => `https://github.com/domsvoboda/xodus-nexus/releases/download/${newest}/${asset}`;

@@ -32,6 +32,8 @@ import { loadShortcutIcon } from './shortcut-icon.js';
 import { AccountProfile } from './account-profile.js';
 import { AccountLibrary } from './account-library.js';
 import { GameContent, type ContentPackage } from './game-content.js';
+import { startAuthTransport } from './auth-transport.js';
+import { authViewFactory } from './auth-window.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -269,14 +271,13 @@ async function runAuth(command: 'login' | 'logout'): Promise<void> {
   accountLibrary.reset();
   authState = { ...authState, running: true, lastResult: undefined };
   emitSnapshot();
-  // The sign-in webview is WebKitGTK. Its DMA-BUF renderer shows a blank
-  // window on several Wayland setups (seen on KDE Plasma with AMD/NVIDIA);
-  // the non-DMA-BUF path renders reliably, and this one window does not
-  // need the performance. Keep every other environment variable intact.
-  const env = command === 'login' ? { ...process.env, WEBKIT_DISABLE_DMABUF_RENDERER: '1' } : process.env;
-  const tracked = spawnTracked(binary, [command], { env, onLine: (line) => emitLog('auth', line) });
-  operations.set(id, tracked.child);
   try {
+    if (command === 'login' && !backend.current.capabilities.externalAuth) {
+      throw Error('Update the Nexus backend in Settings before signing in with this launcher.');
+    }
+    const tracked = command === 'login' ? startAuthTransport(binary, authViewFactory(mainWindow ?? undefined))
+      : spawnTracked(binary, [command], { onLine: (line) => emitLog('auth', line) });
+    operations.set(id, tracked.child);
     const result = await tracked.result;
     if (result.code === 0) await refreshAccount(false);
     authState = {

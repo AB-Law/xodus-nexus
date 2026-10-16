@@ -20,7 +20,10 @@ game installation, saves or Xodus checkout. Keep credentials, raw diagnostics,
 prefixes and agent handoffs outside Git. Include redacted reproduction steps,
 versions and actual test results in bug reports and PRs.
 
-CI builds candidates. Stable publication requires explicit maintainer approval
+Develop and pull requests run source checks without distribution builds. Only
+main builds launcher/backend/runtime candidates, once per relevant source change.
+Promotion reuses those exact files without rebuilding.
+Stable publication requires explicit maintainer approval
 for the exact tested artifact, with no rebuild after validation. The approval
 record is [release-validation.json](.github/release-validation.json).
 

@@ -280,9 +280,16 @@ export function GameContextMenu({ x, y, game, options, busy, onBrowse, onSetting
   </div>;
 }
 
+export interface LibraryFilters {
+  kind: AccountLibraryPage['kind'];
+  playState: 'all' | 'installed' | 'installable';
+  query: string;
+}
+const defaultLibraryFilters: LibraryFilters = { kind: 'all', playState: 'all', query: '' };
 interface AccountGamesProps {
   data: AppSnapshot; toast: (value: Toast) => void; selectedId?: string;
   select?: (game: Game) => void; menu?: (game: Game, x: number, y: number) => void;
+  filters?: LibraryFilters; onFiltersChange?: (filters: LibraryFilters) => void;
 }
 
 export function LibraryPagination({ loading, hasMore, load }: { loading: boolean; hasMore: boolean; load: () => void }) {
@@ -294,10 +301,14 @@ export function LibraryPagination({ loading, hasMore, load }: { loading: boolean
   </div>;
 }
 
-export function AccountGames({ data, toast, selectedId, select, menu }: AccountGamesProps) {
-  const [kind, setKind] = useState<AccountLibraryPage['kind']>('all');
-  const [playState, setPlayState] = useState<'all' | 'installed' | 'installable'>('all');
-  const [query, setQuery] = useState('');
+export function AccountGames({ data, toast, selectedId, select, menu, filters, onFiltersChange }: AccountGamesProps) {
+  const [localFilters, setLocalFilters] = useState<LibraryFilters>(defaultLibraryFilters);
+  const selectedFilters = filters ?? localFilters;
+  const { kind, playState, query } = selectedFilters;
+  const updateFilters = (patch: Partial<LibraryFilters>) => (onFiltersChange ?? setLocalFilters)({ ...selectedFilters, ...patch });
+  const setKind = (kind: LibraryFilters['kind']) => updateFilters({ kind });
+  const setPlayState = (playState: LibraryFilters['playState']) => updateFilters({ playState });
+  const setQuery = (query: string) => updateFilters({ query });
   const [result, setResult] = useState<AccountLibraryPage>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -427,7 +438,7 @@ function GameContentDialog({ game, data, close, toast }: { game: Game; data: App
   </section></div>;
 }
 
-export function LibraryPage({ data, toast }: { data: AppSnapshot; toast: (value: Toast) => void }) {
+export function LibraryPage({ data, toast, filters, onFiltersChange }: Pick<AccountGamesProps, 'data' | 'toast' | 'filters' | 'onFiltersChange'>) {
   const [selectedId, setSelectedId] = useState<string>();
   const [menu, setMenu] = useState<{ id: string; x: number; y: number }>();
   const [dialogGame, setDialogGame] = useState<{ id: string; kind: 'settings' | 'remove' }>();
@@ -537,7 +548,7 @@ export function LibraryPage({ data, toast }: { data: AppSnapshot; toast: (value:
   return <main className="page library-page">
     <header className="page-header"><div><h1>My Library</h1><p>Your owned games, Game Pass games and local installations.</p></div><div className="button-row"><button className="secondary" disabled={data.auth.stored !== true || gameBusy || Object.values(data.gameUpdates ?? {}).some(update => update.checking)} onClick={() => checkUpdates()}><RefreshCw />Check game updates</button><button className="secondary" onClick={importGame}><Plus />Import game</button></div></header>
     <div className={`library-layout${data.games.length ? '' : ' account-only'}`}>
-      <AccountGamesForUser data={data} toast={toast} selectedId={selected?.id} select={game => setSelectedId(game.id)} menu={openMenu} />
+      <AccountGamesForUser data={data} toast={toast} filters={filters} onFiltersChange={onFiltersChange} selectedId={selected?.id} select={game => setSelectedId(game.id)} menu={openMenu} />
       {selected ? <aside className="game-detail">
         <div className="detail-art"><Cover game={selected} /><div className="detail-shade" /><div><StatePill game={selected} /><h2>{selected.title}</h2><span>{selected.publisher ?? 'Publisher not provided'}</span></div></div>
         {selected.installMessage ? <div className="alert amber"><CircleAlert /><span>{selected.installMessage}</span></div> : null}
@@ -704,7 +715,7 @@ export function SettingsPage({ data, toast }: { data: AppSnapshot; toast: (value
         <section><h3>Game logging</h3><div className="toggle-row"><label className="toggle"><input type="checkbox" checked={form.verboseLogs} onChange={(event) => setForm({ ...form, verboseLogs: event.target.checked })} /><span>Verbose game logs</span></label><p>Writes full Wine, vkd3d-proton and Xodus diagnostics to the per-game log file and stops coalescing repeated lines. Slower and much larger logs; use temporarily when diagnosing a crash.</p></div><div className="button-row"><button className="secondary" disabled={Boolean(busy)} onClick={() => invoke('save-diagnostics', () => window.launcher.updateSettings({ verboseLogs: form.verboseLogs }), 'Logging settings saved.')}>Save diagnostics</button></div></section>
         <section><h3>Backend details</h3><p className="diagnostic-path mono">{data.backend.binaryPath ?? 'No backend selected'}</p><div className="meta-grid"><div><span>SOURCE</span><strong>{data.backend.source === 'external' ? 'External installation · read-only' : data.backend.delivery === 'release' ? 'Nexus GitHub Release' : data.backend.source === 'managed' ? 'Local versioned build' : '—'}</strong></div><div><span>COMMIT</span><strong className="mono">{data.backend.commit?.slice(0, 12) ?? '—'}</strong></div></div><button className="secondary" disabled={Boolean(busy) || data.backend.updating || data.backend.checking} onClick={() => invoke('backend-rebuild', () => window.launcher.rebuildBackend(), 'Pinned backend source was built and activated.')}><Github />Build backend from source</button>{data.backend.updating || logs.length > 0 ? <pre className="build-log">{logs.join('\n') || 'Waiting for backend output…'}</pre> : null}</section>
         <section><h3>Runtime details</h3><p className="diagnostic-path mono">{data.runtime.winePath ?? 'No runtime selected'}</p><div className="meta-grid"><div><span>SOURCE</span><strong>{runtimeInfo.source}</strong></div><div><span>BUILD</span><strong className="mono">{data.runtime.commit ?? '—'}</strong></div></div></section>
-        <section><h3>Build dependencies</h3><div className="dependency-grid"><ToggleStatus ok={data.backend.prerequisites.git} label="Git" /><ToggleStatus ok={data.backend.prerequisites.cargo} label="Cargo" /><ToggleStatus ok={data.backend.prerequisites.rustc} label="Rust ≥ 1.98" /><ToggleStatus ok={data.backend.prerequisites.protoc} label="protoc" /></div><p className="fine-print">Building Xodus also requires GTK 3, WebKitGTK 4.1, libsoup 3, and their development packages.</p></section>
+        <section><h3>Build dependencies</h3><div className="dependency-grid"><ToggleStatus ok={data.backend.prerequisites.git} label="Git" /><ToggleStatus ok={data.backend.prerequisites.cargo} label="Cargo" /><ToggleStatus ok={data.backend.prerequisites.rustc} label="Rust 1.99" /><ToggleStatus ok={data.backend.prerequisites.protoc} label="protoc" /></div><p className="fine-print">Building Xodus also requires a C/C++ toolchain, CMake, OpenSSL 3 and D-Bus development packages.</p></section>
       </div>
     </details>
   </main>;
@@ -770,6 +781,8 @@ export default function App() {
   const [toast, setToast] = useState<Toast>();
   const [search, setSearch] = useState('');
   const [submittedSearch, setSubmittedSearch] = useState('');
+  // App stays mounted while pages change, unlike LibraryPage/AccountGames.
+  const [libraryFilters, setLibraryFilters] = useState<LibraryFilters>(defaultLibraryFilters);
 
   useEffect(() => {
     void window.launcher.getSnapshot().then((value) => { setData(value); setLoading(false); }).catch((error) => { setToast({ kind: 'error', message: errorMessage(error) }); setLoading(false); });
@@ -797,7 +810,7 @@ export default function App() {
 
     <section className="content-shell">
       <header className="topbar"><div className="search-box"><Search /><input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && search.trim().length >= 2) { setSubmittedSearch(search.trim()); setPage('store'); } }} placeholder="Search games, add-ons and your library" />{search ? <button onClick={() => setSearch('')}><X /></button> : null}{searchResults.length > 0 && page !== 'store' ? <div className="search-results">{searchResults.map((game) => <button key={game.id} onClick={() => { setSearch(''); setPage('library'); }}><Cover game={game} /><span><GameTitle title={game.title} /><small>{game.storeId ?? game.path}</small></span></button>)}</div> : null}</div><TopStatus data={data} go={setPage} /></header>
-      <div className="page-scroll">{page === 'home' ? <HomePage data={data} go={setPage} action={action} /> : null}{page === 'store' ? <StorePage data={data} toast={setToast} go={setPage} initialQuery={submittedSearch} /> : null}{page === 'library' ? <LibraryPage data={data} toast={setToast} /> : null}{page === 'downloads' ? <DownloadsPage data={data} toast={setToast} /> : null}{page === 'settings' ? <SettingsPage data={data} toast={setToast} /> : null}</div>
+      <div className="page-scroll">{page === 'home' ? <HomePage data={data} go={setPage} action={action} /> : null}{page === 'store' ? <StorePage data={data} toast={setToast} go={setPage} initialQuery={submittedSearch} /> : null}{page === 'library' ? <LibraryPage data={data} toast={setToast} filters={libraryFilters} onFiltersChange={setLibraryFilters} /> : null}{page === 'downloads' ? <DownloadsPage data={data} toast={setToast} /> : null}{page === 'settings' ? <SettingsPage data={data} toast={setToast} /> : null}</div>
     </section>
     {toast ? <div className={`toast ${toast.kind}`}>{toast.kind === 'success' ? <Check /> : toast.kind === 'error' ? <CircleAlert /> : <Terminal />}<span>{toast.message}</span><button onClick={() => setToast(undefined)}><X /></button></div> : null}
   </div>;

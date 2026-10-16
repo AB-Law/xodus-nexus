@@ -1,12 +1,23 @@
 import { expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { AccountGames, GameTitle, LibraryPagination, Sidebar } from './App';
+import { AccountGames, GameTitle, LibraryPagination, Sidebar, type LibraryFilters } from './App';
 import { demoSnapshot } from '../shared/demo-data';
 
 it('keeps one My Library and Store navigation, no separate Game Pass page',()=>{
   const html=renderToStaticMarkup(<Sidebar data={demoSnapshot()} page="library" go={()=>{}} />);
   expect(html).toContain('My Library'); expect(html).toContain('Store');
   expect(html).not.toContain('<span>Game Pass</span>');
+});
+it('restores the parent-owned filters after the library is recreated',()=>{
+  const filters: LibraryFilters = { kind: 'owned', playState: 'installed', query: 'Edition' };
+  const data=demoSnapshot(); data.auth={running:false,stored:false,note:''};
+  const library=()=>renderToStaticMarkup(<AccountGames data={data} toast={()=>{}} filters={filters} onFiltersChange={()=>{}} />);
+  for(const html of [library(),library()]) {
+    expect(html).toContain('<option value="owned" selected="">');
+    expect(html).toContain('<option value="installed" selected="">');
+    expect(html).toContain('value="Edition"');
+    expect(html).not.toContain('<option value="all" selected="">');
+  }
 });
 it('offers Access and Play state filters without cloud streaming, preserving installed games offline',()=>{
   const data=demoSnapshot(); data.auth={running:false,stored:false,note:''};

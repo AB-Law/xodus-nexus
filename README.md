@@ -40,8 +40,11 @@ chmod +x Xodus-Nexus-0.3.0-x86_64.AppImage
 ./Xodus-Nexus-0.3.0-x86_64.AppImage
 ```
 
-No Rust, Cargo or `protoc` is needed for the prebuilt backend. It requires GTK 3,
-WebKitGTK 4.1 and a desktop secret service for sign-in.
+No Rust, Cargo or `protoc` is needed for the prebuilt backend. Starting with
+launcher 0.3.2 and backend 0.2.3, sign-in uses the launcher's own window and no
+longer requires WebKitGTK. A desktop secret service is still needed; the installed
+KDE keyring is activated automatically on SteamOS when necessary. Update both
+components together. Earlier releases still require GTK 3 and WebKitGTK 4.1.
 Distribution-specific runtime prerequisites are listed in the
 [setup guide](https://github.com/domsvoboda/xodus-nexus/wiki).
 

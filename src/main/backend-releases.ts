@@ -33,8 +33,7 @@ export async function discoverBackend(fetcher: typeof fetch): Promise<BackendArt
     assets?: Array<{ name?: string; browser_download_url?: string }>;
   }>;
   if (!Array.isArray(releases)) throw new Error('Invalid backend release list.');
-  // Accept the newest stable backend-vX.Y.Z release at or above the launcher's
-  // minimum version; the launcher is not pinned to one backend release.
+  // The Electron-hosted backend requires the updated launcher.
   let selected: { tag: string; version: string; release: NonNullable<typeof releases[number]> } | undefined;
   for (const item of releases) {
     if (item.draft || item.prerelease) continue;

@@ -45,7 +45,7 @@ launch-chain tests and CLI capability checks, then packages:
 - `candidate.json` binding all five assets to the Nexus commit and workflow run
 
 Native build dependencies: Git, Rust from the lock, Node 22, Cargo, pkg-config,
-C/C++ toolchain, OpenSSL, protoc, GTK 3/WebKitGTK 4.1/libsoup 3 development headers,
+C/C++ toolchain, OpenSSL, protoc, CMake, D-Bus development headers,
 tar/xz. For a clean build:
 
 ```sh
@@ -54,7 +54,7 @@ node scripts/build-backend.mjs --work ./backend-build --output ./backend-release
 
 Directories must not already exist. The source archive can also be built
 offline with the locked Rust toolchain: from `source/`, run
-`cargo build --locked --offline --release -p xodus-cli -p xodus-service`.
+`cargo build --locked --offline --release --no-default-features -p xodus-cli -p xodus-service`.
 
 Promotion is manual: select `backend` in the existing release workflow after
 recording exact-candidate approval. It verifies provenance/checksums and creates
@@ -71,7 +71,7 @@ An unavailable/private release, incompatible system libraries or failed checksum
 never causes automatic compilation or a production backend replacement.
 
 Default install needs no Git/Cargo/protoc/GitHub authentication. Linux x86_64,
-glibc compatible with Ubuntu 22.04, GTK 3, WebKitGTK 4.1, tar/xz and the desktop's
+glibc compatible with Ubuntu 22.04, OpenSSL 3, D-Bus, tar/xz and the desktop's
 secret service are needed. Other architectures/musl and other distributions
 have not been validated. Missing-library failures are shown in Settings.
 
@@ -85,3 +85,32 @@ The Electron launcher is MIT-licensed. The separately distributed Xodus backend
 retains its upstream GPLv3 license; dependency licenses and corresponding source
 are included with every candidate. No proprietary game files, credentials or
 saves are packaged.
+
+## Electron sign-in host (backend 0.2.3, launcher 0.3.2)
+
+`assets/xodus-external-auth.patch` is part of the locked backend patch series.
+The packaged recipe uses `--no-default-features` to build
+a CLI without Tao/Wry, GTK or WebKit linkage. All authentication, token exchange
+and keychain storage remain in the backend.
+
+The launcher detects the CLI's `--external-webview-stdio` capability before
+starting sign-in. It
+hosts the Microsoft page in a separate sandboxed, context-isolated Electron
+window with no Node or launcher API. Private stdio carries versioned, bounded
+UI messages, never a listening port. Initial headers and navigation destinations
+are restricted, cookies live only for one attempt, and cancellation cleans up
+the window and child process. Protocol messages are not added to UI logs.
+
+Backend 0.2.3 requires launcher 0.3.2 or newer. The source keeps upstream's native
+WebKit feature for developers, but public packages use one Electron-hosted path.
+Manual sign-in and profile/Game Pass loading were verified on the local Linux
+host and in a SteamOS VM without system dependency installation. This does not
+claim physical Steam Deck, gameplay or all-distribution validation. Use separate
+profiles for additional tests and never replace a validated release artifact.
+
+The separate `xodus-keyring-activation.patch` handles KDE systems
+that advertise their installed Secret Service under `org.kde.secretservicecompat`
+only. It activates that existing user service if the standard Secret Service
+name has neither an owner nor an activation provider. Existing/default providers
+are left alone. No packages, keyring configuration or plaintext fallback are
+introduced, and keyring failures remain errors.

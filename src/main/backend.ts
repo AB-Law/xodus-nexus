@@ -168,8 +168,8 @@ export class BackendManager {
       this.artifact = await discoverBackend(this.fetcher);
       const binaryPath = await installBackend(this.managedRoot, this.artifact, this.fetcher, async cli => {
         const caps = await this.validate(cli);
-        if (!caps?.account || !caps.run || !caps.streaming || !caps.login || !caps.logout || !caps.download) {
-          throw new Error('Backend validation failed. The prebuilt build requires glibc 2.35 or newer, GTK 3 and WebKitGTK 4.1 runtime libraries.');
+        if (!caps?.account || !caps.run || !caps.streaming || !caps.login || !caps.logout || !caps.download || !caps.externalAuth) {
+          throw new Error('Backend validation failed. The prebuilt build requires glibc 2.35 or newer, OpenSSL 3 and D-Bus runtime libraries.');
         }
         const help = await run(cli, ['run', '--help'], { maxOutput: 100_000 });
         if (help.code !== 0 || !help.output.includes('--materialize-chain')) throw new Error('Backend launch-chain validation failed.');
@@ -226,7 +226,7 @@ export class BackendManager {
       }
       const target = path.join(staging, 'target');
       log(`Building ${commit.slice(0, 10)} with Cargo…`);
-      result = await run('cargo', ['build', '--locked', '--release', '-p', 'xodus-cli', '-p', 'xodus-service'], {
+      result = await run('cargo', ['build', '--locked', '--release', '--no-default-features', '-p', 'xodus-cli', '-p', 'xodus-service'], {
         cwd: staging,
         env: { ...process.env, CARGO_TARGET_DIR: target },
         onLine: log,
@@ -235,7 +235,7 @@ export class BackendManager {
       if (result.code !== 0) throw new Error(`cargo build exited with code ${result.code}`);
       const builtCli = path.join(target, 'release', 'xodus-cli');
       const capabilities = await this.validate(builtCli);
-      if (!capabilities?.login || !capabilities.streaming || !capabilities.account) throw new Error('The built backend failed command validation.');
+      if (!capabilities?.login || !capabilities.streaming || !capabilities.account || !capabilities.externalAuth) throw new Error('The built backend failed command validation.');
       const runHelp = await run(builtCli, ['run', '--help'], { maxOutput: 100_000 });
       if (runHelp.code !== 0 || !runHelp.output.includes('--materialize-chain')) throw new Error('The built backend lacks launch-chain support.');
       await this.assertUpdateAllowed();
