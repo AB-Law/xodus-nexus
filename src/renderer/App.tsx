@@ -9,6 +9,8 @@ import type { AccountLibraryPage, AppSnapshot, CatalogProduct, CatalogSearchResu
 import { estimateTimeRemaining } from '../shared/utils';
 import { runtimeDisplay } from '../shared/runtime-display';
 import { subscriptionBadge } from '../shared/subscription';
+import { defaultLaunchTools, normalizeLaunchTools } from '../shared/launch-tools';
+import type { GameLaunchTools } from '../shared/types';
 
 const emptySnapshot: AppSnapshot = {
   backend: {
@@ -442,12 +444,24 @@ function GameContentDialog({ game, data, close, toast }: { game: Game; data: App
   </section></div>;
 }
 
+export function GameLaunchToolFields({ value, change }: { value: GameLaunchTools; change: (value: GameLaunchTools) => void }) {
+  const update = (patch: Partial<GameLaunchTools>) => change({ ...value, ...patch });
+  return <fieldset className="game-launch-tools"><legend>Launch tools</legend>
+    <label className="tool-checkbox"><input type="checkbox" checked={value.mangoHud} onChange={event => update({ mangoHud: event.target.checked })} /><span>Enable MangoHud</span></label>
+    <label className="tool-checkbox"><input type="checkbox" checked={value.gamescope} onChange={event => update({ gamescope: event.target.checked })} /><span>Run in gamescope</span></label>
+    {value.gamescope ? <label>Gamescope options<input value={value.gamescopeArgs} maxLength={2048} placeholder="-W 1920 -H 1080 -f" onChange={event => update({ gamescopeArgs: event.target.value })} /><small>Only options. Nexus adds the game command. MangoHud with gamescope requires mangoapp.</small></label> : null}
+    <label>Launch options<textarea rows={3} value={value.launchOptions} maxLength={2048} placeholder="PROTON_ENABLE_WAYLAND=1 gamemoderun %command% --launcher-skip" onChange={event => update({ launchOptions: event.target.value })} /><small>NAME=value and wrappers before %command%, game arguments after it. Quotes are supported, not shell expansion. Variables are passed to Wine; Proton-script-only options depend on runtime support.</small></label>
+    <small>Tools must already be installed. Applies to this game and its shortcuts, not the launcher.</small>
+  </fieldset>;
+}
+
 export function LibraryPage({ data, toast, filters, onFiltersChange }: Pick<AccountGamesProps, 'data' | 'toast' | 'filters' | 'onFiltersChange'>) {
   const [selectedId, setSelectedId] = useState<string>();
   const [menu, setMenu] = useState<{ id: string; x: number; y: number }>();
   const [dialogGame, setDialogGame] = useState<{ id: string; kind: 'settings' | 'remove' }>();
   const [editTitle, setEditTitle] = useState('');
   const [editLocale, setEditLocale] = useState('');
+  const [editTools, setEditTools] = useState<GameLaunchTools>({ ...defaultLaunchTools });
   const [localeOptions, setLocaleOptions] = useState<string[]>([]);
   const [dialogBusy, setDialogBusy] = useState(false);
   const [diagnosticLog, setDiagnosticLog] = useState<DiagnosticLog>();
@@ -473,6 +487,7 @@ export function LibraryPage({ data, toast, filters, onFiltersChange }: Pick<Acco
     setMenu(undefined);
     setEditTitle(game.title);
     setEditLocale(game.locale ?? '');
+    setEditTools({ ...defaultLaunchTools, ...game.launchTools });
     setLocaleOptions([]);
     if (kind === 'settings') void window.launcher.getGameLocales(game.id).then(setLocaleOptions).catch((error) => toast({ kind: 'error', message: errorMessage(error) }));
     setDialogGame({ id: game.id, kind });
@@ -483,7 +498,7 @@ export function LibraryPage({ data, toast, filters, onFiltersChange }: Pick<Acco
     if (!dialogGame) return;
     setDialogBusy(true);
     try {
-      await window.launcher.updateGame(dialogGame.id, { title: editTitle.trim(), locale: editLocale });
+      await window.launcher.updateGame(dialogGame.id, { title: editTitle.trim(), locale: editLocale, launchTools: normalizeLaunchTools(editTools) });
       toast({ kind: 'success', message: 'Game settings saved.' });
       setDialogGame(undefined);
     } catch (error) { toast({ kind: 'error', message: errorMessage(error) }); }
@@ -583,7 +598,14 @@ export function LibraryPage({ data, toast, filters, onFiltersChange }: Pick<Acco
 {diagnosticLog ? <DiagnosticDialog log={diagnosticLog} close={() => setDiagnosticLog(undefined)} /> : null}
     {contentGameId && data.games.find(game => game.id === contentGameId) ? <GameContentDialog key={`${contentGameId}:${data.auth.username}:${data.auth.stored}`} game={data.games.find(game => game.id === contentGameId)!} data={data} close={() => setContentGameId(undefined)} toast={toast} /> : null}
     {dialogGame && modalGame ? <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !dialogBusy) setDialogGame(undefined); }}><section className="game-dialog" role="dialog" aria-modal="true" aria-label={dialogGame.kind === 'remove' ? `Remove ${modalGame.title}` : `Settings for ${modalGame.title}`}>
-      {dialogGame.kind === 'remove' ? <><h2>Remove {modalGame.title}?</h2><p>Keep the files, or move this installation folder to Trash. Saves stored outside this folder are not affected.</p><code className="remove-path">{modalGame.path}</code><div className="dialog-actions"><button className="secondary" disabled={dialogBusy} onClick={() => setDialogGame(undefined)}>Cancel</button><button className="secondary" disabled={dialogBusy} onClick={() => removeGame('library')}>Keep files</button><button className="secondary danger" disabled={dialogBusy} onClick={() => removeGame('trash-files')}><Trash2 />Move files to Trash</button></div></> : <form onSubmit={saveGameSettings}><h2>Game settings</h2><label>Display name<input required value={editTitle} onChange={(event) => setEditTitle(event.target.value)} /></label><label>Game language<select value={editLocale} onChange={(event) => setEditLocale(event.target.value)}><option value="">System default</option>{localeOptions.map((locale) => <option key={locale} value={locale}>{locale}</option>)}{editLocale && !localeOptions.some((locale) => locale.toLowerCase() === editLocale.toLowerCase()) ? <option value={editLocale}>{editLocale}</option> : null}</select></label><p>Available languages come from the game manifest. All games use the active Xodus Runtime.</p><div className="dialog-actions"><button type="button" className="secondary" disabled={dialogBusy} onClick={() => setDialogGame(undefined)}>Cancel</button><button className="primary" disabled={dialogBusy || !editTitle.trim()}><Check />Save</button></div></form>}
+      {dialogGame.kind === 'remove' ? <><h2>Remove {modalGame.title}?</h2><p>Keep the files, or move this installation folder to Trash. Saves stored outside this folder are not affected.</p><code className="remove-path">{modalGame.path}</code><div className="dialog-actions"><button className="secondary" disabled={dialogBusy} onClick={() => setDialogGame(undefined)}>Cancel</button><button className="secondary" disabled={dialogBusy} onClick={() => removeGame('library')}>Keep files</button><button className="secondary danger" disabled={dialogBusy} onClick={() => removeGame('trash-files')}><Trash2 />Move files to Trash</button></div></> : <form onSubmit={saveGameSettings}>
+        <h2>Game settings</h2>
+        <label>Display name<input required value={editTitle} onChange={(event) => setEditTitle(event.target.value)} /></label>
+        <label>Game language<select value={editLocale} onChange={(event) => setEditLocale(event.target.value)}><option value="">System default</option>{localeOptions.map((locale) => <option key={locale} value={locale}>{locale}</option>)}{editLocale && !localeOptions.some((locale) => locale.toLowerCase() === editLocale.toLowerCase()) ? <option value={editLocale}>{editLocale}</option> : null}</select></label>
+        <p>Available languages come from the game manifest. All games use the active Xodus Runtime.</p>
+        <GameLaunchToolFields value={editTools} change={setEditTools} />
+        <div className="dialog-actions"><button type="button" className="secondary" disabled={dialogBusy} onClick={() => setDialogGame(undefined)}>Cancel</button><button className="primary" disabled={dialogBusy || !editTitle.trim()}><Check />Save</button></div>
+      </form>}
     </section></div> : null}
   </main>;
 }

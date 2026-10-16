@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { AccountGames, Cover, GameTitle, LibraryPagination, Sidebar, type LibraryFilters } from './App';
+import { AccountGames, Cover, GameLaunchToolFields, GameTitle, LibraryPagination, Sidebar, type LibraryFilters } from './App';
+import { defaultLaunchTools } from '../shared/launch-tools';
 import { demoSnapshot } from '../shared/demo-data';
 
 it('keeps one My Library and Store navigation, no separate Game Pass page',()=>{
@@ -57,4 +58,12 @@ it('keeps pagination loading inside the button, without the oversized Store load
   const initial=renderToStaticMarkup(<LibraryPagination loading={true} hasMore={false} load={()=>{}} />);
   expect(initial).toContain('role="status"'); expect(initial).not.toContain('catalog-loading');
   expect(renderToStaticMarkup(<LibraryPagination loading={false} hasMore={false} load={()=>{}} />)).toBe('');
+});
+
+it('offers saved per-game overlay options and Steam-style environment and arguments',()=>{
+  const html=renderToStaticMarkup(<GameLaunchToolFields value={{...defaultLaunchTools,mangoHud:true,gamescope:true,launchOptions:'PROTON_ENABLE_WAYLAND=1 %command% --launcher-skip'}} change={()=>{}} />);
+  expect(html).toContain('Enable MangoHud'); expect(html).toContain('Run in gamescope');
+  expect(html).toContain('Gamescope options'); expect(html).toContain('requires mangoapp');
+  expect(html).toContain('Launch options'); expect(html).toContain('PROTON_ENABLE_WAYLAND=1 %command% --launcher-skip');
+  expect(html).toContain('checked');
 });

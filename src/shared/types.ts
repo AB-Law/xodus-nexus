@@ -79,6 +79,13 @@ export interface RuntimeStatus {
   error?: string;
 }
 
+export interface GameLaunchTools {
+  mangoHud: boolean;
+  gamescope: boolean;
+  gamescopeArgs: string;
+  launchOptions: string;
+}
+
 export interface Game {
   id: string;
   title: string;
@@ -90,6 +97,7 @@ export interface Game {
   executable?: string;
   winePath?: string; // Legacy saved field; ignored for launch. The runtime is global.
   launchArgs?: string;
+  launchTools?: GameLaunchTools;
   locale?: string;
   coverDataUrl?: string;
   coverUrl?: string; // Store box art, preferred over the installation's small logo.
@@ -291,7 +299,7 @@ export interface LauncherApi {
   removeDownload(id: string): Promise<void>;
   clearFinishedDownloads(): Promise<void>;
   importGame(path?: string): Promise<Game | null>;
-  updateGame(id: string, patch: Partial<Pick<Game, 'title' | 'executable' | 'launchArgs' | 'locale'>>): Promise<Game>;
+  updateGame(id: string, patch: Partial<Pick<Game, 'title' | 'executable' | 'launchArgs' | 'locale' | 'launchTools'>>): Promise<Game>;
   getGameLocales(id: string): Promise<string[]>;
   removeGame(id: string, mode: 'library' | 'trash-files'): Promise<void>;
   getGameLaunchOptions(id: string): Promise<GameLaunchOptions>;

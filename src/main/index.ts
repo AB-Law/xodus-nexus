@@ -22,6 +22,8 @@ import { spawnGameProcess, type GameProcess } from './game-process.js';
 import { gameLocaleEnvironment, manifestLocales, manifestTitleId, supportedGameLocale } from './game-locale.js';
 import { antiCheatEnvironment } from './anti-cheat.js';
 import { gameLaunchArguments } from './game-launch.js';
+import { prepareGameWrapper, type GameWrapper } from './game-wrapper.js';
+import { normalizeLaunchTools } from '../shared/launch-tools.js';
 import { LauncherUpdater } from './launcher-update.js';
 import { readDiagnosticTail } from './diagnostic-log.js';
 import { queryGameUpdate } from './game-updates.js';
@@ -604,13 +606,15 @@ async function prepareGameLaunch(id: string): Promise<void> {
   writeLaunchLog(`Wine: ${wine}`);
   emitSnapshot();
   let serviceSession: XodusServiceSession | undefined;
+  let launchWrapper: GameWrapper | undefined;
   try {
     const legacyPrefixRoot = path.join(dataRoot, 'prefixes', game.id);
     const compatibilityDataPath = path.join(dataRoot, 'compatdata', game.id);
     const steamRoot = path.join(app.getPath('home'), '.steam', 'root');
-    const protonRunner = await prepareProtonRunner(wine, compatibilityDataPath, steamRoot);
+    launchWrapper = await prepareGameWrapper(wine, game.launchTools, path.join(dataRoot, 'launch-wrappers'), process.env, game.path);
+    const protonRunner = await prepareProtonRunner(wine, compatibilityDataPath, steamRoot, launchWrapper.command);
     const wineCommand = protonRunner?.command ?? wine;
-    args[2] = wineCommand;
+    args[2] = protonRunner?.launchCommand ?? launchWrapper.command;
     if (inspected.vcRedistEncrypted) {
       if (!protonRunner) throw new Error('This encrypted VC++ prerequisite requires a Proton prefix. Select Xodus Runtime in Settings.');
       const installed = await installedVcRuntimeVersion(path.join(compatibilityDataPath, 'pfx'));
@@ -684,6 +688,7 @@ async function prepareGameLaunch(id: string): Promise<void> {
           serviceSessions.delete(operationId);
         }
         await tracked.cleanup().catch((error) => console.error('Game service cleanup failed:', error));
+        await launchWrapper?.cleanup().catch((error) => console.error('Game wrapper cleanup failed:', error));
         gameLog.flush();
         launchLog.end();
         emitSnapshot();
@@ -691,6 +696,7 @@ async function prepareGameLaunch(id: string): Promise<void> {
       } finally { finalizingGame = false; finishShortcutSession(); }
     });
   } catch (error) {
+    await launchWrapper?.cleanup().catch(() => undefined);
     if (serviceSession) {
       await serviceSession.stop().catch(() => undefined);
       serviceSessions.delete(operationId);
@@ -1008,6 +1014,7 @@ function registerIpc(): void {
   ipcMain.handle('update-game', async (_event, id: string, patch: Partial<Game>) => {
     const allowed: Partial<Game> = {};
     for (const key of ['title', 'executable', 'launchArgs'] as const) if (typeof patch[key] === 'string') allowed[key] = patch[key];
+    if ('launchTools' in patch) allowed.launchTools = normalizeLaunchTools(patch.launchTools);
     if (typeof patch.locale === 'string') {
       const game = store.games.find((entry) => entry.id === id);
       if (!game) throw new Error('Game not found.');

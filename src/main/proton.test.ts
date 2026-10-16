@@ -6,6 +6,8 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { managedUnrealCultureGameIni, prefixUserLocale, prepareProtonRunner, syncPrefixUserLocale, syncUnrealCultureGameIni } from './proton.js';
+import { prepareGameWrapper } from './game-wrapper.js';
+import { defaultLaunchTools } from '../shared/launch-tools.js';
 
 const created: string[] = [];
 const execFile = promisify(execFileCallback);
@@ -15,6 +17,25 @@ afterEach(async () => {
 });
 
 describe('prepareProtonRunner', () => {
+  it('applies game environment and arguments after runtime defaults, without wrapping setup or Stop', async () => {
+    const root=await mkdtemp(path.join(tmpdir(),'nexus-proton-game-tools-')); created.push(root);
+    const runtime=path.join(root,'runtime'), wine=path.join(runtime,'files/bin/wine'), compat=path.join(root,'compat');
+    await mkdir(path.dirname(wine),{recursive:true}); await mkdir(path.join(runtime,'files/share/default_pfx'),{recursive:true});
+    const system32=path.join(compat,'pfx/drive_c/windows/system32'); await mkdir(system32,{recursive:true});
+    for(const name of ['libvkd3d-utils-1.dll','dxgi.dll','d3d12.dll']) await writeFile(path.join(system32,name),'ready');
+    await writeFile(path.join(runtime,'proton'),'#!/bin/sh\nexit 0\n'); await chmod(path.join(runtime,'proton'),0o700);
+    await writeFile(wine,'#!/bin/sh\nprintf "%s\\n" "$WINEDLLOVERRIDES" "$DXVK_HUD" "$WINEPREFIX"; printf "<%s>\\n" "$@"\n'); await chmod(wine,0o700);
+    await writeFile(path.join(runtime,'files/bin/wineserver'),'#!/bin/sh\nexit 0\n'); await chmod(path.join(runtime,'files/bin/wineserver'),0o700);
+    const wrapper=await prepareGameWrapper(wine,{...defaultLaunchTools,launchOptions:'WINEDLLOVERRIDES="dxgi=n,b;winhttp=b" DXVK_HUD=fps %command% --launcher-skip'},path.join(root,'wrappers'));
+    const runner=(await prepareProtonRunner(wine,compat,path.join(root,'steam'),wrapper.command))!;
+    const setup=await execFile(runner.command,['setup']);
+    expect(setup.stdout).not.toContain('fps'); expect(setup.stdout).not.toContain('--launcher-skip');
+    const game=await execFile(runner.launchCommand!,['actual game.exe']);
+    expect(game.stdout).toContain(`dxgi=n,b;winhttp=b\nfps\n${path.join(compat,'pfx')}`);
+    expect(game.stdout).toContain('<actual game.exe>\n<--launcher-skip>');
+    expect(runner.stopPrefix.command).toBe(runner.command);
+    await execFile(runner.stopPrefix.command,runner.stopPrefix.args);
+  });
   it.each([false, true])('provisions shared HTTP/2 dependencies safely (old symlink: %s)', async (oldSymlink) => {
     const root = await mkdtemp(path.join(tmpdir(), 'xodus-nexus-h2-prefix-'));
     created.push(root);
