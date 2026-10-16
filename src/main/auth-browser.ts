@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { constants, promises as fs } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import os from 'node:os';
@@ -10,18 +10,44 @@ import type { AuthView, AuthViewFactory } from './auth-transport.js';
 import { externalFontEnvironment } from './launcher-fonts.js';
 
 type Open = Extract<AuthFrame, { type: 'open' }>;
+export type AuthBrowser = { kind: 'native'; binary: string } | { kind: 'flatpak'; binary: string; installation: '--user' | '--system'; ref: string };
+export class AuthBrowserNotFoundError extends Error {}
 
-export async function findAuthBrowser(environment: NodeJS.ProcessEnv = process.env): Promise<string> {
+export async function findAuthBrowser(environment: NodeJS.ProcessEnv = process.env): Promise<AuthBrowser> {
   if (process.platform !== 'linux') throw Error('Browser sign-in is currently supported on Linux with Google Chrome.');
-  // Flatpak/Snap wrappers and arbitrary user-supplied commands are not supported.
+  // Prefer native Chrome. Never interpret a setting or desktop Exec as a command.
   const candidates = ['/usr/bin/google-chrome-stable', '/usr/bin/google-chrome', '/opt/google/chrome/google-chrome'];
   for (const directory of (environment.PATH ?? '').split(path.delimiter).filter(value => path.isAbsolute(value))) {
     candidates.push(path.join(directory, 'google-chrome-stable'), path.join(directory, 'google-chrome'));
   }
   for (const file of new Set(candidates)) {
-    try { if (!(await fs.stat(file)).isFile()) continue; await fs.access(file, constants.X_OK); return file; } catch { /* Try the next installed path. */ }
+    try { if (!(await fs.stat(file)).isFile()) continue; await fs.access(file, constants.X_OK); return { kind: 'native', binary: file }; } catch { /* Try the next installed path. */ }
   }
-  throw Error('Browser sign-in requires Google Chrome installed on this system. Install Chrome, or use the regular Sign in option.');
+  const flatpaks = ['/usr/bin/flatpak', '/bin/flatpak', ...(environment.PATH ?? '').split(path.delimiter).filter(path.isAbsolute).map(directory => path.join(directory, 'flatpak'))];
+  for (const binary of new Set(flatpaks)) {
+    try { if (!(await fs.stat(binary)).isFile()) continue; await fs.access(binary, constants.X_OK); } catch { continue; }
+    for (const installation of ['--user', '--system'] as const) {
+      try {
+        const stdout = await new Promise<string>((resolve, reject) => execFile(binary, ['info', installation, '--show-ref', 'com.google.Chrome'], {
+          env: externalFontEnvironment(environment), timeout: 3000, maxBuffer: 4096, encoding: 'utf8',
+        }, (error, stdout) => error ? reject(error) : resolve(stdout)));
+        const ref = stdout.trim();
+        if (/^app\/com\.google\.Chrome\/(?:x86_64|aarch64)\/stable$/.test(ref)) return { kind: 'flatpak', binary, installation, ref };
+      } catch { /* Absent installation, unavailable Flatpak or bounded lookup failure. */ }
+    }
+    break;
+  }
+  throw new AuthBrowserNotFoundError('Google Chrome was not found. Install Google Chrome (native or Flatpak from Discover), then try again.');
+}
+
+/** Flatpak preserves standard pipes; a constant inner command maps them to CDP.
+ * Its run command does not support flatpak-spawn's --forward-fd option. */
+export function browserLaunch(browser: AuthBrowser, profile: string, headless = false): { command: string; args: string[]; input: number; output: number } {
+  const args = ['--user-data-dir=' + path.join(profile, 'profile'), '--incognito', '--no-first-run', '--no-default-browser-check', '--disable-sync', '--disable-extensions', '--remote-debugging-pipe', ...(headless ? ['--headless=new'] : []), 'about:blank'];
+  if (browser.kind === 'native') return { command: browser.binary, args, input: 3, output: 4 };
+  return { command: browser.binary, args: ['run', browser.installation, '--die-with-parent', '--filesystem=' + profile,
+    '--env=XDG_CONFIG_HOME=' + path.join(profile, 'config'), '--env=XDG_CACHE_HOME=' + path.join(profile, 'cache'), '--env=XDG_DATA_HOME=' + path.join(profile, 'data'), '--env=TMPDIR=' + path.join(profile, 'tmp'),
+    '--command=sh', browser.ref, '-c', 'exec /app/bin/chrome "$@" 3<&0 4>&1 </dev/null >/dev/null', 'nexus-browser-auth', ...args], input: 0, output: 1 };
 }
 
 // Main-world bridge on trusted Microsoft pages only. It never changes WebAuthn.
@@ -54,7 +80,7 @@ export async function browserAuthViewFactory(environment: NodeJS.ProcessEnv = pr
 }
 
 /** Dedicated disposable Chrome, controlled through inherited pipes, never default-profile debugging. */
-export function createBrowserAuthViewFactory(binary: string, environment: NodeJS.ProcessEnv = process.env, options: { headless?: boolean } = {}): AuthViewFactory {
+export function createBrowserAuthViewFactory(browser: AuthBrowser | string, environment: NodeJS.ProcessEnv = process.env, options: { headless?: boolean } = {}): AuthViewFactory {
   return (send, cancel, fail): AuthView => {
     let chrome: ChildProcess | undefined, cdp: AuthCdp | undefined, profile: string | undefined;
     let sessionId: string | undefined, targetId: string | undefined, mainFrame: string | undefined, frame: Open | undefined;
@@ -100,12 +126,15 @@ export function createBrowserAuthViewFactory(binary: string, environment: NodeJS
     async function initialize(): Promise<void> {
       profile = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-browser-auth-')); await fs.chmod(profile, 0o700);
       if (disposed) return;
-      chrome = spawn(binary, ['--user-data-dir=' + profile, '--incognito', '--no-first-run', '--no-default-browser-check', '--disable-sync', '--disable-extensions', '--remote-debugging-pipe', ...(options.headless ? ['--headless=new'] : []), 'about:blank'], {
-        env: externalFontEnvironment(environment), stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'], shell: false, detached: true,
+      await Promise.all(['profile', 'config', 'cache', 'data', 'tmp'].map(name => fs.mkdir(path.join(profile!, name), { mode: 0o700 })));
+      if (disposed) return;
+      const launch = browserLaunch(typeof browser === 'string' ? { kind: 'native', binary: browser } : browser, profile, options.headless);
+      chrome = spawn(launch.command, launch.args, {
+        env: { ...externalFontEnvironment(environment), TMPDIR: path.join(profile, 'tmp') }, stdio: launch.input === 0 ? ['pipe', 'pipe', 'ignore'] : ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'], shell: false, detached: true,
       });
       chrome.once('error', failure);
       chrome.once('exit', () => { if (!disposed) { if (frame) cancel(frame.session); else failure(); } });
-      cdp = new AuthCdp(chrome.stdio[3] as Writable, chrome.stdio[4] as Readable, event => { void handle(event).catch(failure); }, failure);
+      cdp = new AuthCdp(chrome.stdio[launch.input] as Writable, chrome.stdio[launch.output] as Readable, event => { void handle(event).catch(failure); }, failure);
       const targets = await call('Target.getTargets');
       const target = targets.targetInfos.find((item: any) => item.type === 'page' && item.url === 'about:blank');
       if (!target) throw Error('Browser sign-in window is unavailable.'); targetId = target.targetId;

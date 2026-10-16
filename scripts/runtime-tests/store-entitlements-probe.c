@@ -514,6 +514,220 @@ done:
     IXThreadingImpl_Release(threads);
 }
 
+struct game_test_context
+{
+    XStoreContextHandle store;
+    XTaskQueueRegistrationToken token;
+    UINT64 serial, version;
+    LONG calls;
+    UINT mode;
+    BOOL ok, waited;
+    HANDLE started, gate, waiting, finished;
+};
+
+static void CALLBACK game_changed(void *arg)
+{
+    struct game_test_context *context = arg;
+    InterlockedIncrement(&context->calls);
+    if (context->mode == 1) context->ok = game_license_unregister(context->store, context->token, TRUE);
+    else if (context->mode == 2) { entitled_store_close(context->store); context->ok = TRUE; }
+    else if (context->mode == 3)
+    { SetEvent(context->started); context->ok = WaitForSingleObject(context->gate, 3000) == WAIT_OBJECT_0; }
+    else if (context->mode == 4 && context->calls == 1)
+        game_license_notify(context->serial, ++context->version);
+}
+
+static DWORD WINAPI game_test_trigger(void *arg)
+{
+    struct game_test_context *context = arg;
+    game_license_notify(context->serial, ++context->version);
+    return 0;
+}
+
+static DWORD WINAPI game_test_wait(void *arg)
+{
+    struct game_test_context *context = arg;
+    SetEvent(context->waiting);
+    if (context->mode == 5) { entitled_store_close(context->store); context->waited = TRUE; }
+    else context->waited = game_license_unregister(context->store, context->token, TRUE);
+    SetEvent(context->finished);
+    return 0;
+}
+
+static void test_game_licenses(void)
+{
+    IXThreadingImpl *threads = NULL;
+    XTaskQueueHandle queue = NULL, immediate = NULL, terminated = NULL, process_queue = NULL, pool = NULL;
+    struct game_test_context context = {0}, other = {0};
+    XStoreSku skus[2] = {{0}}, swap;
+    XStoreProduct product = {0};
+    struct entitled_snapshot proof = {0};
+    UINT64 now = time(NULL), refresh = 0, serial, xuid;
+    XTaskQueueRegistrationToken token = {0};
+    HANDLE trigger, waiter;
+    CHECK("game-threading", QueryApiImpl(&CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&threads) == S_OK && threads);
+    if (!threads) return;
+    CHECK("game-manual-queue", IXThreadingImpl_XTaskQueueCreate(threads, XTaskQueueDispatchMode_Manual, XTaskQueueDispatchMode_Manual, &queue) == S_OK);
+    CHECK("game-immediate-queue", IXThreadingImpl_XTaskQueueCreate(threads, XTaskQueueDispatchMode_Manual, XTaskQueueDispatchMode_Immediate, &immediate) == S_OK);
+    CHECK("game-create", entitled_store_create(NULL, &context.store) == S_OK);
+    CHECK("game-create-other", entitled_store_create(NULL, &other.store) == S_OK);
+    CHECK("game-identity", entitled_store_identity(context.store, &xuid, &context.serial) == S_OK && context.serial);
+    CHECK("game-other-identity", entitled_store_identity(other.store, &xuid, &other.serial) == S_OK && other.serial != context.serial);
+    CHECK("game-null-token", game_license_register(context.store, queue, NULL, game_changed, NULL) == E_POINTER);
+    token.token = 123;
+    CHECK("game-null-callback-clears-token", game_license_register(context.store, queue, NULL, NULL, &token) == E_POINTER && !token.token);
+    token.token = 123;
+    CHECK("game-invalid-context-clears-token", game_license_register((void *)1, queue, NULL, game_changed, &token) == E_INVALIDARG && !token.token);
+    CHECK("game-register", game_license_register(context.store, queue, &context, game_changed, &context.token) == S_OK && context.token.token);
+    CHECK("game-register-other", game_license_register(other.store, queue, &other, game_changed, &other.token) == S_OK && other.token.token != context.token.token);
+    CHECK("game-no-initial-event", !context.calls && !IXThreadingImpl_XTaskQueueDispatch(threads, queue, XTaskQueuePort_Completion, 0));
+    CHECK("game-wrong-context-token-noop", game_license_unregister(other.store, context.token, TRUE));
+    proof.valid_until = now + 60; proof.proof_until = now + 600; proof.count = 1; proof.products = &product;
+    product.storeId = storeId; product.productKind = XStoreProductKind_Game; product.isInUserCollection = TRUE;
+    product.skusCount = 1; product.skus = skus;
+    skus[0].skuId = "0010"; skus[0].isInUserCollection = TRUE; skus[0].isTrial = TRUE; skus[0].collectionData.endDate = now + 3600;
+    game_license_observe(context.serial, ++refresh, &proof);
+    CHECK("game-first-proof-only-baseline", !IXThreadingImpl_XTaskQueueDispatch(threads, queue, XTaskQueuePort_Completion, 0) && !context.calls);
+    skus[0].isTrial = FALSE;
+    game_license_observe(context.serial, ++refresh, &proof);
+    CHECK("game-completion-not-work-port", !IXThreadingImpl_XTaskQueueDispatch(threads, queue, XTaskQueuePort_Work, 0) && !context.calls);
+    CHECK("game-trial-full-change", IXThreadingImpl_XTaskQueueDispatch(threads, queue, XTaskQueuePort_Completion, 0) && context.calls == 1 && !other.calls);
+    CHECK("game-no-duplicate-event", !IXThreadingImpl_XTaskQueueDispatch(threads, queue, XTaskQueuePort_Completion, 0));
+    proof.proof_until++;
+    game_license_observe(context.serial, ++refresh, &proof);
+    CHECK("game-proof-ttl-not-license-change", !IXThreadingImpl_XTaskQueueDispatch(threads, queue, XTaskQueuePort_Completion, 0));
+    skus[1] = skus[0]; skus[1].skuId = "0020"; product.skusCount = 2;
+    game_license_observe(context.serial, ++refresh, &proof);
+    CHECK("game-sku-set-change", IXThreadingImpl_XTaskQueueDispatch(threads, queue, XTaskQueuePort_Completion, 0) && context.calls == 2);
+    swap = skus[0]; skus[0] = skus[1]; skus[1] = swap;
+    game_license_observe(context.serial, ++refresh, &proof);
+    CHECK("game-sku-order-not-change", !IXThreadingImpl_XTaskQueueDispatch(threads, queue, XTaskQueuePort_Completion, 0));
+    skus[0].isTrial = TRUE;
+    game_license_observe(context.serial, refresh - 1, &proof);
+    proof.proof_until = 0; game_license_observe(context.serial, ++refresh, &proof); proof.proof_until = now + 600;
+    proof.valid_until = now - 1; game_license_observe(context.serial, ++refresh, &proof); proof.valid_until = now + 60;
+    product.storeId = "B00000000002"; game_license_observe(context.serial, ++refresh, &proof); product.storeId = storeId;
+    product.productKind = XStoreProductKind_Durable; game_license_observe(context.serial, ++refresh, &proof); product.productKind = XStoreProductKind_Game;
+    proof.count = 0; game_license_observe(context.serial, ++refresh, &proof); proof.count = 1;
+    skus[0].collectionData.endDate = -1; game_license_observe(context.serial, ++refresh, &proof); skus[0].collectionData.endDate = now + 3600;
+    CHECK("game-no-unverified-expired-related-absent-stale-events", !IXThreadingImpl_XTaskQueueDispatch(threads, queue, XTaskQueuePort_Completion, 0) && context.calls == 2);
+    game_license_observe(context.serial, ++refresh, &proof);
+    skus[0].isTrial = FALSE; game_license_observe(context.serial, ++refresh, &proof);
+    CHECK("game-coalesced-refresh", IXThreadingImpl_XTaskQueueDispatch(threads, queue, XTaskQueuePort_Completion, 0) && context.calls == 3);
+    CHECK("game-coalesced-no-extra", !IXThreadingImpl_XTaskQueueDispatch(threads, queue, XTaskQueuePort_Completion, 0));
+    skus[0].collectionData.endDate++; game_license_observe(context.serial, ++refresh, &proof);
+    CHECK("game-unregister-queued-false", !game_license_unregister(context.store, context.token, FALSE));
+    CHECK("game-wait-after-pending", game_license_unregister(context.store, context.token, TRUE));
+    IXThreadingImpl_XTaskQueueDispatch(threads, queue, XTaskQueuePort_Completion, 0);
+    CHECK("game-queued-event-suppressed", context.calls == 3);
+    CHECK("game-repeat-unregister-safe", game_license_unregister(context.store, context.token, TRUE));
+    CHECK("game-other-still-registered", game_license_registrations && game_license_registrations->serial == other.serial);
+    CHECK("game-other-unregister", game_license_unregister(other.store, other.token, FALSE));
+    CHECK("game-register-after-baseline", game_license_register(context.store, queue, &context, game_changed, &context.token) == S_OK);
+    CHECK("game-no-event-after-register-known", !IXThreadingImpl_XTaskQueueDispatch(threads, queue, XTaskQueuePort_Completion, 0));
+    skus[0].collectionData.endDate++; game_license_observe(context.serial, ++refresh, &proof);
+    serial = context.serial; entitled_store_close(context.store);
+    IXThreadingImpl_XTaskQueueDispatch(threads, queue, XTaskQueuePort_Completion, 0);
+    CHECK("game-close-queued-suppressed", context.calls == 3 && !game_license_registrations);
+    CHECK("game-closed-context-denied", game_license_register(context.store, queue, &context, game_changed, &token) == E_INVALIDARG);
+    game_license_observe(serial, ++refresh, &proof);
+    entitled_store_close(other.store);
+    CHECK("game-new-context-after-close", entitled_store_create(NULL, &context.store) == S_OK);
+    CHECK("game-new-context-serial", entitled_store_identity(context.store, &xuid, &context.serial) == S_OK && context.serial != serial);
+    game_license_observe(serial, ++refresh, &proof);
+    CHECK("game-stale-async-cannot-touch-new-context", !((struct entitled_store_context *)context.store)->license_version);
+    entitled_store_close(context.store);
+
+    for (UINT mode = 1; mode <= 4; mode++)
+    {
+        if (mode == 3) continue;
+        memset(&context, 0, sizeof(context)); context.mode = mode;
+        CHECK("game-reentrant-create", entitled_store_create(NULL, &context.store) == S_OK);
+        CHECK("game-reentrant-identity", entitled_store_identity(context.store, &xuid, &context.serial) == S_OK);
+        CHECK("game-reentrant-register", game_license_register(context.store, immediate, &context, game_changed, &context.token) == S_OK);
+        game_test_trigger(&context);
+        CHECK("game-reentrant-completes", mode == 4 ? context.calls == 2 : context.calls == 1 && context.ok);
+        if (mode != 2) entitled_store_close(context.store);
+        CHECK("game-reentrant-no-live-registration", !game_license_registrations);
+    }
+    for (UINT close = 0; close < 2; close++)
+    {
+        memset(&context, 0, sizeof(context)); context.mode = 3;
+        CHECK("game-wait-create", entitled_store_create(NULL, &context.store) == S_OK);
+        CHECK("game-wait-identity", entitled_store_identity(context.store, &xuid, &context.serial) == S_OK);
+        context.started = CreateEventW(NULL, TRUE, FALSE, NULL); context.gate = CreateEventW(NULL, TRUE, FALSE, NULL);
+        context.waiting = CreateEventW(NULL, TRUE, FALSE, NULL); context.finished = CreateEventW(NULL, TRUE, FALSE, NULL);
+        CHECK("game-wait-register", game_license_register(context.store, immediate, &context, game_changed, &context.token) == S_OK);
+        if (close)
+        {
+            memset(&other, 0, sizeof(other)); other.store = context.store;
+            CHECK("game-close-multiple-register", game_license_register(context.store, queue, &other, game_changed, &other.token) == S_OK);
+        }
+        trigger = CreateThread(NULL, 0, game_test_trigger, &context, 0, NULL);
+        CHECK("game-running-callback", trigger && WaitForSingleObject(context.started, 2000) == WAIT_OBJECT_0);
+        CHECK("game-running-unregister-false", !game_license_unregister(context.store, context.token, FALSE));
+        /* The callback has already selected mode 3 before waiting on its gate. */
+        context.mode = close ? 5 : 3;
+        waiter = CreateThread(NULL, 0, game_test_wait, &context, 0, NULL);
+        CHECK("game-wait-started", waiter && WaitForSingleObject(context.waiting, 1000) == WAIT_OBJECT_0);
+        CHECK("game-wait-blocks-until-callback-return", WaitForSingleObject(context.finished, 20) == WAIT_TIMEOUT);
+        SetEvent(context.gate);
+        CHECK("game-wait-finishes", WaitForSingleObject(context.finished, 2000) == WAIT_OBJECT_0 && context.waited);
+        CHECK("game-running-callback-finishes", WaitForSingleObject(trigger, 2000) == WAIT_OBJECT_0 && context.ok);
+        WaitForSingleObject(waiter, 2000); CloseHandle(waiter); CloseHandle(trigger);
+        CloseHandle(context.started); CloseHandle(context.gate); CloseHandle(context.waiting); CloseHandle(context.finished);
+        if (!close) entitled_store_close(context.store);
+        else
+        {
+            IXThreadingImpl_XTaskQueueDispatch(threads, queue, XTaskQueuePort_Completion, 0);
+            CHECK("game-close-suppresses-all-other-registrations", !other.calls);
+        }
+        CHECK("game-wait-clean", !game_license_registrations);
+    }
+
+    CHECK("game-threadpool-queue", IXThreadingImpl_XTaskQueueCreate(threads, XTaskQueueDispatchMode_ThreadPool, XTaskQueueDispatchMode_ThreadPool, &pool) == S_OK);
+    for (UINT i = 0; i < 100; i++)
+    {
+        memset(&context, 0, sizeof(context));
+        CHECK("game-race-create", entitled_store_create(NULL, &context.store) == S_OK);
+        CHECK("game-race-identity", entitled_store_identity(context.store, &xuid, &context.serial) == S_OK);
+        CHECK("game-race-register", game_license_register(context.store, pool, &context, game_changed, &context.token) == S_OK);
+        game_test_trigger(&context);
+        CHECK("game-race-unregister", game_license_unregister(context.store, context.token, TRUE));
+        CHECK("game-race-at-most-once", context.calls <= 1);
+        entitled_store_close(context.store);
+    }
+    IXThreadingImpl_XTaskQueueCloseHandle(threads, pool);
+
+    memset(&context, 0, sizeof(context));
+    CHECK("game-process-context", entitled_store_create(NULL, &context.store) == S_OK);
+    IXThreadingImpl_XTaskQueueGetCurrentProcessTaskQueue(threads, &process_queue);
+    IXThreadingImpl_XTaskQueueSetCurrentProcessTaskQueue(threads, queue);
+    CHECK("game-null-queue-uses-process-queue", game_license_register(context.store, NULL, &context, game_changed, &context.token) == S_OK);
+    CHECK("game-null-queue-unregister", game_license_unregister(context.store, context.token, TRUE));
+    IXThreadingImpl_XTaskQueueSetCurrentProcessTaskQueue(threads, process_queue);
+    if (process_queue) IXThreadingImpl_XTaskQueueCloseHandle(threads, process_queue);
+    CHECK("game-cancel-queue-create", IXThreadingImpl_XTaskQueueCreate(threads, XTaskQueueDispatchMode_Manual, XTaskQueueDispatchMode_Manual, &terminated) == S_OK);
+    CHECK("game-cancel-identity", entitled_store_identity(context.store, &xuid, &context.serial) == S_OK);
+    CHECK("game-cancel-register", game_license_register(context.store, terminated, &context, game_changed, &context.token) == S_OK);
+    game_test_trigger(&context);
+    CHECK("game-terminate-start", IXThreadingImpl_XTaskQueueTerminate(threads, terminated, FALSE, NULL, NULL) == S_OK);
+    for (UINT i = 0; i < 20; i++)
+    {
+        IXThreadingImpl_XTaskQueueDispatch(threads, terminated, XTaskQueuePort_Work, 0);
+        IXThreadingImpl_XTaskQueueDispatch(threads, terminated, XTaskQueuePort_Completion, 0);
+    }
+    CHECK("game-canceled-not-delivered", !context.calls);
+    game_test_trigger(&context); /* Submission to a terminated queue must unwind. */
+    CHECK("game-submit-failure-unregister", game_license_unregister(context.store, context.token, FALSE));
+    IXThreadingImpl_XTaskQueueCloseHandle(threads, terminated);
+    entitled_store_close(context.store);
+    IXThreadingImpl_XTaskQueueCloseHandle(threads, queue);
+    IXThreadingImpl_XTaskQueueCloseHandle(threads, immediate);
+    IXThreadingImpl_Release(threads);
+    CHECK("game-no-live-stores-or-registrations", !entitled_stores && !game_license_registrations);
+}
+
 int main(void)
 {
     HMODULE dll = LoadLibraryA("xgameruntime.dll");
@@ -525,6 +739,25 @@ int main(void)
     if (store_api)
     {
         CHECK("runtime-create-store-context", IXStoreImpl6_XStoreCreateContext(store_api, NULL, &store) == S_OK && store);
+        IXThreadingImpl *threads = NULL;
+        XTaskQueueHandle queue = NULL;
+        XTaskQueueRegistrationToken game_token = {0};
+        struct game_test_context context = {0};
+        CHECK("runtime-game-threading", runtime_query(&CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&threads) == S_OK && threads);
+        if (threads)
+        {
+            CHECK("runtime-game-queue", IXThreadingImpl_XTaskQueueCreate(threads, XTaskQueueDispatchMode_Manual, XTaskQueueDispatchMode_Manual, &queue) == S_OK);
+            CHECK("runtime-game-register-implemented", IXStoreImpl6_XStoreRegisterGameLicenseChanged(store_api, store, queue, &context, game_changed, &game_token) == S_OK && game_token.token);
+            CHECK("runtime-game-no-initial-event", !IXThreadingImpl_XTaskQueueDispatch(threads, queue, XTaskQueuePort_Completion, 0) && !context.calls);
+            IXThreadingImpl_XTaskQueueCloseHandle(threads, queue); /* Subscription owns a duplicate. */
+            CHECK("runtime-game-unregister", IXStoreImpl6_XStoreUnregisterGameLicenseChanged(store_api, store, game_token, TRUE));
+            game_token.token = 123;
+            CHECK("runtime-game-invalid-context", IXStoreImpl6_XStoreRegisterGameLicenseChanged(store_api, (void *)1, NULL, &context, game_changed, &game_token) == E_INVALIDARG && !game_token.token);
+            game_token.token = 123;
+            CHECK("runtime-game-null-callback", IXStoreImpl6_XStoreRegisterGameLicenseChanged(store_api, store, NULL, NULL, NULL, &game_token) == E_POINTER && !game_token.token);
+            CHECK("runtime-game-register-close", IXStoreImpl6_XStoreRegisterGameLicenseChanged(store_api, store, NULL, NULL, game_changed, &game_token) == S_OK);
+            IXThreadingImpl_Release(threads);
+        }
         XAsyncBlock invalid_license = {0};
         CHECK("runtime-license-invalid-context", IXStoreImpl6_XStoreAcquireLicenseForPackageAsync(store_api, (void *)1, "00000001111122223333444444444444", &invalid_license) == E_INVALIDARG);
         CHECK("runtime-license-invalid-handle", !IXStoreImpl6_XStoreIsLicenseValid(store_api, (void *)1));
@@ -536,7 +769,7 @@ int main(void)
         IXStoreImpl6_Release(store_api);
     }
     bridge_started = CreateEventA(NULL, TRUE, FALSE, NULL); bridge_gate = CreateEventA(NULL, TRUE, FALSE, NULL);
-    test_receipts(); test_async(test_metadata()); test_package_licenses();
+    test_receipts(); test_async(test_metadata()); test_package_licenses(); test_game_licenses();
     CloseHandle(bridge_started); CloseHandle(bridge_gate);
     if (SUCCEEDED(hr)) RoUninitialize();
     printf("CHECKS %u FAILURES %u\n", checks, failures);
