@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Support Store game-license change subscriptions in the shared runtime.
+- Support Google Chrome installed through Discover/Flatpak for browser sign-in. Thanks @quentingeorgel for reporting the issue.
 - Fix games remaining active after a normal exit.
 - Fix games exiting during speech initialization when using the bundled runtime.
 - Support chunk-order requests for verified installed packages in the runtime.

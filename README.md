@@ -35,8 +35,8 @@ In **Settings**, install the **Nexus backend** and **Nexus runtime**, then sign 
 with your Microsoft account. A valid game purchase or subscription is required.
 
 If passkey sign-in gets stuck, choose **Continue in browser** in the sign-in
-window. This option requires Google Chrome installed on the computer; other
-browsers are not supported.
+window. This option requires Google Chrome, either a native installation or the
+Flatpak version available through Discover. Other browsers are not supported.
 
 [Setup guide and SteamOS requirements](https://github.com/domsvoboda/xodus-nexus/wiki/Getting-started)
 
