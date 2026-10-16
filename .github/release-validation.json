@@ -3,6 +3,15 @@
   "approvals": [
     {
       "kind": "launcher",
+      "runId": "38952488081",
+      "commit": "2c1ed41ee031316fb34eb825a3d440c87bcdc0bd",
+      "manifestSha256": "d04393f06682cd993c20567a92fd4472be4ca8a524a073d65e23b591df03aefb",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit hotfix publication authorization 2026-10-16 after local launchfix AppImage handoff. The subsequent user-triggered Minecraft Dungeons launch log reached the Shipping executable and exited with code 0 without the previous missing-prefix failure; this is not a new online-play or cloud-roundtrip claim. The same prepared-runner selection passed synthetic executable tests with launch tools both disabled and enabled. Main CI 38952488081 succeeded. Exact launcher 0.3.4 candidate identity and SHA-256/SHA-512 verified; the unchanged CI AppImage rendered the sample-only interface and exited successfully with the normal Electron sandbox in an isolated profile. No real account, game or cloud operation on these exact CI bytes. Publish the existing artifact without rebuilding; keep the backend, runtime and production settings unchanged."
+    },
+    {
+      "kind": "launcher",
       "runId": "38946435932",
       "commit": "13fdd3e1c004008c0008a101ab12f44097a3f88f",
       "manifestSha256": "2dc26036570dde3544867fc9cf4dead9351a7372a6a913fae3fcc349ef91c531",
