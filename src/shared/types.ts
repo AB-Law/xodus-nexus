@@ -12,6 +12,7 @@ export interface BackendCapabilities {
   streaming: boolean;
   streamingProgressJson?: boolean;
   streamingControls?: boolean;
+  packageSelection?: boolean;
   run: boolean;
   version?: string;
 }
@@ -126,6 +127,8 @@ export interface DownloadTask {
   gameId?: string;
   title: string;
   productId: string;
+  selectedContentId?: string;
+  selectionMarket?: string;
   destination: string;
   status: 'queued' | 'running' | 'paused' | 'complete' | 'failed' | 'cancelled';
   canPause?: boolean;
@@ -210,6 +213,26 @@ export interface InstallRequest {
   productId: string;
   title: string;
   destination: string;
+  selectedContentId?: string;
+  selectionMarket?: string;
+}
+
+export interface InstallChoice {
+  productId: string;
+  contentId: string;
+  title: string;
+  platform: string;
+  packageFormat: string;
+  kind: string;
+  supported: boolean;
+}
+
+export interface InstallPlan {
+  schema: 1;
+  rootProductId: string;
+  market: string;
+  status: 'ready' | 'choice' | 'unavailable';
+  choices: InstallChoice[];
 }
 
 export interface GameContentItem {
@@ -290,6 +313,7 @@ export interface LauncherApi {
   getFeaturedCatalog(): Promise<CatalogSearchResult>;
   getAccountLibrary(kind: AccountLibraryPage['kind'], cursor?: string, refresh?: boolean): Promise<AccountLibraryPage>;
   startInstall(request: InstallRequest): Promise<string>;
+  getInstallPlan(productId: string): Promise<InstallPlan>;
   getGameContent(id: string): Promise<GameContentPlan>;
   installGameContent(id: string, productId: string): Promise<string>;
   updateInstalledGame(id: string): Promise<string>;

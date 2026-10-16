@@ -30,6 +30,7 @@ const api: LauncherApi = {
   getFeaturedCatalog: () => ipcRenderer.invoke('catalog-featured'),
   getAccountLibrary: (kind, cursor, refresh) => ipcRenderer.invoke('account-library', kind, cursor, refresh),
   startInstall: (request: InstallRequest) => ipcRenderer.invoke('start-install', request),
+  getInstallPlan: (productId: string) => ipcRenderer.invoke('install-plan', productId),
   getGameContent: id => ipcRenderer.invoke('game-content', id),
   installGameContent: (id, productId) => ipcRenderer.invoke('install-game-content', id, productId),
   updateInstalledGame: (id: string) => ipcRenderer.invoke('update-installed-game', id),

@@ -36,6 +36,7 @@ import { AccountLibrary } from './account-library.js';
 import { GameContent, type ContentPackage } from './game-content.js';
 import { startAuthTransport } from './auth-transport.js';
 import { authViewFactory } from './auth-window.js';
+import { installSelection, readInstallPlan } from './install-plan.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -340,6 +341,19 @@ async function installGameContent(id: string, productId: string): Promise<string
 async function prepareInstall(request: InstallRequest, updateGame?: Game, content?: { game: Game; pkg: ContentPackage; manager: GameContent }): Promise<string> {
   const binary = requireBackend('streaming');
   const productId = safeProductId(request.productId);
+  const market = currentMarket();
+  let selectedContentId: string | undefined;
+  if (!content) {
+    if (!backend.current.capabilities.packageSelection) throw Error('Update the Xodus backend in Settings before installing games.');
+    if (request.selectionMarket !== undefined && request.selectionMarket !== market) throw Error('Store market changed. Choose the installation package again.');
+    if (request.selectedContentId !== undefined) {
+      if (request.selectionMarket !== market || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(request.selectedContentId)) throw Error('Invalid installation package selection.');
+      // Streaming re-resolves membership before license/download. Do not make
+      // a redundant third catalog round trip here after the dialog preflight.
+      selectedContentId = request.selectedContentId;
+    } else selectedContentId = installSelection(await readInstallPlan(binary, productId, market));
+    if (binary !== backend.current.binaryPath || market !== currentMarket()) throw Error('Backend or Store market changed. Try installing again.');
+  }
   const destination = path.resolve(request.destination.trim());
   if (!path.isAbsolute(destination)) throw new Error('The destination must be an absolute path.');
   if (updateGame) {
@@ -362,6 +376,8 @@ async function prepareInstall(request: InstallRequest, updateGame?: Game, conten
     gameId: content?.game.id ?? updateGame?.id,
     title: request.title.trim() || productId,
     productId,
+    selectedContentId,
+    selectionMarket: selectedContentId ? market : undefined,
     destination,
     status: 'running',
     progress: null,
@@ -383,7 +399,8 @@ async function prepareInstall(request: InstallRequest, updateGame?: Game, conten
   }, () => { /* Covers are optional. */ });
 
   const args = ['streaming', content?.pkg.contentId ?? productId, destination, '--parallel', String(store.settings.parallelDownloads)];
-  if (store.settings.market) args.push('--market', store.settings.market);
+  args.push('--market', market);
+  if (selectedContentId) args.push('--selected-content-id', selectedContentId);
   if (structured) args.push('--progress-json');
   if (controllable) args.push('--control-stdin');
   const progressTracker = new DownloadProgress();
@@ -864,6 +881,7 @@ function registerDemoIpc(catalogMarket: () => string): void {
   ipcMain.handle('catalog-featured', () => catalog.featured(catalogMarket()));
   ipcMain.handle('account-library', (_event, kind: 'all' | 'owned' | 'gamepass') => demoAccountLibrary(kind, demoCoverUrls));
   ipcMain.handle('start-install', () => 'demo-download');
+  ipcMain.handle('install-plan', () => { throw Error('Package selection is unavailable in demo mode.'); });
   ipcMain.handle('game-content', (_event, id: string) => ({ gameId: id, checkedAt: new Date().toISOString(), items: [] }));
   ipcMain.handle('install-game-content', () => { throw Error('Content installation is unavailable in demo mode.'); });
   ipcMain.handle('update-installed-game', (_event, id: string) => id);
@@ -955,6 +973,14 @@ function registerIpc(): void {
   });
   ipcMain.handle('catalog-featured', () => catalog.featured(catalogMarket()));
   ipcMain.handle('start-install', (_event, request: InstallRequest) => startInstall(request));
+  ipcMain.handle('install-plan', async (_event, raw: string) => {
+    const binary = requireBackend('streaming');
+    if (!backend.current.capabilities.packageSelection) throw Error('Update the Xodus backend in Settings to choose installation packages.');
+    const productId = safeProductId(raw), market = currentMarket();
+    const plan = await readInstallPlan(binary, productId, market);
+    if (binary !== backend.current.binaryPath || market !== currentMarket()) throw Error('Backend or Store market changed. Try again.');
+    return plan;
+  });
   ipcMain.handle('game-content', async (_event, id: string) => (await gameContent(id)).plan);
   ipcMain.handle('install-game-content', (_event, id: string, productId: string) => installGameContent(id, productId));
   ipcMain.handle('update-installed-game', async (_event, id: string) => {
@@ -995,7 +1021,7 @@ function registerIpc(): void {
           if (task.kind === 'content') {
             if (!task.gameId) throw Error('Content download has no parent game.');
             await installGameContent(task.gameId, task.productId);
-          } else await startInstall({ productId: task.productId, title: task.title, destination: task.destination }, game);
+          } else await startInstall({ productId: task.productId, title: task.title, destination: task.destination, selectedContentId: task.selectedContentId, selectionMarket: task.selectionMarket }, game);
           await store.removeDownload(id);
         } catch (error) { task.status = 'paused'; throw error; }
         finally { emitSnapshot(); }

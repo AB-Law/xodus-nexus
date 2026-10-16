@@ -11,6 +11,7 @@ import { runtimeDisplay } from '../shared/runtime-display';
 import { subscriptionBadge } from '../shared/subscription';
 import { defaultLaunchTools, normalizeLaunchTools } from '../shared/launch-tools';
 import type { GameLaunchTools } from '../shared/types';
+import { PackageInstallProvider, usePackageInstall } from './PackageInstall';
 
 const emptySnapshot: AppSnapshot = {
   backend: {
@@ -171,6 +172,7 @@ export function HomePage({ data, go, action }: {
 }
 
 function StorePage({ data, toast, go, initialQuery }: { data: AppSnapshot; toast: (value: Toast) => void; go: (page: Page) => void; initialQuery: string }) {
+  const startPackageInstall = usePackageInstall();
   const [catalog, setCatalog] = useState<CatalogSearchResult>();
   const [featured, setFeatured] = useState<CatalogSearchResult>();
   const [featuredLoading, setFeaturedLoading] = useState(true);
@@ -222,7 +224,7 @@ function StorePage({ data, toast, go, initialQuery }: { data: AppSnapshot; toast
   async function install(product: CatalogProduct, target = installDestination(product)) {
     setBusy(product.productId);
     try {
-      await window.launcher.startInstall({ productId: product.installProductId ?? product.productId, title: product.title, destination: target });
+      if (!await startPackageInstall({ productId: product.installProductId ?? product.productId, title: product.title, destination: target })) return;
       toast({ kind: 'success', message: `Xodus is checking the license and installing ${product.title}.` });
       go('downloads');
     } catch (error) { toast({ kind: 'error', message: errorMessage(error) }); }
@@ -232,7 +234,7 @@ function StorePage({ data, toast, go, initialQuery }: { data: AppSnapshot; toast
   async function manualInstall(event: FormEvent) {
     event.preventDefault(); setBusy('manual');
     try {
-      await window.launcher.startInstall({ productId: manualProductId, title: manualTitle, destination });
+      if (!await startPackageInstall({ productId: manualProductId, title: manualTitle, destination })) return;
       toast({ kind: 'success', message: 'Xodus streaming started.' }); go('downloads');
     } catch (error) { toast({ kind: 'error', message: errorMessage(error) }); }
     finally { setBusy(undefined); }
@@ -305,6 +307,7 @@ export function LibraryPagination({ loading, hasMore, load }: { loading: boolean
 }
 
 export function AccountGames({ data, toast, selectedId, select, menu, filters, onFiltersChange }: AccountGamesProps) {
+  const startPackageInstall = usePackageInstall();
   const [localFilters, setLocalFilters] = useState<LibraryFilters>(defaultLibraryFilters);
   const selectedFilters = filters ?? localFilters;
   const { kind, playState, query } = selectedFilters;
@@ -354,8 +357,8 @@ export function AccountGames({ data, toast, selectedId, select, menu, filters, o
     setInstalling(product.productId);
     try {
       const folder = product.title.normalize('NFKD').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 80) || product.productId;
-      await window.launcher.startInstall({ productId: product.installProductId ?? product.productId, title: product.title,
-        destination: `${data.settings.installRoot.replace(/\/+$/, '')}/${folder}` });
+      if (!await startPackageInstall({ productId: product.installProductId ?? product.productId, title: product.title,
+        destination: `${data.settings.installRoot.replace(/\/+$/, '')}/${folder}` })) return;
       toast({ kind: 'success', message: `${product.title} added to Install Queue.` });
     } catch (error) { toast({ kind: 'error', message: errorMessage(error) }); }
     finally { setInstalling(undefined); }
@@ -611,6 +614,7 @@ export function LibraryPage({ data, toast, filters, onFiltersChange }: Pick<Acco
 }
 
 export function DownloadsPage({ data, toast }: { data: AppSnapshot; toast: (value: Toast) => void }) {
+  const startPackageInstall = usePackageInstall();
   const [expanded, setExpanded] = useState<string>();
   const [retrying, setRetrying] = useState<string>();
   async function cancel(id: string) {
@@ -639,7 +643,7 @@ export function DownloadsPage({ data, toast }: { data: AppSnapshot; toast: (valu
         if (!task.gameId) throw Error('This content download has no parent game.');
         await window.launcher.installGameContent(task.gameId, task.productId);
       }
-      else await window.launcher.startInstall({ productId: task.productId, title: task.title, destination: task.destination });
+      else if (!await startPackageInstall({ productId: task.productId, title: task.title, destination: task.destination })) return;
       toast({ kind: 'success', message: `Retrying ${task.title} with Xodus.` });
     } catch (error) { toast({ kind: 'error', message: errorMessage(error) }); }
     finally { setRetrying(undefined); }
@@ -831,7 +835,7 @@ export default function App() {
   function action(fn: () => Promise<unknown>, success?: string) { void fn().then(() => success && setToast({ kind: 'success', message: success })).catch((error) => setToast({ kind: 'error', message: errorMessage(error) })); }
 
   if (loading) return <div className="boot"><div className="brand-mark">X</div><LoaderCircle className="spin" /><span>Loading Xodus Nexus</span></div>;
-  return <div className="app-shell">
+  return <PackageInstallProvider><div className="app-shell">
     {!data.settings.firstRunCompleted ? <FirstRunWizard data={data} toast={(value) => setToast(value)} /> : null}
     <Sidebar data={data} page={page} go={setPage} />
 
@@ -840,5 +844,5 @@ export default function App() {
       <div className="page-scroll">{page === 'home' ? <HomePage data={data} go={setPage} action={action} /> : null}{page === 'store' ? <StorePage data={data} toast={setToast} go={setPage} initialQuery={submittedSearch} /> : null}{page === 'library' ? <LibraryPage data={data} toast={setToast} filters={libraryFilters} onFiltersChange={setLibraryFilters} /> : null}{page === 'downloads' ? <DownloadsPage data={data} toast={setToast} /> : null}{page === 'settings' ? <SettingsPage data={data} toast={setToast} /> : null}</div>
     </section>
     {toast ? <div className={`toast ${toast.kind}`}>{toast.kind === 'success' ? <Check /> : toast.kind === 'error' ? <CircleAlert /> : <Terminal />}<span>{toast.message}</span><button onClick={() => setToast(undefined)}><X /></button></div> : null}
-  </div>;
+  </div></PackageInstallProvider>;
 }

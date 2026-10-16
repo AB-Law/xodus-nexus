@@ -283,6 +283,16 @@ button.primary svg, button.secondary svg { width: 17px; height: 17px; }
 .game-launch-tools details[open] summary { margin-bottom: 12px; }
 .dialog-actions { margin-top: 24px; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .dialog-actions button { min-height: 36px; }
+.package-dialog { width: min(720px, 100%); }
+.package-choices { display: grid; gap: 10px; }
+.game-dialog .package-choice { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 1px solid #515860; border-radius: 4px; cursor: pointer; }
+.game-dialog .package-choice:has(input:checked) { border-color: #75be55; background: #283526; }
+.game-dialog .package-choice input { flex: 0 0 18px; width: 18px; height: 18px; padding: 0; margin: 2px 0 0; accent-color: #75be55; }
+.package-choice span { min-width: 0; display: grid; gap: 5px; }
+.package-choice strong { font-size: 14px; }
+.package-choice small { color: var(--muted); overflow-wrap: anywhere; }
+.package-choice.unsupported { opacity: .55; cursor: default; }
+.package-content-id { font-family: monospace; }
 .library-card:hover, .library-card.selected { background: #24272b; border-color: #5a5f66; }
 .library-card.selected { outline: 2px solid rgba(255,255,255,.45); }
 .library-card .game-cover, .library-card .cover-placeholder { aspect-ratio: 1/1; }

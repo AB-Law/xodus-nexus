@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Show an installation package picker for Store offers with multiple downloads instead of waiting for terminal input. Requires the updated Nexus backend.
 - Name game shortcut files after the game, with safe handling of duplicate titles.
 - Add per-game MangoHud, gamescope and custom command-prefix settings.
 - Align the game details with the library grid and give installed and installable cards matching heights.

@@ -207,6 +207,15 @@ function packageSupport(productId: string, details: Map<string, Record<string, u
   };
   const nextVisited = new Set(visited).add(productId);
   const references = bundleReferences(product);
+  if (references.length > 1) {
+    const resolved = references.map(reference => packageSupport(reference.productId, details, nextVisited));
+    if (resolved.some(item => item.installability === 'supported')) return {
+      installability: 'supported', packageFormat: 'MSIXVC',
+      supportNote: 'This Store offer contains multiple products. Choose a verified PC package before installing. Ownership is checked by Xodus.',
+    };
+    return { installability: resolved.some(item => item.installability === 'unknown') ? 'unknown' : 'unsupported',
+      supportNote: 'No supported PC package could be verified in this Store bundle.' };
+  }
   const primary = references.filter((reference) => reference.primary);
   const candidates = primary.length === 1 ? primary : references.length === 1 ? references : [];
   if (candidates.length === 0) return {

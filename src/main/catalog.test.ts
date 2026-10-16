@@ -63,7 +63,7 @@ describe('Microsoft Store catalog parsing', () => {
     expect(products[0].posterUrl).toBe('https://store-images.s-microsoft.com/image/boxart');
   });
 
-  it('resolves a Store edition to its single primary bundled MSIXVC product', () => {
+  it('keeps a multi-product Store edition intact for backend package selection', () => {
     const products = parseCatalogProducts({ productsList: [{ productId: '9edition', title: 'Game Standard Edition', isGame: true }] }, {
       Products: [{
         ProductId: '9EDITION',
@@ -83,10 +83,10 @@ describe('Microsoft Store catalog parsing', () => {
     });
     expect(products[0]).toMatchObject({
       productId: '9EDITION',
-      installProductId: '9PACKAGE',
       installability: 'supported',
       packageFormat: 'MSIXVC',
     });
+    expect(products[0].installProductId).toBeUndefined();
   });
 
   it('does not treat an unsupported direct EAppx package as a resolvable bundle', () => {

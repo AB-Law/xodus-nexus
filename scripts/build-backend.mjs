@@ -49,12 +49,12 @@ const cli = path.join(target, 'release/xodus-cli');
 const help = command(cli, ['--help'], true);
 if (authUi === 'electron' && !help.includes('--external-webview-stdio')) throw Error('External sign-in capability missing');
 if (authUi === 'electron' && /lib(?:gtk|webkit|soup|javascriptcore)/i.test(command('readelf', ['-d', cli], true))) throw Error('Headless CLI links a native webview library');
-for (const name of ['account', 'login', 'logout', 'download', 'streaming', 'run']) {
+for (const name of ['account', 'login', 'logout', 'download', 'streaming', 'run', 'resolve-package']) {
   if (!new RegExp(`^\\s{2}${name}\\s{2,}`, 'm').test(help)) throw Error(`Backend lacks ${name}`);
 }
 if (!command(cli, ['run', '--help'], true).includes('--materialize-chain')) throw Error('Launch-chain support missing');
 const streamingHelp = command(cli, ['streaming', '--help'], true);
-for (const flag of ['--progress-json', '--control-stdin']) {
+for (const flag of ['--progress-json', '--control-stdin', '--selected-content-id']) {
   if (!streamingHelp.includes(flag)) throw Error(`Structured download capability missing: ${flag}`);
 }
 // xodus-service has no --help parser; running it would access keychain/network.
