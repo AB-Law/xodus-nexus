@@ -1,0 +1,162 @@
+import { spawn, type ChildProcess } from 'node:child_process';
+import { constants, promises as fs } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import os from 'node:os';
+import path from 'node:path';
+import type { Readable, Writable } from 'node:stream';
+import { AuthCdp, type CdpEvent } from './auth-cdp.js';
+import { AUTH_HOSTS, trustedAuthUrl, type AuthFrame } from './auth-protocol.js';
+import type { AuthView, AuthViewFactory } from './auth-transport.js';
+import { externalFontEnvironment } from './launcher-fonts.js';
+
+type Open = Extract<AuthFrame, { type: 'open' }>;
+
+export async function findAuthBrowser(environment: NodeJS.ProcessEnv = process.env): Promise<string> {
+  if (process.platform !== 'linux') throw Error('Browser sign-in is currently supported on Linux with Google Chrome.');
+  // Flatpak/Snap wrappers and arbitrary user-supplied commands are not supported.
+  const candidates = ['/usr/bin/google-chrome-stable', '/usr/bin/google-chrome', '/opt/google/chrome/google-chrome'];
+  for (const directory of (environment.PATH ?? '').split(path.delimiter).filter(value => path.isAbsolute(value))) {
+    candidates.push(path.join(directory, 'google-chrome-stable'), path.join(directory, 'google-chrome'));
+  }
+  for (const file of new Set(candidates)) {
+    try { if (!(await fs.stat(file)).isFile()) continue; await fs.access(file, constants.X_OK); return file; } catch { /* Try the next installed path. */ }
+  }
+  throw Error('Browser sign-in requires Google Chrome installed on this system. Install Chrome, or use the regular Sign in option.');
+}
+
+// Main-world bridge on trusted Microsoft pages only. It never changes WebAuthn.
+export function installBrowserAuthBridge(name: string, hosts: readonly string[]): void {
+  if (window !== window.top || location.protocol !== 'https:' || location.port || !hosts.includes(location.hostname)) return;
+  const channel = (globalThis as any)[name] as (payload: string) => void;
+  const notify = (payload: unknown) => { if (typeof payload === 'string' && payload.length <= 65_536) channel(payload); };
+  Object.defineProperty(window.external, 'notify', { value: notify, configurable: false, writable: false });
+  window.addEventListener('DOMContentLoaded', () => {
+    if (location.hostname === 'login.live.com' && location.pathname === '/ppsecure/post.srf') {
+      const data = (window as any).ServerData;
+      if (data && typeof data.sDAToken === 'string' && data.sDAToken) notify(JSON.stringify(data));
+    }
+  }, { once: true });
+}
+
+export function browserBindingAllowed(context: any, mainFrame: string | undefined, frame: Open | undefined): boolean {
+  return !!frame && !!mainFrame && context?.auxData?.isDefault === true && context.auxData.frameId === mainFrame && typeof context.origin === 'string' && trustedAuthUrl(context.origin);
+}
+
+export function browserRequestHeaders(request: { frameId?: string; resourceType?: string; request?: { url?: string; headers?: Record<string, string> } }, mainFrame: string | undefined, frame?: Open): { name: string; value: string }[] | undefined {
+  if (!frame || !mainFrame || request.frameId !== mainFrame || request.resourceType !== 'Document' || request.request?.url !== frame.url || !trustedAuthUrl(frame.url)) return;
+  const names = new Set(Object.keys(frame.headers).map(name => name.toLowerCase()));
+  return [...Object.entries(request.request.headers ?? {}).filter(([name]) => !names.has(name.toLowerCase())), ...Object.entries(frame.headers)].map(([name, value]) => ({ name, value }));
+}
+
+export async function browserAuthViewFactory(environment: NodeJS.ProcessEnv = process.env): Promise<AuthViewFactory> {
+  const binary = await findAuthBrowser(environment);
+  return createBrowserAuthViewFactory(binary, environment);
+}
+
+/** Dedicated disposable Chrome, controlled through inherited pipes, never default-profile debugging. */
+export function createBrowserAuthViewFactory(binary: string, environment: NodeJS.ProcessEnv = process.env, options: { headless?: boolean } = {}): AuthViewFactory {
+  return (send, cancel, fail): AuthView => {
+    let chrome: ChildProcess | undefined, cdp: AuthCdp | undefined, profile: string | undefined;
+    let sessionId: string | undefined, targetId: string | undefined, mainFrame: string | undefined, frame: Open | undefined;
+    let disposed = false, failed = false, initialization: Promise<void> | undefined;
+    const contexts = new Map<number, any>();
+    const binding = 'nexusAuth' + randomBytes(24).toString('hex');
+    const failure = () => { if (!disposed && !failed) { failed = true; fail(); } };
+    const call = <T = any>(method: string, params: object = {}, target = sessionId): Promise<T> => {
+      if (!cdp || disposed) return Promise.reject(Error('Browser sign-in is closed.'));
+      return cdp.call<T>(method, params, target);
+    };
+    const evaluate = async (expression: string, contextId: number) => {
+      const value = await call('Runtime.evaluate', { expression, contextId, returnByValue: true });
+      if (value.exceptionDetails) throw Error('Browser sign-in page failed.'); return value.result?.value;
+    };
+    async function handle(event: CdpEvent): Promise<void> {
+      const p = event.params;
+      if (event.method === 'Target.targetDestroyed' && p.targetId === targetId) { if (frame) cancel(frame.session); else failure(); return; }
+      if (event.sessionId !== sessionId || disposed) return;
+      if (event.method === 'Runtime.executionContextCreated') { contexts.set(p.context.id, p.context); return; }
+      if (event.method === 'Runtime.executionContextDestroyed') { contexts.delete(p.executionContextId); return; }
+      if (event.method === 'Runtime.executionContextsCleared') { contexts.clear(); return; }
+      if (event.method === 'Page.frameNavigated' && !p.frame.parentId) {
+        mainFrame = p.frame.id;
+        if (frame && !trustedAuthUrl(p.frame.url) && p.frame.url !== 'about:blank') failure();
+        return;
+      }
+      if (event.method === 'Page.windowOpen') { failure(); return; }
+      if (event.method === 'Fetch.requestPaused') {
+        // Intercept only Microsoft login requests. Never forward host headers to a redirect or iframe.
+        const headers = browserRequestHeaders(p, mainFrame, frame);
+        await call('Fetch.continueRequest', { requestId: p.requestId, ...(headers ? { headers } : {}) }); return;
+      }
+      if (event.method !== 'Runtime.bindingCalled' || p.name !== binding || typeof p.payload !== 'string' || Buffer.byteLength(p.payload) > 65_536) return;
+      const context = contexts.get(p.executionContextId);
+      if (!browserBindingAllowed(context, mainFrame, frame)) return;
+      const active = frame!;
+      // Recheck this realm after the async command, not a new page's default realm.
+      const origin = await call('Runtime.evaluate', { expression: 'location.origin', contextId: p.executionContextId, returnByValue: true });
+      if (frame !== active || !trustedAuthUrl(origin.result?.value ?? '') || origin.result.value !== context.origin) return;
+      send(active.session, p.payload);
+    }
+    async function initialize(): Promise<void> {
+      profile = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-browser-auth-')); await fs.chmod(profile, 0o700);
+      if (disposed) return;
+      chrome = spawn(binary, ['--user-data-dir=' + profile, '--incognito', '--no-first-run', '--no-default-browser-check', '--disable-sync', '--disable-extensions', '--remote-debugging-pipe', ...(options.headless ? ['--headless=new'] : []), 'about:blank'], {
+        env: externalFontEnvironment(environment), stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'], shell: false, detached: true,
+      });
+      chrome.once('error', failure);
+      chrome.once('exit', () => { if (!disposed) { if (frame) cancel(frame.session); else failure(); } });
+      cdp = new AuthCdp(chrome.stdio[3] as Writable, chrome.stdio[4] as Readable, event => { void handle(event).catch(failure); }, failure);
+      const targets = await call('Target.getTargets');
+      const target = targets.targetInfos.find((item: any) => item.type === 'page' && item.url === 'about:blank');
+      if (!target) throw Error('Browser sign-in window is unavailable.'); targetId = target.targetId;
+      sessionId = (await call('Target.attachToTarget', { targetId, flatten: true })).sessionId;
+      await call('Target.setDiscoverTargets', { discover: true }, undefined);
+      await call('Page.enable'); mainFrame = (await call('Page.getFrameTree')).frameTree.frame.id;
+      await call('Runtime.enable');
+      await call('Runtime.addBinding', { name: binding });
+      await call('Page.addScriptToEvaluateOnNewDocument', { source: `(${installBrowserAuthBridge.toString()})(${JSON.stringify(binding)},${JSON.stringify(AUTH_HOSTS)})` });
+      await call('Browser.setDownloadBehavior', { behavior: 'deny' });
+      await call('Fetch.enable', { patterns: [{ urlPattern: 'https://login.live.com/*', requestStage: 'Request' }] });
+    }
+    return {
+      async open(value) {
+        if (disposed || !trustedAuthUrl(value.url)) throw Error('Unsupported browser sign-in URL.');
+        initialization ??= initialize(); await initialization;
+        if (disposed) throw Error('Browser sign-in is closed.');
+        frame = value;
+        const result = await call('Page.navigate', { url: value.url });
+        if (result.errorText) throw Error('Browser sign-in page did not load.');
+      },
+      close(id) { if (frame?.session === id) frame = undefined; },
+      async context(id, context) {
+        if (disposed || frame?.session !== id) return;
+        const active = frame;
+        const realm = [...contexts.values()].find(value => browserBindingAllowed(value, mainFrame, active));
+        if (!realm) return;
+        const origin = await evaluate('location.origin', realm.id);
+        if (frame !== active || contexts.get(realm.id) !== realm || !trustedAuthUrl(origin ?? '') || origin !== realm.origin) return;
+        const message = JSON.stringify({ type: 'callback', value: { name: 'CloudExperienceHost.getContext', args: ['CloudExperienceHost', 'TokenBroker', 'TokenBroker', '{"PrivatePropertyBag":1,"PasswordlessConnect":1,"PreferAssociate":1,"ChromelessUI":0}'], context } });
+        await evaluate(`globalThis["CloudExperienceHost.Bridge.dispatchMessage"](${JSON.stringify(message)})`, realm.id);
+      },
+      async dispose() {
+        if (disposed) return; disposed = true; frame = undefined;
+        // Interrupt an in-flight initializer before waiting for it, including
+        // disposal racing mkdtemp or a stalled browser command.
+        try { await Promise.race([cdp?.call('Browser.close'), new Promise(resolve => setTimeout(resolve, 500))]); } catch { /* Scoped termination follows. */ }
+        cdp?.close();
+        await initialization?.catch(() => {});
+        const current = chrome;
+        if (current && current.exitCode === null && current.signalCode === null) {
+          const exited = new Promise<void>(resolve => current.once('close', () => resolve()));
+          const kill = (signal: NodeJS.Signals) => { if (current.pid && current.exitCode === null && current.signalCode === null) try { process.kill(-current.pid, signal); } catch { current.kill(signal); } };
+          kill('SIGTERM');
+          await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 1000))]);
+          kill('SIGKILL');
+          await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 500))]);
+        }
+        // mkdtemp-owned path only, never a browser profile supplied through settings or environment.
+        if (profile && (!current || current.exitCode !== null || current.signalCode !== null)) await fs.rm(profile, { recursive: true, force: true });
+      },
+    };
+  };
+}

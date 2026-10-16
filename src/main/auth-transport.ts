@@ -14,7 +14,7 @@ export function startAuthTransport(binary: string, createView: AuthViewFactory, 
   child: ChildProcessWithoutNullStreams; result: Promise<{ code: number; output: string }>;
 } {
   // This explicit flag is absent in the native backend. Never fall back to an
-  // incompatible handshake, and never expose a local listening port.
+  // incompatible handshake. The backend uses only these private stdio pipes.
   const child = spawn(binary, ['--external-webview-stdio', 'login'], {
     env: { ...externalFontEnvironment(environment), XODUS_LOG: 'off', RUST_LOG: 'off' }, stdio: ['pipe', 'pipe', 'pipe'], shell: false,
   });

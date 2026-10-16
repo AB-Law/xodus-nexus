@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.3.3
 
+- Offer Continue in browser when Microsoft passkey sign-in is waiting, including during first-time setup. Requires Google Chrome installed on the computer; other browsers are not supported.
+- Let users cancel a waiting passkey request without closing Microsoft sign-in.
 - Bundle a fallback font to prevent font-related startup crashes on minimal Linux installations.
 - Keep My Library filters after restarting Nexus and close search suggestions when leaving the search field or changing pages.
 - Fix desktop game shortcuts reporting an invalid profile path when Nexus is already running.
