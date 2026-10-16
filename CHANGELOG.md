@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Bundle a fallback font to prevent font-related startup crashes on minimal Linux installations.
 - Keep My Library filters after restarting Nexus and close search suggestions when leaving the search field or changing pages.
 - Fix desktop game shortcuts reporting an invalid profile path when Nexus is already running.
 - Show an installation package picker for Store offers with multiple downloads instead of waiting for terminal input. Requires the updated Nexus backend.

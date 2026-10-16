@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { stripAnsi } from '../shared/utils.js';
+import { externalFontEnvironment } from './launcher-fonts.js';
 
 export interface RunOptions {
   cwd?: string;
@@ -24,7 +25,7 @@ export function spawnTracked(command: string, args: string[], options: RunOption
 } {
   const child = spawn(command, args, {
     cwd: options.cwd,
-    env: options.env ?? process.env,
+    env: externalFontEnvironment(options.env),
     shell: false,
     detached: options.detached ?? false,
     stdio: ['pipe', 'pipe', 'pipe'],
