@@ -329,6 +329,7 @@ export interface LauncherApi {
   getGameLaunchOptions(id: string): Promise<GameLaunchOptions>;
   launchGame(id: string): Promise<void>;
   createGameShortcut(id: string, destination: 'desktop' | 'applications'): Promise<string>;
+  addToSteam(id?: string): Promise<string>;
   installGameVcRuntime(id: string): Promise<void>;
   cancelGame(): Promise<void>;
   updateSettings(patch: Partial<Settings>): Promise<Settings>;

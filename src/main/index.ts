@@ -42,6 +42,8 @@ import { fallbackAuthViewFactory } from './auth-fallback.js';
 import { installSelection, readInstallPlan } from './install-plan.js';
 import { adoptLauncherFonts, externalFontEnvironment } from './launcher-fonts.js';
 import { prepareGameModeKeyring } from './session-environment.js';
+import { addSteamShortcut, steamAccounts, steamRunning } from './steam-shortcuts.js';
+import { nexusSteamArtwork } from './steam-artwork.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -922,6 +924,7 @@ function registerDemoIpc(catalogMarket: () => string): void {
   ipcMain.handle('game-launch-options', () => demoLaunchOptions);
   ipcMain.handle('launch-game', () => {});
   ipcMain.handle('create-game-shortcut', () => { throw new Error('Shortcuts are unavailable in demo mode.'); });
+  ipcMain.handle('add-to-steam', () => { throw new Error('Steam integration is unavailable in demo mode.'); });
   ipcMain.handle('install-game-vc-runtime', () => {});
   ipcMain.handle('cancel-game', () => {});
   ipcMain.handle('update-settings', (_event, patch: Partial<Settings>) => ({ ...snapshot().settings, ...patch }));
@@ -1101,6 +1104,41 @@ function registerIpc(): void {
   });
   ipcMain.handle('game-launch-options', (_event, id: string) => gameLaunchOptions(id));
   ipcMain.handle('launch-game', (_event, id: string) => launchGame(id));
+  ipcMain.handle('add-to-steam', async (_event, id?: string) => {
+    if (process.platform !== 'linux') throw Error('Steam integration is currently supported on Linux only.');
+    if (id !== undefined && typeof id !== 'string') throw Error('Invalid game ID.');
+    const game = id === undefined ? undefined : store.games.find(entry => entry.id === id);
+    if (id !== undefined && (!game || game.installState !== 'ready')) throw Error('Only installed, ready games can be added to Steam.');
+    if (await steamRunning()) throw Error('Close Steam completely, then try Add to Steam again. Nexus will not close Steam for you.');
+    const accounts = await steamAccounts(os.homedir());
+    if (!accounts.length) throw Error('No Steam profile found. Open Steam and sign in once, then close it and try again.');
+    let selected = 0;
+    if (accounts.length > 1) {
+      const choice = await dialog.showMessageBox(mainWindow!, { type: 'question', title: 'Choose Steam profile',
+        message: 'Which Steam profile should receive this shortcut?', cancelId: accounts.length, defaultId: accounts.length,
+        buttons: [...accounts.map(account => `${account.includes('com.valvesoftware.Steam') ? 'Flatpak Steam' : 'Steam'} profile ${path.basename(path.dirname(account))}`), 'Cancel'] });
+      selected = choice.response;
+      if (selected >= accounts.length) throw Error('Add to Steam cancelled.');
+    }
+    if (accounts[selected].includes('/.var/app/com.valvesoftware.Steam/')) {
+      throw Error('Adding shortcuts currently requires native Linux Steam. Flatpak Steam is not yet supported.');
+    }
+    const normalize = (bytes: Buffer) => {
+      const image = nativeImage.createFromBuffer(bytes);
+      if (image.isEmpty()) return;
+      const size = image.getSize();
+      if (size.width < 1 || size.height < 1 || size.width * size.height > 16_777_216) return;
+      const scale = Math.min(1, 1200 / Math.max(size.width, size.height));
+      const result = image.resize({ width: Math.max(1, Math.round(size.width * scale)), height: Math.max(1, Math.round(size.height * scale)) }).toPNG();
+      return result.length <= 4 * 1024 * 1024 ? result : undefined;
+    };
+    const cover = game ? await loadShortcutIcon(game, normalize) : undefined;
+    const launch = await shortcuts.steamLaunch(game, cover);
+    const fallback = await fs.readFile(launch.icon);
+    const wide = game?.heroUrl ? await loadShortcutIcon({ coverUrl: game.heroUrl }, normalize) : undefined;
+    const artwork = game ? { cover: cover ?? fallback, wide } : await nexusSteamArtwork(fallback).catch(() => ({ cover: fallback, wide: fallback }));
+    return addSteamShortcut(accounts[selected], launch, artwork);
+  });
   ipcMain.handle('create-game-shortcut', async (_event, id: string, destination: ShortcutDestination) => {
     const game = store.games.find(entry => entry.id === id);
     if (!game) throw new Error('Game not found.');

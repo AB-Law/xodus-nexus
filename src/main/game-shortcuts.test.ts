@@ -11,6 +11,27 @@ import { ShortcutLaunch } from './shortcut-launch.js';
 const execute = promisify(execFile);
 const id = '0123456789abcdef';
 const game = { id, title: 'A game\nExec=unwanted', installState: 'ready' as const };
+
+it('creates Steam launch descriptions without unwanted desktop/menu entries and preserves profile arguments', async () => {
+  const f = await fixture();
+  try {
+    await f.shortcuts.initialize();
+    const steam = await f.shortcuts.steamLaunch({ ...game, title: 'A game' });
+    expect(steam.executable).toBe('"/bin/sh"');
+    expect(steam.options).toContain('"' + id + '"');
+    expect((await execute('/bin/sh', [path.join(f.locations.userData, 'shortcuts/launch-game'), id])).stdout.trim())
+      .toBe(`--nexus-profile ${f.locations.userData} --launch-game ${id}`);
+    const nexus = await f.shortcuts.steamLaunch();
+    expect(nexus.title).toBe('Xodus Nexus');
+    expect(nexus.identity).not.toBe(steam.identity);
+    expect((await execute('/bin/sh', [path.join(f.locations.userData, 'shortcuts/launch-nexus')])).stdout.trim())
+      .toBe(`--nexus-profile ${f.locations.userData}`);
+    await expect(fs.access(f.locations.desktop)).rejects.toThrow();
+    await expect(fs.access(f.locations.applications)).rejects.toThrow();
+    await expect(f.shortcuts.steamLaunch({ ...game, installState: 'imported' })).rejects.toThrow('ready');
+    await expect(f.shortcuts.steamLaunch({ ...game, id: '../bad' })).rejects.toThrow('ready');
+  } finally { await fs.rm(f.root, { recursive: true, force: true }); }
+});
 async function fixture() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-shortcuts-'));
   const launcher = path.join(root, 'Launcher $`%\' name.AppImage');
