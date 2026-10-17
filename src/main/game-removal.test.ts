@@ -3,13 +3,13 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { DownloadTask, Game } from '../shared/types.js';
-import { assertGameRemovalAvailable, validateGameTrashTarget } from './game-removal.js';
+import { assertGameRemovalAvailable, validateGameDeleteTarget } from './game-removal.js';
 
 const temporary: string[] = [];
 afterEach(async () => { await Promise.all(temporary.splice(0).map((directory) => fs.rm(directory, { recursive: true, force: true }))); });
 
 async function fixture(): Promise<Game> {
-  const parent = await fs.mkdtemp(path.join(os.tmpdir(), 'xodus-trash-test-'));
+  const parent = await fs.mkdtemp(path.join(os.tmpdir(), 'xodus-delete-test-'));
   temporary.push(parent);
   const directory = path.join(parent, 'game');
   await fs.mkdir(directory);
@@ -20,20 +20,20 @@ async function fixture(): Promise<Game> {
 describe('game removal target', () => {
   it('accepts an isolated game directory with a manifest', async () => {
     const game = await fixture();
-    expect(await validateGameTrashTarget(game, [], [os.homedir()])).toBe(game.path);
+    expect(await validateGameDeleteTarget(game, [], [os.homedir()])).toMatchObject({ path: game.path });
   });
 
   it('rejects a directory containing another game', async () => {
     const game = await fixture();
     const nested = { ...game, id: 'nested', path: path.join(game.path, 'nested') };
-    await expect(validateGameTrashTarget(game, [nested], [])).rejects.toThrow('another library game');
+    await expect(validateGameDeleteTarget(game, [nested], [])).rejects.toThrow('another library game');
   });
 
   it('rejects a protected directory and a missing manifest', async () => {
     const game = await fixture();
-    await expect(validateGameTrashTarget(game, [], [path.join(game.path, 'runtime')])).rejects.toThrow('protected');
+    await expect(validateGameDeleteTarget(game, [], [path.join(game.path, 'runtime')])).rejects.toThrow('protected');
     await fs.unlink(path.join(game.path, 'MicrosoftGame.config'));
-    await expect(validateGameTrashTarget(game, [], [])).rejects.toThrow('manifest');
+    await expect(validateGameDeleteTarget(game, [], [])).rejects.toThrow('manifest');
   });
 });
 
@@ -99,15 +99,15 @@ describe('target-specific removal locks', () => {
     await expect(assertGameRemovalAvailable(game, [], inactive, { ...game, id: 'other', path: `${game.path}-other` })).resolves.toBeUndefined();
   });
 
-  it('allows forgetting a missing installation but does not authorize trashing it', async () => {
+  it('allows forgetting a missing installation but does not authorize deleting it', async () => {
     const game = await fixture(), missing = { ...game, path: `${game.path}-missing` };
     await expect(assertGameRemovalAvailable(missing, [], inactive)).resolves.toBeUndefined();
-    await expect(validateGameTrashTarget(missing, [], [])).rejects.toThrow();
+    await expect(validateGameDeleteTarget(missing, [], [])).rejects.toThrow();
   });
 
-  it('retains Trash safeguards for symlinks and filesystem roots', async () => {
+  it('retains deletion safeguards for symlinks and filesystem roots', async () => {
     const game = await fixture(), alias = `${game.path}-alias`; await fs.symlink(game.path, alias);
-    await expect(validateGameTrashTarget({ ...game, path: alias }, [], [])).rejects.toThrow('real directory');
-    await expect(validateGameTrashTarget({ ...game, path: path.parse(game.path).root }, [], [])).rejects.toThrow('filesystem root');
+    await expect(validateGameDeleteTarget({ ...game, path: alias }, [], [])).rejects.toThrow('real directory');
+    await expect(validateGameDeleteTarget({ ...game, path: path.parse(game.path).root }, [], [])).rejects.toThrow('filesystem root');
   });
 });

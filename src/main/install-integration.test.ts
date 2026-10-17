@@ -17,7 +17,7 @@ const h = vi.hoisted(() => ({
   blockDisplay: vi.fn(() => 7), releaseDisplay: vi.fn(() => true),
   steamProfiles: [] as string[], steamIsRunning: true,
   liveImport: vi.fn(), offlineImport: vi.fn(), showMessage: vi.fn(),
-  trash: vi.fn(), removeShortcut: vi.fn(async () => {}), signals: [] as string[],
+  trash: vi.fn(), deleteFiles: vi.fn(), removeShortcut: vi.fn(async () => {}), signals: [] as string[],
   notifications: [] as { title: string; body: string }[],
   posters: vi.fn(async (ids: string[]) => new Map(ids.map(id => [id, `https://store-images.s-microsoft.com/${id}`]))),
 }));
@@ -40,8 +40,8 @@ vi.mock('./catalog.js', () => ({ CatalogService: class { async artwork() { retur
 vi.mock('./account-profile.js', () => ({ AccountProfile: class { async select() {} cancel() {} } }));
 vi.mock('./launcher-update.js', () => ({ LauncherUpdater: class { state = {}; async initialize() {} async check() {} cancel() {} } }));
 vi.mock('./launcher-fonts.js', () => ({ adoptLauncherFonts: () => undefined, externalFontEnvironment: (env: unknown) => env }));
-// Never let failure fixtures invoke the host's real Trash helper.
-vi.mock('./game-trash.js', () => ({ moveGameToTrash: (target: string, native: (target: string) => Promise<void>) => native(target) }));
+// Deletion is restricted to disposable fixture directories, never real games.
+vi.mock('./game-delete.js', () => ({ deleteGameDirectory: (target: { path: string }) => h.deleteFiles(target.path) }));
 vi.mock('./session-environment.js', () => ({ prepareGameModeKeyring: async () => 'skipped' }));
 vi.mock('./game-shortcuts.js', () => ({ shortcutArguments: () => ({}), shortcutInstanceData: () => ({}), shortcutInstanceRequest: () => ({}),
   GameShortcuts: class { async initialize() {} remove = h.removeShortcut; async steamDesktop() { return { file: path.join(h.root, 'game.desktop'),
@@ -89,17 +89,15 @@ beforeAll(async () => {
   await fs.writeFile(path.join(gamePath, 'Game.exe'), 'MZ fixture');
   await fs.writeFile(path.join(gamePath, '.xodus-streaming.msixvc'), 'synthetic container');
   await store.upsertGame({ ...data.games[0], id: 'sample', path: gamePath, storeId: '9ZZZZZZZZZZZ', executable: 'Game.exe', installState: 'ready' });
-  for (const id of ['remove-library', 'remove-trash', 'remove-fail', 'remove-playing-other']) {
+  for (const id of ['remove-library', 'remove-delete', 'remove-fail', 'remove-playing-other']) {
     const directory = path.join(h.root, id); await fs.mkdir(directory);
     await fs.writeFile(path.join(directory, 'MicrosoftGame.config'), '<Game/>');
     await fs.writeFile(path.join(directory, 'keep.txt'), 'synthetic game files');
     await store.upsertGame({ ...data.games[0], id, path: directory, installState: 'ready' });
   }
-  // Simulate Trash only inside this fixture. Never call the desktop Trash API.
-  await fs.mkdir(path.join(h.root, 'fixture-trash'));
-  h.trash.mockImplementation(async (directory: string) => {
+  h.deleteFiles.mockImplementation(async (directory: string) => {
     if (path.dirname(directory) !== h.root) throw Error('Fixture refuses a non-test path');
-    await fs.rename(directory, path.join(h.root, 'fixture-trash', path.basename(directory)));
+    await fs.rm(directory, { recursive: true, force: false });
   });
   await import('./index.js');
   await vi.waitFor(() => expect(h.handlers.has('start-install')).toBe(true));
@@ -147,20 +145,23 @@ it('removes only unrelated games while downloading, without interrupting the que
   await ipc('remove-game', 'remove-library', 'library');
   expect(await fs.readFile(path.join(h.root, 'remove-library/keep.txt'), 'utf8')).toBe('synthetic game files');
   expect(h.trash).not.toHaveBeenCalled();
+  expect(h.deleteFiles).not.toHaveBeenCalled();
+  await expect(ipc('remove-game', 'remove-fail', 'trash-files')).rejects.toThrow('Invalid removal option');
+  expect(h.deleteFiles).not.toHaveBeenCalled();
 
-  h.trash.mockRejectedValueOnce(Error('Synthetic Trash failure'));
-  await expect(ipc('remove-game', 'remove-fail', 'trash-files')).rejects.toThrow('Synthetic Trash failure');
+  h.deleteFiles.mockRejectedValueOnce(Error('Synthetic deletion failure'));
+  await expect(ipc('remove-game', 'remove-fail', 'delete-files')).rejects.toThrow('Synthetic deletion failure');
   expect(snapshot().games.some((game: any) => game.id === 'remove-fail')).toBe(true);
   expect(await fs.readFile(path.join(h.root, 'remove-fail/keep.txt'), 'utf8')).toBe('synthetic game files');
 
   let release!: () => void, entered!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
   const ready = new Promise<void>(resolve => { entered = resolve; });
-  h.trash.mockImplementationOnce(async (directory: string) => {
+  h.deleteFiles.mockImplementationOnce(async (directory: string) => {
     entered(); await gate;
-    await fs.rename(directory, path.join(h.root, 'fixture-trash', path.basename(directory)));
+    await fs.rm(directory, { recursive: true, force: false });
   });
-  const removing = ipc('remove-game', 'remove-trash', 'trash-files');
+  const removing = ipc('remove-game', 'remove-delete', 'delete-files');
   await ready;
   try {
     await expect(install('S')).rejects.toThrow('being removed');
@@ -171,18 +172,19 @@ it('removes only unrelated games while downloading, without interrupting the que
     expect(snapshot().downloads.find((task: any) => task.id === active).status).toBe('running');
   } finally { release(); }
   await removing;
-  expect(h.trash).toHaveBeenLastCalledWith(path.join(h.root, 'remove-trash'));
-  expect(await fs.readFile(path.join(h.root, 'fixture-trash/remove-trash/keep.txt'), 'utf8')).toBe('synthetic game files');
+  expect(h.deleteFiles).toHaveBeenLastCalledWith(path.join(h.root, 'remove-delete'));
+  await expect(fs.access(path.join(h.root, 'remove-delete'))).rejects.toThrow();
+  expect(h.trash).not.toHaveBeenCalled();
   expect(h.removeShortcut).toHaveBeenCalledWith('remove-library');
-  expect(h.removeShortcut).toHaveBeenCalledWith('remove-trash');
+  expect(h.removeShortcut).toHaveBeenCalledWith('remove-delete');
   expect(h.signals).toEqual([]);
   expect(h.downloads).toHaveLength(1);
   expect(snapshot().downloads.find((task: any) => task.id === queued).status).toBe('queued');
   expect(snapshot().downloads.map((task: any) => task.id)).toEqual(downloadsBefore.map((task: any) => task.id));
-  expect(snapshot().games.some((game: any) => ['remove-library', 'remove-trash'].includes(game.id))).toBe(false);
+  expect(snapshot().games.some((game: any) => ['remove-library', 'remove-delete'].includes(game.id))).toBe(false);
   const persisted = new StateStore(path.join(h.root, 'userData')); await persisted.load();
-  expect(persisted.games.some(game => ['remove-library', 'remove-trash'].includes(game.id))).toBe(false);
-  await ipc('remove-game', 'remove-fail', 'library'); // failed Trash released the admission lock
+  expect(persisted.games.some(game => ['remove-library', 'remove-delete'].includes(game.id))).toBe(false);
+  await ipc('remove-game', 'remove-fail', 'library'); // Failed deletion released the admission lock.
   await ipc('cancel-download', queued); h.downloads[0].finish(1);
   await vi.waitFor(() => expect(snapshot().downloads.find((task: any) => task.id === active).status).toBe('failed'));
   h.downloads.splice(0);
@@ -193,7 +195,7 @@ it('runs real queue IPC, pause/cancel/failure/restart and simultaneous play/down
   const first = await install('A'); await vi.waitFor(() => expect(h.downloads).toHaveLength(1));
   expect(h.blockDisplay).not.toHaveBeenCalled();
   await ipc('launch-game', 'sample'); expect(snapshot().gameOperation.status).toBe('running');
-  for (const mode of ['library', 'trash-files']) await expect(ipc('remove-game', 'sample', mode)).rejects.toThrow('Close this game');
+  for (const mode of ['library', 'delete-files']) await expect(ipc('remove-game', 'sample', mode)).rejects.toThrow('Close this game');
   await ipc('remove-game', 'remove-playing-other', 'library');
   expect(snapshot().gameOperation.status).toBe('running');
   expect(h.blockDisplay).toHaveBeenCalledWith('prevent-display-sleep');

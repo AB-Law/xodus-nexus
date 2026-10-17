@@ -326,7 +326,7 @@ export interface LauncherApi {
   importGame(path?: string): Promise<Game | null>;
   updateGame(id: string, patch: Partial<Pick<Game, 'title' | 'executable' | 'launchArgs' | 'locale' | 'launchTools'>>): Promise<Game>;
   getGameLocales(id: string): Promise<string[]>;
-  removeGame(id: string, mode: 'library' | 'trash-files'): Promise<void>;
+  removeGame(id: string, mode: 'library' | 'delete-files'): Promise<void>;
   getGameLaunchOptions(id: string): Promise<GameLaunchOptions>;
   launchGame(id: string): Promise<void>;
   createGameShortcut(id: string, destination: 'desktop' | 'applications'): Promise<string>;

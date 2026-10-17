@@ -106,6 +106,19 @@ game compatibility, Xbox service availability, or an authenticated EAC session.
 These tests do not yet cover registered wait handles, resource-exhaustion paths,
 or complete XAsync cancellation semantics.
 
+## WinHTTP transport checks
+
+`run-http2-suite.mjs RUNTIME WORK_PARENT` builds `http2-suite.c` and runs it
+against a loopback-only TLS server. It creates a fresh prefix and installs its
+temporary CA only there. No game, account, external server or host trust-store
+change is involved.
+
+The suite checks HTTP/1.1 and HTTP/2 requests, uploads, redirects, asynchronous
+reads and cancellation, certificate-chain ownership and TLS hostname rejection.
+Compression checks cover session/request opt-in, unchanged raw responses when
+disabled, decoded availability, small reads, large and fragmented bodies,
+chunked transfers, malformed/truncated gzip and repeated requests.
+
 ## Experimental lifecycle patch
 
 `assets/xgameruntime-taskqueue-lifecycle-experimental.patch` is a diagnostic
