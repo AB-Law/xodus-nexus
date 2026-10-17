@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, powerSaveBlocker, screen, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, Notification, powerSaveBlocker, screen, shell } from 'electron';
 import { constants, createWriteStream, promises as fs, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -18,7 +18,8 @@ import { CatalogService } from './catalog.js';
 import { cloudSaveRuntime, selectedWinePath, startXodusService, storeContentRuntime, unbridgedCloudSaveRuntime, type XodusServiceSession } from './xodus-service.js';
 import { GameLogReducer, gameLoggingEnvironment, gameWindowEnvironment } from './game-log.js';
 import { downloadVerifiedVcRedist, installedVcRuntimeVersion, VC_REDIST_VERSION, versionAtLeast } from './vc-runtime.js';
-import { validateGameTrashTarget } from './game-removal.js';
+import { assertGameRemovalAvailable, validateGameTrashTarget } from './game-removal.js';
+import { moveGameToTrash } from './game-trash.js';
 import { spawnGameProcess, type GameProcess } from './game-process.js';
 import { gameLocaleEnvironment, manifestLocales, manifestTitleId, supportedGameLocale } from './game-locale.js';
 import { antiCheatEnvironment } from './anti-cheat.js';
@@ -47,8 +48,17 @@ import { prepareGameModeKeyring } from './session-environment.js';
 import { addSteamShortcut, steamAccounts, steamRunning } from './steam-shortcuts.js';
 import { gameSteamPortrait, nexusSteamArtwork } from './steam-artwork.js';
 import { addLiveSteamShortcut } from './steam-live.js';
+import { DownloadCompletionNotifications } from './download-notifications.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const downloadNotifications = new DownloadCompletionNotifications({
+  isSupported: () => Notification.isSupported(),
+  show: options => {
+    const notification = new Notification({ ...options, icon: fileURLToPath(new URL('../../assets/icon.png', import.meta.url)), urgency: 'normal' });
+    notification.on('failed', () => console.warn('The desktop could not display a download completion notification.'));
+    notification.show();
+  },
+});
 let mainWindow: BrowserWindow | null = null;
 let store: StateStore;
 let backend: BackendManager;
@@ -218,7 +228,7 @@ function requireBackend(command: keyof typeof backend.current.capabilities): str
   return status.binaryPath;
 }
 
-function ensureIdle(mode?: 'install' | 'launch'): void {
+function ensureIdle(mode?: 'install' | 'launch' | 'remove'): void {
   if (authState.running) throw Error('A sign-in operation is already in progress.');
   if (shutdownStarted) throw Error('The launcher is closing.');
   if (preparingInstall || preparingContent) throw new Error('An installation is being prepared.');
@@ -421,6 +431,7 @@ async function prepareInstall(request: InstallRequest, updateGame?: Game, conten
     startedAt: new Date().toISOString(),
   };
   await store.addDownload(task);
+  void enrichDownloadCovers([task], market).catch(() => { /* Artwork is optional. */ });
   const identity = `${authState.username}:${binary}:${market}`;
   const isCancelled = () => task.status === 'cancelled';
   installQueue.enqueue({ id, run: async () => {
@@ -454,14 +465,6 @@ async function runDownload(task: DownloadTask, binary: string, market: string, u
   const controllable = structured && Boolean(backend.current.capabilities.streamingControls);
   if (!structured) task.log.push('Update the Nexus backend in Settings for numeric progress and Pause/Resume. This download can continue without them.');
   emitSnapshot();
-  // Show the game's Store box art in the queue while it downloads.
-  void catalog.posters([productId], currentMarket()).then(async (posters) => {
-    const coverUrl = posters.get(productId);
-    if (!coverUrl) return;
-    await store.updateDownload(id, { coverUrl });
-    emitSnapshot();
-  }, () => { /* Covers are optional. */ });
-
   const args = ['streaming', content?.pkg.contentId ?? productId, destination, '--parallel', String(store.settings.parallelDownloads)];
   args.push('--market', market);
   if (selectedContentId) args.push('--selected-content-id', selectedContentId);
@@ -552,6 +555,7 @@ async function runDownload(task: DownloadTask, binary: string, market: string, u
     }
     operations.delete(id);
     emitSnapshot();
+    downloadNotifications.complete(task);
     if (task.status === 'complete' && !content) void enrichLibraryCovers().then(() => emitSnapshot(), () => { /* Artwork is optional. */ });
   }).catch(async (error) => {
     finishControls();
@@ -905,6 +909,21 @@ function currentMarket(): string {
 }
 
 // Fetch real covers and wide art even when an installation has a small logo.
+async function enrichDownloadCovers(tasks: readonly DownloadTask[], market: string): Promise<void> {
+  const missing = tasks.filter(task => !task.coverUrl && ['queued', 'running', 'paused'].includes(task.status));
+  if (!missing.length) return;
+  const posters = await catalog.posters([...new Set(missing.map(task => task.productId))], market);
+  let changed = false;
+  for (const task of missing) {
+    const current = store.downloads.find(entry => entry.id === task.id && entry.productId === task.productId);
+    const coverUrl = posters.get(task.productId);
+    if (!current || current.coverUrl || !coverUrl) continue;
+    await store.updateDownload(task.id, { coverUrl });
+    changed = true;
+  }
+  if (changed) emitSnapshot();
+}
+
 async function enrichLibraryCovers(): Promise<void> {
   const missing = store.games.filter((game) => game.storeId && (!game.coverUrl || !game.heroUrl));
   if (missing.length === 0) return;
@@ -1130,18 +1149,19 @@ function registerIpc(): void {
   });
   ipcMain.handle('remove-game', async (_event, id: string, mode: 'library' | 'trash-files') => {
     if (mode !== 'library' && mode !== 'trash-files') throw new Error('Invalid removal option.');
-    ensureIdle();
-    if (store.downloads.some((task) => task.status === 'queued' || task.status === 'running' || task.status === 'paused')) {
-      throw new Error('Wait for active installations before removing a game.');
-    }
+    ensureIdle('remove');
     const game = store.games.find((entry) => entry.id === id);
     if (!game) throw new Error('Game not found.');
     gameRemovalInProgress = true;
     try {
+      const activeGame = gameOperation && ['preparing', 'running', 'stopping'].includes(gameOperation.status) ? gameOperation : undefined;
+      const runningGame = activeGame ? store.games.find(entry => entry.id === activeGame.gameId) : undefined;
+      if (activeGame && !runningGame) throw Error('Could not verify the active game. Close it before removing a game.');
+      await assertGameRemovalAvailable(game, store.downloads, task => operations.has(task.id) || installQueue.has(task.id), runningGame);
       if (mode === 'trash-files') {
         const protectedPaths = [os.homedir(), app.getPath('userData'), store.settings.installRoot, store.settings.runtimeRoot, store.settings.externalXodusRoot, __dirname].filter(Boolean);
         const target = await validateGameTrashTarget(game, store.games.filter((entry) => entry.id !== id), protectedPaths);
-        await shell.trashItem(target);
+        await moveGameToTrash(target, entry => shell.trashItem(entry));
       }
       await store.removeGame(id);
       await shortcuts.remove(id).catch((error) => console.error('Could not remove game shortcuts:', error));
@@ -1505,6 +1525,7 @@ app.whenReady().then(async () => {
   await syncManagedWinePath();
   await refreshAccount(false);
   void enrichLibraryCovers().then(() => emitSnapshot(), () => { /* Covers are optional. */ });
+  void enrichDownloadCovers(store.downloads, currentMarket()).catch(() => { /* Covers are optional. */ });
   void checkLauncherUpdate().then(() => emitSnapshot());
   registerIpc();
   launchReady = true;
