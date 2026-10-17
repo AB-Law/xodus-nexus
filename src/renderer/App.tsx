@@ -14,6 +14,7 @@ import type { GameLaunchTools } from '../shared/types';
 import { PackageInstallProvider, usePackageInstall } from './PackageInstall';
 import { defaultLibraryFilters, loadLibraryFilters, saveLibraryFilters, type LibraryFilters } from './library-preferences';
 import { InstallQueueShortcut } from './InstallQueueShortcut';
+import { GameRemovalContents } from './GameRemovalContents';
 export type { LibraryFilters } from './library-preferences';
 
 const emptySnapshot: AppSnapshot = {
@@ -533,14 +534,14 @@ export function LibraryPage({ data, toast, filters, onFiltersChange, selection }
     finally { setDialogBusy(false); }
   }
 
-  async function removeGame(mode: 'library' | 'trash-files') {
+  async function removeGame(mode: 'library' | 'delete-files') {
     if (!dialogGame) return;
     setDialogBusy(true);
     try {
       await window.launcher.removeGame(dialogGame.id, mode);
       setSelectedId(undefined);
       setDialogGame(undefined);
-      toast({ kind: 'success', message: mode === 'library' ? 'Removed from library. Game files were kept.' : 'Game folder moved to Trash.' });
+      toast({ kind: 'success', message: mode === 'library' ? 'Removed from library. Game files were kept.' : 'Game files permanently deleted.' });
     } catch (error) { toast({ kind: 'error', message: errorMessage(error) }); }
     finally { setDialogBusy(false); }
   }
@@ -626,7 +627,7 @@ export function LibraryPage({ data, toast, filters, onFiltersChange, selection }
 {diagnosticLog ? <DiagnosticDialog log={diagnosticLog} close={() => setDiagnosticLog(undefined)} /> : null}
     {contentGameId && data.games.find(game => game.id === contentGameId) ? <GameContentDialog key={`${contentGameId}:${data.auth.username}:${data.auth.stored}`} game={data.games.find(game => game.id === contentGameId)!} data={data} close={() => setContentGameId(undefined)} toast={toast} /> : null}
     {dialogGame && modalGame ? <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !dialogBusy) setDialogGame(undefined); }}><section className="game-dialog" role="dialog" aria-modal="true" aria-label={dialogGame.kind === 'remove' ? `Remove ${modalGame.title}` : `Settings for ${modalGame.title}`}>
-      {dialogGame.kind === 'remove' ? <><h2>Remove {modalGame.title}?</h2><p>Keep the files, or move this installation folder to Trash. Saves stored outside this folder are not affected.</p><code className="remove-path">{modalGame.path}</code><div className="dialog-actions"><button className="secondary" disabled={dialogBusy} onClick={() => setDialogGame(undefined)}>Cancel</button><button className="secondary" disabled={dialogBusy} onClick={() => removeGame('library')}>Keep files</button><button className="secondary danger" disabled={dialogBusy} onClick={() => removeGame('trash-files')}><Trash2 />Move files to Trash</button></div></> : <form onSubmit={saveGameSettings}>
+      {dialogGame.kind === 'remove' ? <GameRemovalContents game={modalGame} busy={dialogBusy} close={() => setDialogGame(undefined)} remove={mode => { void removeGame(mode); }} /> : <form onSubmit={saveGameSettings}>
         <h2>Game settings</h2>
         <label>Display name<input required value={editTitle} onChange={(event) => setEditTitle(event.target.value)} /></label>
         <label>Game language<select value={editLocale} onChange={(event) => setEditLocale(event.target.value)}><option value="">System default</option>{localeOptions.map((locale) => <option key={locale} value={locale}>{locale}</option>)}{editLocale && !localeOptions.some((locale) => locale.toLowerCase() === editLocale.toLowerCase()) ? <option value={editLocale}>{editLocale}</option> : null}</select></label>

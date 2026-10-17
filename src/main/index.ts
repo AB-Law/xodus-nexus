@@ -18,8 +18,8 @@ import { CatalogService } from './catalog.js';
 import { cloudSaveRuntime, selectedWinePath, startXodusService, storeContentRuntime, unbridgedCloudSaveRuntime, type XodusServiceSession } from './xodus-service.js';
 import { GameLogReducer, gameLoggingEnvironment, gameWindowEnvironment } from './game-log.js';
 import { downloadVerifiedVcRedist, installedVcRuntimeVersion, VC_REDIST_VERSION, versionAtLeast } from './vc-runtime.js';
-import { assertGameRemovalAvailable, validateGameTrashTarget } from './game-removal.js';
-import { moveGameToTrash } from './game-trash.js';
+import { assertGameRemovalAvailable, validateGameDeleteTarget } from './game-removal.js';
+import { deleteGameDirectory } from './game-delete.js';
 import { spawnGameProcess, type GameProcess } from './game-process.js';
 import { gameLocaleEnvironment, manifestLocales, manifestTitleId, supportedGameLocale } from './game-locale.js';
 import { antiCheatEnvironment } from './anti-cheat.js';
@@ -1151,8 +1151,8 @@ function registerIpc(): void {
     emitSnapshot();
     return game;
   });
-  ipcMain.handle('remove-game', async (_event, id: string, mode: 'library' | 'trash-files') => {
-    if (mode !== 'library' && mode !== 'trash-files') throw new Error('Invalid removal option.');
+  ipcMain.handle('remove-game', async (_event, id: string, mode: 'library' | 'delete-files') => {
+    if (mode !== 'library' && mode !== 'delete-files') throw new Error('Invalid removal option.');
     ensureIdle('remove');
     const game = store.games.find((entry) => entry.id === id);
     if (!game) throw new Error('Game not found.');
@@ -1162,10 +1162,10 @@ function registerIpc(): void {
       const runningGame = activeGame ? store.games.find(entry => entry.id === activeGame.gameId) : undefined;
       if (activeGame && !runningGame) throw Error('Could not verify the active game. Close it before removing a game.');
       await assertGameRemovalAvailable(game, store.downloads, task => operations.has(task.id) || installQueue.has(task.id), runningGame);
-      if (mode === 'trash-files') {
-        const protectedPaths = [os.homedir(), app.getPath('userData'), store.settings.installRoot, store.settings.runtimeRoot, store.settings.externalXodusRoot, __dirname].filter(Boolean);
-        const target = await validateGameTrashTarget(game, store.games.filter((entry) => entry.id !== id), protectedPaths);
-        await moveGameToTrash(target, entry => shell.trashItem(entry));
+      if (mode === 'delete-files') {
+        const protectedPaths = ['/boot', '/dev', '/etc', '/proc', '/run', '/sys', '/usr', '/var', os.homedir(), app.getPath('userData'), store.settings.installRoot, store.settings.runtimeRoot, store.settings.externalXodusRoot, __dirname].filter(Boolean);
+        const target = await validateGameDeleteTarget(game, store.games.filter((entry) => entry.id !== id), protectedPaths);
+        await deleteGameDirectory(target);
       }
       await store.removeGame(id);
       await shortcuts.remove(id).catch((error) => console.error('Could not remove game shortcuts:', error));
