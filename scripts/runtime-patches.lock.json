@@ -120,6 +120,10 @@
     {
       "file": "assets/xgameruntime-manifest-comments.patch",
       "sha256": "9f9d4469ab1358db1a3e0146c279c2614b076ebcbe7d67027b504eb8810296df"
+    },
+    {
+      "file": "assets/wine-winhttp-response-options.patch",
+      "sha256": "d4cb1475159e36e27d324ab61a7f2a9e7b695f193e037583587b4524b9eccb98"
     }
   ],
   "expectedXgameruntimeSources": {

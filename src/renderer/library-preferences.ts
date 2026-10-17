@@ -14,7 +14,8 @@ function normalize(value: unknown): LibraryFilters {
   return {
     kind: record.kind === 'owned' || record.kind === 'gamepass' ? record.kind : 'all',
     playState: record.playState === 'installed' || record.playState === 'installable' ? record.playState : 'all',
-    query: typeof record.query === 'string' ? record.query.slice(0, 512) : '',
+    // Search is session-only, including when loading older saved preferences.
+    query: '',
   };
 }
 
@@ -25,6 +26,10 @@ export function loadLibraryFilters(storage?: Preferences): LibraryFilters {
 }
 
 export function saveLibraryFilters(filters: LibraryFilters, storage?: Preferences): boolean {
-  try { (storage ?? window.localStorage).setItem(key, JSON.stringify(normalize(filters))); return true; }
+  try {
+    const { kind, playState } = normalize(filters);
+    (storage ?? window.localStorage).setItem(key, JSON.stringify({ kind, playState }));
+    return true;
+  }
   catch { return false; }
 }

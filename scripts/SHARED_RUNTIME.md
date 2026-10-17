@@ -326,7 +326,8 @@ Expected contract checks: queue teardown 20, queue stress 1,302, XAsync
 provider 116, completion lifetime 2,805, scheduling 16, file saves 21,
 WinRT JSON 9, token dispatch/lifetime 88, Store entitlements/licenses 181, installed
 content 274, PlayFab folder/session 153 and initialization 19 (5,004 total),
-plus 14 HTTP/2 checks. The JSON probe exercises real activation, parsing,
+plus HTTP/1.1 and HTTP/2 transport, certificate-chain and response-decompression
+checks. The JSON probe exercises real activation, parsing,
 object access and nested array/object access without account data or network.
 The token-dispatch probe uses a synthetic delayed failure, not a real identity
 or token. ABI/transport tests are not a substitute for a game test: test the clean-build

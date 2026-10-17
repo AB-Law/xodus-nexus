@@ -14,6 +14,9 @@ import type { GameLaunchTools } from '../shared/types';
 import { PackageInstallProvider, usePackageInstall } from './PackageInstall';
 import { defaultLibraryFilters, loadLibraryFilters, saveLibraryFilters, type LibraryFilters } from './library-preferences';
 import { InstallQueueShortcut } from './InstallQueueShortcut';
+import { GamepadNavigation } from './GamepadNavigation';
+import { ConfirmationProvider, useConfirmation } from './Confirmation';
+import { GameRemovalContents } from './GameRemovalContents';
 export type { LibraryFilters } from './library-preferences';
 
 const emptySnapshot: AppSnapshot = {
@@ -51,10 +54,10 @@ export function GameTitle({ title }: { title: string }) {
   return <strong title={title}>{title}</strong>;
 }
 
-function NavItem({ active, icon, label, badge, onClick }: {
-  active: boolean; icon: React.ReactNode; label: string; badge?: number; onClick: () => void;
+function NavItem({ active, icon, label, badge, onClick, autoSelect = false }: {
+  active: boolean; icon: React.ReactNode; label: string; badge?: number; onClick: () => void; autoSelect?: boolean;
 }) {
-  return <button className={`nav-item ${active ? 'active' : ''}`} onClick={onClick}>
+  return <button className={`nav-item ${active ? 'active' : ''}`} data-gamepad-auto-select={autoSelect ? '' : undefined} onClick={onClick}>
     {icon}<span>{label}</span>{badge ? <b>{badge}</b> : null}
   </button>;
 }
@@ -63,7 +66,7 @@ export function Sidebar({ data, page, go, openGame }: { data: AppSnapshot; page:
   const account = data.auth.gamertag ?? data.auth.username ?? (data.auth.stored === true ? 'Microsoft account' : 'Sign in');
   return <aside className="sidebar">
     <button className="account-summary" onClick={() => go('settings')}><AccountAvatar auth={data.auth} /><span><strong>{account}</strong><AccountMembership auth={data.auth} /></span><ChevronRight /></button>
-    <nav><NavItem active={page === 'home'} icon={<Home />} label="Home" onClick={() => go('home')} /><NavItem active={page === 'library'} icon={<Library />} label="My Library" onClick={() => go('library')} /><NavItem active={page === 'store'} icon={<Store />} label="Store" onClick={() => go('store')} /></nav>
+    <nav><NavItem autoSelect active={page === 'home'} icon={<Home />} label="Home" onClick={() => go('home')} /><NavItem autoSelect active={page === 'library'} icon={<Library />} label="My Library" onClick={() => go('library')} /><NavItem autoSelect active={page === 'store'} icon={<Store />} label="Store" onClick={() => go('store')} /></nav>
     {data.games.length > 0 ? <div className="recents"><span>Most recent</span>{data.games.slice(0, 5).map(game => <button key={game.id} onClick={() => openGame ? openGame(game.id) : go('library')}><Cover game={game} /><GameTitle title={game.title} /></button>)}</div> : null}
     <div className="sidebar-bottom"><NavItem active={page === 'settings'} icon={<Cog />} label="Settings" onClick={() => go('settings')} /><InstallQueueShortcut downloads={data.downloads} games={data.games} active={page === 'downloads'} openQueue={() => go('downloads')} /></div>
   </aside>;
@@ -91,7 +94,7 @@ export function TopStatus({ data, go }: { data: AppSnapshot; go: (page: Page) =>
 }
 
 export function DiagnosticDialog({ log, close }: { log: DiagnosticLog; close: () => void }) {
-  return <div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}><section className="game-dialog diagnostic-dialog" role="dialog" aria-modal="true" aria-label="Diagnostic log"><h2>{log.name}</h2><p>Private diagnostic log — review before sharing.{log.truncated ? ' Showing the most recent 512 KiB.' : ''}</p><pre>{log.content || 'The log is empty.'}</pre><div className="dialog-actions"><button className="secondary" onClick={close}>Close</button></div></section></div>;
+  return <div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}><section className="game-dialog diagnostic-dialog" role="dialog" aria-modal="true" aria-label="Diagnostic log"><h2>{log.name}</h2><p>Private diagnostic log — review before sharing.{log.truncated ? ' Showing the most recent 512 KiB.' : ''}</p><pre>{log.content || 'The log is empty.'}</pre><div className="dialog-actions"><button className="secondary" data-gamepad-cancel onClick={close}>Close</button></div></section></div>;
 }
 
 export function Cover({ game, className = '', variant = 'cover' }: { game: Game; className?: string; variant?: 'cover' | 'hero' }) {
@@ -379,7 +382,7 @@ export function AccountGames({ data, toast, selectedId, select, menu, filters, o
     finally { setInstalling(undefined); }
   }
   return <section className="account-games">
-    <div className="library-filters">
+    <div className="library-filters" data-gamepad-filters>
       <label>Access<select aria-label="Access" value={kind} onChange={event => setKind(event.target.value as AccountLibraryPage['kind'])}><option value="all">All games</option><option value="owned">Owned</option><option value="gamepass">In Game Pass</option></select></label>
       <label>Play state<select aria-label="Play state" value={playState} onChange={event => setPlayState(event.target.value as typeof playState)}><option value="all">All states</option><option value="installed">Installed</option><option value="installable">Ready to install</option></select></label>
       <label className="library-filter-search">Search<input aria-label="Search library" placeholder="Search your games" value={query} onChange={event => setQuery(event.target.value)} /></label>
@@ -388,27 +391,27 @@ export function AccountGames({ data, toast, selectedId, select, menu, filters, o
     <div className="account-games-results">
     {!available ? <p>{data.auth.stored !== true ? 'Sign in to load your account games. Installed games remain available.' : !data.backend.capabilities.library ? 'Update the Xodus backend to load account licenses.' : 'Wait for sign-in to finish.'}</p> : null}
       {error ? <div className="alert amber"><CircleAlert /><span>{error}</span></div> : null}
-      <div className="catalog-grid">{rows.map(row => {
+      <div className="catalog-grid" data-gamepad-grid>{rows.map(row => {
         if (row.game) {
           const game = row.game;
           const license = access(game);
-          return <div className={`library-card-wrap catalog-card ${selectedId === game.id ? 'selected' : ''}`} key={game.id} onContextMenu={event => { event.preventDefault(); menu?.(game, event.clientX, event.clientY); }}>
-            <button className="library-card catalog-card-main" onClick={() => select?.(game)} onKeyDown={event => { if (event.key === 'F10' && event.shiftKey) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); menu?.(game, rect.left + 16, rect.top + 16); } }}><Cover game={game} /><div><GameTitle title={game.title} /><small>{game.publisher ?? 'Local installation'}</small><span>{license === 'owned' ? 'Owned' : license === 'gamepass' ? 'Game Pass' : 'Local installation'}</span></div></button>
+          return <div className={`library-card-wrap catalog-card ${selectedId === game.id ? 'selected' : ''}`} data-gamepad-card key={game.id} onContextMenu={event => { event.preventDefault(); menu?.(game, event.clientX, event.clientY); }}>
+            <button className="library-card catalog-card-main" data-gamepad-auto-select data-gamepad-detail-target={game.id} onClick={() => select?.(game)} onKeyDown={event => { if (event.key === 'F10' && event.shiftKey) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); menu?.(game, rect.left + 16, rect.top + 16); } }}><Cover game={game} /><div><GameTitle title={game.title} /><small>{game.publisher ?? 'Local installation'}</small><span>{license === 'owned' ? 'Owned' : license === 'gamepass' ? 'Game Pass' : 'Local installation'}</span></div></button>
             <span className="catalog-card-status"><Check />{data.gameUpdates?.[game.id]?.available ? 'Update available' : 'Installed'}</span>
-            <button className="library-card-menu-button" data-game-menu-trigger aria-label={`Options for ${game.title}`} aria-haspopup="menu" title={`Options for ${game.title}`} onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); menu?.(game, rect.right, rect.bottom); }}><MoreHorizontal /></button>
+            <button className="library-card-menu-button" data-game-menu-trigger data-gamepad-skip aria-label={`Options for ${game.title}`} aria-haspopup="menu" title={`Options for ${game.title}`} onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); menu?.(game, rect.right, rect.bottom); }}><MoreHorizontal /></button>
           </div>;
         }
         const product = row.product!;
         const present = installed.has(product.productId) || installed.has(product.installProductId ?? '');
         const downloading = queued.has(product.productId) || queued.has(product.installProductId ?? '');
-        return <article className="catalog-card" key={product.productId}>
+        return <article className="catalog-card" data-gamepad-card key={product.productId}>
           <div className="catalog-card-main">{product.posterUrl ? <img src={product.posterUrl} alt={`${product.title} cover`} loading="lazy" /> : <div className="catalog-cover-placeholder"><Gamepad2 /></div>}<span className="catalog-support supported">PC</span><div><GameTitle title={product.title} /><small>{product.publisher ?? product.productId}</small><span>{product.access === 'owned' ? 'Owned' : 'Game Pass'}</span></div></div>
           <button className="catalog-card-install" disabled={present || downloading || Boolean(installing) || !data.backend.capabilities.streaming} onClick={() => install(product)}>{present ? <Check /> : <Download />}{present ? 'Installed' : downloading ? 'In Install Queue' : installing === product.productId ? 'Preparing…' : 'Install'}</button>
         </article>;
       })}</div>
       {!busy && !searching && !error && !rows.length ? <p>{visible?.cursor && playState !== 'installed' ? 'No games match these filters in the loaded results. Load more to continue.' : 'No games match these filters.'}</p> : null}
-      <LibraryPagination loading={busy} hasMore={Boolean(visible?.cursor)} searching={searching} load={() => { void load(); }} />
-      <p className="account-library-note">Only licensed games with a verified, supported PC package are listed. Add-ons and unsupported packages are excluded. Installation checks your license again.</p>
+      <div data-gamepad-library-footer><LibraryPagination loading={busy} hasMore={Boolean(visible?.cursor)} searching={searching} load={() => { void load(); }} />
+      <p className="account-library-note">Only licensed games with a verified, supported PC package are listed. Add-ons and unsupported packages are excluded. Installation checks your license again.</p></div>
     </div>
   </section>;
 }
@@ -427,6 +430,7 @@ export function ContentList({ plan, disabled, pending, install }: { plan: GameCo
 }
 
 function GameContentDialog({ game, data, close, toast }: { game: Game; data: AppSnapshot; close: () => void; toast: (value: Toast) => void }) {
+  const confirm = useConfirmation();
   const [plan, setPlan] = useState<GameContentPlan>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
@@ -445,7 +449,7 @@ function GameContentDialog({ game, data, close, toast }: { game: Game; data: App
   }, [game.id, data.auth.username, data.auth.stored, data.auth.running, data.backend.binaryPath, data.settings.market, revision, queueState]);
   async function install(id: string) {
     const item = plan?.items.find(item => item.productId === id);
-    if (!item || !window.confirm(`${item.status === 'installed' ? 'Repair' : 'Install'} ${item.title}? This downloads licensed content into a separate managed folder. Close the game first.`)) return;
+    if (!item || !await confirm({ title: `${item.status === 'installed' ? 'Repair' : 'Install'} ${item.title}?`, message: 'This downloads licensed content into a separate managed folder. Close the game first.', confirmLabel: item.status === 'installed' ? 'Repair' : 'Install' })) return;
     setPending(id); setError(undefined);
     try { await window.launcher.installGameContent(game.id, id); toast({ kind: 'success', message: 'Content added to Install Queue.' }); }
     catch (error) { setError(errorMessage(error)); }
@@ -458,7 +462,7 @@ function GameContentDialog({ game, data, close, toast }: { game: Game; data: App
     {plan?.runtimeSupported === false ? <p className="error-text">Update the Nexus runtime in Settings before installing related content.</p> : null}
     {plan && !loading ? <ContentList plan={plan} disabled={busy || !data.backend.capabilities.streaming || plan.runtimeSupported === false} pending={pending} install={id => { void install(id); }} /> : null}
     {queue.some(task => ['running', 'paused', 'queued'].includes(task.status)) ? <p>Content download is in Install Queue. Pause, resume or cancel it there.</p> : null}
-    <div className="dialog-actions"><button className="secondary" disabled={loading || Boolean(pending)} onClick={() => setRevision(value => value + 1)}><RefreshCw />Refresh</button><button className="secondary" disabled={Boolean(pending)} onClick={close}>Close</button></div>
+    <div className="dialog-actions"><button className="secondary" disabled={loading || Boolean(pending)} onClick={() => setRevision(value => value + 1)}><RefreshCw />Refresh</button><button className="secondary" disabled={Boolean(pending)} data-gamepad-cancel onClick={close}>Close</button></div>
   </section></div>;
 }
 
@@ -476,6 +480,7 @@ export function GameLaunchToolFields({ value, change }: { value: GameLaunchTools
 }
 
 export function LibraryPage({ data, toast, filters, onFiltersChange, selection }: Pick<AccountGamesProps, 'data' | 'toast' | 'filters' | 'onFiltersChange'> & { selection?: { id: string } }) {
+  const confirm = useConfirmation();
   const [selectedId, setSelectedId] = useState<string>();
   const [menu, setMenu] = useState<{ id: string; x: number; y: number }>();
   const [dialogGame, setDialogGame] = useState<{ id: string; kind: 'settings' | 'remove' }>();
@@ -533,14 +538,14 @@ export function LibraryPage({ data, toast, filters, onFiltersChange, selection }
     finally { setDialogBusy(false); }
   }
 
-  async function removeGame(mode: 'library' | 'trash-files') {
+  async function removeGame(mode: 'library' | 'delete-files') {
     if (!dialogGame) return;
     setDialogBusy(true);
     try {
       await window.launcher.removeGame(dialogGame.id, mode);
       setSelectedId(undefined);
       setDialogGame(undefined);
-      toast({ kind: 'success', message: mode === 'library' ? 'Removed from library. Game files were kept.' : 'Game folder moved to Trash.' });
+      toast({ kind: 'success', message: mode === 'library' ? 'Removed from library. Game files were kept.' : 'Game files permanently deleted.' });
     } catch (error) { toast({ kind: 'error', message: errorMessage(error) }); }
     finally { setDialogBusy(false); }
   }
@@ -571,7 +576,7 @@ export function LibraryPage({ data, toast, filters, onFiltersChange, selection }
   }
 
   async function updateInstalledGame() {
-    if (!selected || !window.confirm(`Check and update ${selected.title}? Xodus may replace changed game files in place. Do not run the game until the update finishes.`)) return;
+    if (!selected || !await confirm({ title: `Update ${selected.title}?`, message: 'Xodus may replace changed game files in place. Do not run the game until the update finishes.', confirmLabel: 'Update game' })) return;
     try {
       await window.launcher.updateInstalledGame(selected.id);
       toast({ kind: 'success', message: `Update started for ${selected.title}. See Install Queue.` });
@@ -596,14 +601,14 @@ export function LibraryPage({ data, toast, filters, onFiltersChange, selection }
     <header className="page-header"><div><h1>My Library</h1><p>Your owned games, Game Pass games and local installations.</p></div><div className="button-row"><button className="secondary" disabled={data.auth.stored !== true || gameBusy || Object.values(data.gameUpdates ?? {}).some(update => update.checking)} onClick={() => checkUpdates()}><RefreshCw />Check game updates</button><button className="secondary" onClick={importGame}><Plus />Import game</button></div></header>
     <div className={`library-layout${data.games.length ? '' : ' account-only'}`}>
       <AccountGamesForUser data={data} toast={toast} filters={filters} onFiltersChange={onFiltersChange} selectedId={selected?.id} select={game => setSelectedId(game.id)} menu={openMenu} />
-      {selected ? <aside className="game-detail">
+      {selected ? <aside className="game-detail" data-gamepad-detail={selected.id}>
         <div className="detail-art"><Cover game={selected} variant="hero" /></div>
         <div className="detail-copy"><StatePill game={selected} /><h2>{selected.title}</h2><span>{selected.publisher ?? 'Publisher not provided'}</span></div>
         {selected.installMessage ? <div className="alert amber"><CircleAlert /><span>{selected.installMessage}</span></div> : null}
 <div className="game-update-status">{data.gameUpdates?.[selected.id]?.available ? <p className="success-text">Update available · {selected.installedVersion ?? 'Installed version'} → {data.gameUpdates[selected.id].latestVersion}</p> : data.gameUpdates?.[selected.id]?.available === false ? <p>Up to date · {data.gameUpdates[selected.id].latestVersion}</p> : null}{data.gameUpdates?.[selected.id]?.error ? <p className="error-text">{data.gameUpdates[selected.id].error}</p> : null}</div>
         <dl><div><dt>Store ID</dt><dd>{selected.storeId ?? 'Not found'}</dd></div><div><dt>Executable</dt><dd>{selected.executable ?? 'Not found'}</dd></div><div><dt>Location</dt><dd title={selected.path}>{selected.path}</dd></div></dl>
         <div className="detail-actions">
-          <button className="primary" disabled={gameBusy || selected.installState !== 'ready' || !data.backend.capabilities.run || !(data.settings.winePath || data.runtime.winePath)} onClick={() => play()}>{gameBusy ? <LoaderCircle className="spin" /> : <Play fill="currentColor" />}{gameBusy ? 'Working…' : 'Play'}</button>
+          <button className="primary" data-gamepad-play disabled={gameBusy || selected.installState !== 'ready' || !data.backend.capabilities.run || !(data.settings.winePath || data.runtime.winePath)} onClick={() => play()}>{gameBusy ? <LoaderCircle className="spin" /> : <Play fill="currentColor" />}{gameBusy ? 'Working…' : 'Play'}</button>
           <button className="secondary" disabled={gameBusy || data.gameUpdates?.[selected.id]?.checking || !selected.storeId || selected.installState !== 'ready' || !data.backend.capabilities.streaming || data.downloads.some((task) => task.status === 'running')} onClick={() => data.gameUpdates?.[selected.id]?.available ? updateInstalledGame() : checkUpdates(selected.id)} title="Check the installed package version without changing game files"><RefreshCw />{data.gameUpdates?.[selected.id]?.checking ? 'Checking…' : data.gameUpdates?.[selected.id]?.available ? 'Update game' : 'Check for updates'}</button>
           {gameBusy && !(selectedOperation?.kind === 'prerequisite' && selectedOperation.status === 'running') ? <button className="secondary danger" onClick={stopGame}><X />Stop</button> : null}
           <button className="icon-button" onClick={() => window.launcher.openPath(selected.path)} title="Open game folder"><FolderOpen /></button>
@@ -626,13 +631,13 @@ export function LibraryPage({ data, toast, filters, onFiltersChange, selection }
 {diagnosticLog ? <DiagnosticDialog log={diagnosticLog} close={() => setDiagnosticLog(undefined)} /> : null}
     {contentGameId && data.games.find(game => game.id === contentGameId) ? <GameContentDialog key={`${contentGameId}:${data.auth.username}:${data.auth.stored}`} game={data.games.find(game => game.id === contentGameId)!} data={data} close={() => setContentGameId(undefined)} toast={toast} /> : null}
     {dialogGame && modalGame ? <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !dialogBusy) setDialogGame(undefined); }}><section className="game-dialog" role="dialog" aria-modal="true" aria-label={dialogGame.kind === 'remove' ? `Remove ${modalGame.title}` : `Settings for ${modalGame.title}`}>
-      {dialogGame.kind === 'remove' ? <><h2>Remove {modalGame.title}?</h2><p>Keep the files, or move this installation folder to Trash. Saves stored outside this folder are not affected.</p><code className="remove-path">{modalGame.path}</code><div className="dialog-actions"><button className="secondary" disabled={dialogBusy} onClick={() => setDialogGame(undefined)}>Cancel</button><button className="secondary" disabled={dialogBusy} onClick={() => removeGame('library')}>Keep files</button><button className="secondary danger" disabled={dialogBusy} onClick={() => removeGame('trash-files')}><Trash2 />Move files to Trash</button></div></> : <form onSubmit={saveGameSettings}>
+      {dialogGame.kind === 'remove' ? <GameRemovalContents game={modalGame} busy={dialogBusy} close={() => setDialogGame(undefined)} remove={mode => { void removeGame(mode); }} /> : <form onSubmit={saveGameSettings}>
         <h2>Game settings</h2>
         <label>Display name<input required value={editTitle} onChange={(event) => setEditTitle(event.target.value)} /></label>
         <label>Game language<select value={editLocale} onChange={(event) => setEditLocale(event.target.value)}><option value="">System default</option>{localeOptions.map((locale) => <option key={locale} value={locale}>{locale}</option>)}{editLocale && !localeOptions.some((locale) => locale.toLowerCase() === editLocale.toLowerCase()) ? <option value={editLocale}>{editLocale}</option> : null}</select></label>
         <p>Available languages come from the game manifest. All games use the active Xodus Runtime.</p>
         <GameLaunchToolFields value={editTools} change={setEditTools} />
-        <div className="dialog-actions"><button type="button" className="secondary" disabled={dialogBusy} onClick={() => setDialogGame(undefined)}>Cancel</button><button className="primary" disabled={dialogBusy || !editTitle.trim()}><Check />Save</button></div>
+        <div className="dialog-actions"><button type="button" className="secondary" disabled={dialogBusy} data-gamepad-cancel onClick={() => setDialogGame(undefined)}>Cancel</button><button className="primary" disabled={dialogBusy || !editTitle.trim()}><Check />Save</button></div>
       </form>}
     </section></div> : null}
   </main>;
@@ -700,6 +705,7 @@ function ToggleStatus({ ok, label }: { ok: boolean; label: string }) {
 }
 
 export function SettingsPage({ data, toast }: { data: AppSnapshot; toast: (value: Toast) => void }) {
+  const confirm = useConfirmation();
   const [form, setForm] = useState<Settings>(data.settings);
   const [busy, setBusy] = useState<string>();
   const [logs, setLogs] = useState<string[]>([]);
@@ -735,10 +741,10 @@ export function SettingsPage({ data, toast }: { data: AppSnapshot; toast: (value
       {data.launcherUpdate?.error ? <div className="alert amber"><CircleAlert /><span>{data.launcherUpdate.error}</span></div> : null}
       <div className="settings-heading"><div className="settings-icon"><Rocket /></div><div><span className="overline">XODUS NEXUS</span><h2>{data.launcherUpdate?.currentVersion ?? 'Development build'}</h2><p>{data.launcherUpdate?.latestVersion ? `Version ${data.launcherUpdate.latestVersion} is available.` : 'Check GitHub for launcher updates.'}</p></div></div>
       <div className="button-row">
-        {data.launcherUpdate?.latestVersion && data.launcherUpdate.canInstall && !data.launcherUpdate.restartRequired ? <button className="primary" disabled={data.launcherUpdate.updating || Boolean(busy)} onClick={() => { if (window.confirm('Install the verified launcher update? The current AppImage will be backed up. Games and downloads must be stopped first.')) void invoke('launcher-install', () => window.launcher.installLauncherUpdate()); }}><ArrowDownToLine />{data.launcherUpdate.updating ? 'Updating…' : 'Install launcher update'}</button> : null}
+        {data.launcherUpdate?.latestVersion && data.launcherUpdate.canInstall && !data.launcherUpdate.restartRequired ? <button className="primary" disabled={data.launcherUpdate.updating || Boolean(busy)} onClick={async () => { if (await confirm({ title: 'Install launcher update?', message: 'The current AppImage will be backed up. Games and downloads must be stopped first.', confirmLabel: 'Install update' })) void invoke('launcher-install', () => window.launcher.installLauncherUpdate()); }}><ArrowDownToLine />{data.launcherUpdate.updating ? 'Updating…' : 'Install launcher update'}</button> : null}
         {data.launcherUpdate?.releaseUrl && !data.launcherUpdate.canInstall ? <a className="primary" href={data.launcherUpdate.releaseUrl} target="_blank" rel="noreferrer"><ArrowDownToLine />Download update</a> : null}
         {data.launcherUpdate?.restartRequired ? <button className="primary" onClick={() => invoke('launcher-restart', () => window.launcher.restartLauncher())}><RefreshCw />Restart launcher</button> : null}
-        {data.launcherUpdate?.canRollback ? <button className="secondary" disabled={data.launcherUpdate.updating || Boolean(busy)} onClick={() => { if (window.confirm('Restore the previous launcher AppImage? Your settings and games will not change.')) void invoke('launcher-rollback', () => window.launcher.rollbackLauncherUpdate()); }}>Restore previous launcher</button> : null}
+        {data.launcherUpdate?.canRollback ? <button className="secondary" disabled={data.launcherUpdate.updating || Boolean(busy)} onClick={async () => { if (await confirm({ title: 'Restore previous launcher?', message: 'Your settings and games will not change.', confirmLabel: 'Restore launcher' })) void invoke('launcher-rollback', () => window.launcher.rollbackLauncherUpdate()); }}>Restore previous launcher</button> : null}
         <button className="secondary" disabled={data.launcherUpdate?.checking || data.launcherUpdate?.updating || data.launcherUpdate?.restartRequired} onClick={() => invoke('update-check', () => window.launcher.checkLauncherUpdate(), 'Update check finished.')}>{data.launcherUpdate?.checking ? <LoaderCircle className="spin" /> : <RefreshCw />}Check for updates</button>
         <button className="secondary" disabled={Boolean(busy)} title="Add Nexus with artwork, including while Steam is running." onClick={() => invoke('steam-launcher', () => window.launcher.addToSteam(), 'Nexus added to Steam.')}><Plus />Add Nexus to Steam</button>
       </div>
@@ -822,7 +828,7 @@ export function FirstRunWizard({ data, toast }: { data: AppSnapshot; toast: (val
   }
 
   return <div className="wizard-overlay">
-    <div className="wizard">
+    <div className="wizard" role="dialog" aria-modal="true" aria-label="Set up Xodus Nexus">
       <div><span className="overline">WELCOME</span><h1>Set up Xodus Nexus</h1></div>
       <p>Choose where games install. Everything else can be changed later in Settings.</p>
       <label className="wizard-field">Games folder
@@ -904,7 +910,7 @@ export default function App() {
   function action(fn: () => Promise<unknown>, success?: string) { void fn().then(() => success && setToast({ kind: 'success', message: success })).catch((error) => setToast({ kind: 'error', message: errorMessage(error) })); }
 
   if (loading) return <div className="boot"><div className="brand-mark">X</div><LoaderCircle className="spin" /><span>Loading Xodus Nexus</span></div>;
-  return <PackageInstallProvider><div className="app-shell">
+  return <ConfirmationProvider><PackageInstallProvider><div className="app-shell">
     {!data.settings.firstRunCompleted ? <FirstRunWizard data={data} toast={(value) => setToast(value)} /> : null}
     <Sidebar data={data} page={page} go={setPage} openGame={openLibraryGame} />
 
@@ -913,5 +919,9 @@ export default function App() {
       <div className="page-scroll">{page === 'home' ? <HomePage data={data} go={setPage} action={action} /> : null}{page === 'store' ? <StorePage data={data} toast={setToast} go={setPage} initialQuery={submittedSearch} /> : null}{page === 'library' ? <LibraryPage data={data} toast={setToast} filters={libraryFilters} onFiltersChange={changeLibraryFilters} selection={librarySelection} /> : null}{page === 'downloads' ? <DownloadsPage data={data} toast={setToast} /> : null}{page === 'settings' ? <SettingsPage data={data} toast={setToast} /> : null}</div>
     </section>
     {toast ? <div className={`toast ${toast.kind}`}>{toast.kind === 'success' ? <Check /> : toast.kind === 'error' ? <CircleAlert /> : <Terminal />}<span>{toast.message}</span><button onClick={() => setToast(undefined)}><X /></button></div> : null}
-  </div></PackageInstallProvider>;
+  </div><GamepadNavigation back={() => setPage('home')} page={delta => setPage(current => {
+    const pages: Page[] = ['home', 'library', 'store'];
+    const index = pages.indexOf(current);
+    return index === -1 ? pages[delta > 0 ? 0 : pages.length - 1] : pages[(index + delta + pages.length) % pages.length];
+  })} /></PackageInstallProvider></ConfirmationProvider>;
 }

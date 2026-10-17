@@ -2,10 +2,13 @@
 
 ## Unreleased
 
+- Clear My Library search on restart while remembering Access and Play state filters.
+- Add gamepad navigation for the launcher, including directional focus, dialogs and game options, while preserving mouse and touch controls. Thanks @Techzilla44 for the suggestion.
+- Support gzip response decompression and server certificate-chain queries in the shared runtime's WinHTTP implementation.
 - Prevent doubled keyboard input in Steam Game Mode without changing game input settings. Thanks @Techzilla44 for reporting the issue.
 - Search all pages of the account library automatically instead of only the games already loaded.
 - Open the selected game from Most recent and library search results.
-- Retry failed Linux Trash moves with the alternative system helper and show useful errors without permanently deleting files.
+- Delete uninstalled game files directly instead of moving them to Trash, with an explicit permanent-deletion warning and an option to keep the files.
 - Preview installation progress when hovering over Install Queue and show a desktop notification when a download completes.
 - Allow removing an unrelated game while another game downloads, keeping active installation folders protected.
 - Ignore commented-out manifest examples when importing games and reading runtime package metadata.
