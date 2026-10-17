@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.5
 
 - Add an optional per-game DualSense compatibility mode for controllers not detected through native HIDRAW input.
 - Prevent automatic display sleep while a game is running, including when playing with a controller.

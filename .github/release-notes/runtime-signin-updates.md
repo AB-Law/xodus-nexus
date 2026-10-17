@@ -1,9 +1,7 @@
-# Nexus runtime: Store licenses and related content
+# Nexus runtime: game exit and license compatibility
 
-- Fix Store entitlement queries and package-license checks used by games such as DOOM Eternal.
-- Discover installed related content packages and return their real package identifiers.
-- Fix Xbox request-signature header formatting.
+- Fix games remaining active in the launcher after a normal exit.
+- Support game-license change notifications during license refresh.
+- Improve compatibility with games requesting chunk ordering for already-installed packages.
 
-Use launcher 0.3.1 or later to install missing licensed content through **Manage content**. Unowned DLC remains locked. Other games using these APIs may benefit, but compatibility is game-dependent.
-
-Thanks to @LZGM4702 for reporting the DOOM Eternal issue.
+Update the Nexus runtime in **Settings**. Compatibility remains game-dependent.
