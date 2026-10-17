@@ -694,6 +694,7 @@ async function prepareGameLaunch(id: string): Promise<void> {
   let launchWrapper: GameWrapper | undefined;
   let releaseDisplay = () => {};
   try {
+    if (game.launchTools?.dualSenseCompatibility) writeLaunchLog('DualSense compatibility mode enabled for this game (054c:0ce6).');
     const legacyPrefixRoot = path.join(dataRoot, 'prefixes', game.id);
     const compatibilityDataPath = path.join(dataRoot, 'compatdata', game.id);
     const steamRoot = path.join(app.getPath('home'), '.steam', 'root');

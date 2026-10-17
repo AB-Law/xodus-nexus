@@ -40,6 +40,28 @@ it('preserves quoted environment, literal arguments, original identity and actua
   expect(result.output).toContain('<original game.exe>\n<--launcher-skip>\n<two words>\n<literal $HOME>');
   await wrapper.cleanup(); await expect(stat(wrapper.command)).rejects.toThrow();
 });
+it.each([undefined, '', '0', '0x1234/0xabcd', '0x054C/0x0CE6', '1'])('scopes the optional DualSense mode and preserves existing HIDRAW exclusions: %s', async disabled => {
+  const { root, wine, env } = await setup();
+  await writeFile(wine, '#!/bin/sh\nprintf "%s\\n" "$PROTON_DISABLE_HIDRAW" "$PROTON_ENABLE_HIDRAW" "$SteamGameId" "$SDL_GAMECONTROLLERCONFIG"\n');
+  const source = { ...env, PROTON_DISABLE_HIDRAW: disabled, PROTON_ENABLE_HIDRAW:'0x045e/0x0b12', SteamGameId:'16968485195965530112', SDL_GAMECONTROLLERCONFIG:'Xbox mapping' };
+  const before = { ...source };
+  const wrapper = await prepareGameWrapper(wine, { ...defaultLaunchTools, dualSenseCompatibility:true }, path.join(root,'wrappers'), source);
+  const expected = disabled === '1' || /0x054c\/0x0ce6/i.test(disabled ?? '') ? disabled : [disabled === '0' ? '' : disabled, '0x054c/0x0ce6'].filter(Boolean).join(',');
+  expect((await run(wrapper.command, [], { env:source })).output).toBe(`${expected}\n0x045e/0x0b12\n16968485195965530112\nXbox mapping\n`);
+  expect(source).toEqual(before);
+  const other = await prepareGameWrapper(wine, undefined, path.join(root,'other'), source);
+  expect(other.command).toBe(wine);
+  expect((await run(other.command, [], { env:source })).output).toBe(`${disabled ?? ''}\n0x045e/0x0b12\n16968485195965530112\nXbox mapping\n`);
+  await wrapper.cleanup();
+});
+it('combines DualSense compatibility with explicit game-only exclusions, keeping the custom wrapper and arguments', async () => {
+  const { root, wine, env, tool } = await setup();
+  await writeFile(wine, '#!/bin/sh\nprintf "%s\\n" "$PROTON_DISABLE_HIDRAW" "$@"\n');
+  await tool('custom-wrap', 'exec "$@"');
+  const wrapper = await prepareGameWrapper(wine, { ...defaultLaunchTools, dualSenseCompatibility:true,
+    launchOptions:'PROTON_DISABLE_HIDRAW=0x1234/0xabcd custom-wrap %command% "two words"' }, path.join(root,'wrappers'), { ...env, PROTON_DISABLE_HIDRAW:'1' });
+  expect((await run(wrapper.command, ['game.exe'], { env })).output).toBe('0x1234/0xabcd,0x054c/0x0ce6\ngame.exe\ntwo words\n');
+});
 it('supports MangoHud directly and gamescope with mangoapp, never wrapping a launcher process',async()=>{
   const {root,bin,wine,env:baseEnv,tool}=await setup();
   const env={...baseEnv,PATH:bin};

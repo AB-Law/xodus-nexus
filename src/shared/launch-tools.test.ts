@@ -20,6 +20,9 @@ it.each(['WINEPREFIX=/other', 'XODUS_SOCKET=/other', 'WINE_DLL_FILE_MAP=bad', 'S
 it('validates persisted launch tool settings at the IPC boundary', () => {
   expect(normalizeLaunchTools(undefined)).toEqual(defaultLaunchTools);
   expect(() => normalizeLaunchTools({ ...defaultLaunchTools, mangoHud:'yes' })).toThrow();
+  expect(() => normalizeLaunchTools({ ...defaultLaunchTools, dualSenseCompatibility:'yes' })).toThrow();
+  expect(normalizeLaunchTools({ mangoHud:false, gamescope:false, gamescopeArgs:'', launchOptions:'' }).dualSenseCompatibility).toBe(false);
+  expect(normalizeLaunchTools({ ...defaultLaunchTools, dualSenseCompatibility:true }).dualSenseCompatibility).toBe(true);
   expect(() => normalizeLaunchTools({ ...defaultLaunchTools, gamescopeArgs:'-f --' })).toThrow();
   expect(normalizeLaunchTools({ ...defaultLaunchTools, launchOptions:' PROTON_ENABLE_WAYLAND=1 %command% ' }).launchOptions).toBe('PROTON_ENABLE_WAYLAND=1 %command%');
 });

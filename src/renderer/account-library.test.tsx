@@ -86,3 +86,14 @@ it('offers saved per-game overlay options and Steam-style environment and argume
   expect(html).toContain('Launch options'); expect(html).toContain('PROTON_ENABLE_WAYLAND=1 %command% --launcher-skip');
   expect(html).toContain('checked');
 });
+
+it('offers DualSense compatibility per game, off by default and with feature limitations', () => {
+  const render = (enabled: boolean) => renderToStaticMarkup(<GameLaunchToolFields value={{ ...defaultLaunchTools, dualSenseCompatibility:enabled }} change={() => {}} />);
+  const off = render(false), on = render(true);
+  expect(off).toContain('DualSense compatibility mode');
+  expect(off).not.toContain('checked');
+  expect(on).toContain('checked');
+  expect(on).toContain('for this game only');
+  expect(on).toContain('Does not change Xbox controller settings');
+  expect(on).toContain('adaptive triggers may be unavailable');
+});
