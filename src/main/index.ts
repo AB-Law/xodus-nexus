@@ -43,7 +43,9 @@ import { authViewFactory } from './auth-window.js';
 import { browserAuthViewFactory } from './auth-browser.js';
 import { fallbackAuthViewFactory } from './auth-fallback.js';
 import { installSelection, readInstallPlan } from './install-plan.js';
-import { adoptLauncherFonts, externalFontEnvironment } from './launcher-fonts.js';
+import { adoptLauncherFonts } from './launcher-fonts.js';
+import { externalLauncherEnvironment } from './launcher-environment.js';
+import { openDesktopTarget } from './desktop-open.js';
 import { prepareGameModeKeyring } from './session-environment.js';
 import { addSteamShortcut, steamAccounts, steamRunning } from './steam-shortcuts.js';
 import { gameSteamPortrait, nexusSteamArtwork } from './steam-artwork.js';
@@ -1043,9 +1045,11 @@ function registerIpc(): void {
     if (!launcherUpdater.state.restartRequired || !launcherUpdater.targetPath) throw new Error('No launcher restart is pending.');
     // AppImage sets these again for the new mount. Do not reuse the old mount.
     for (const key of ['APPIMAGE', 'APPDIR', 'ARGV0', 'OWD']) delete process.env[key];
-    const fontEnvironment = externalFontEnvironment();
-    if (fontEnvironment.FONTCONFIG_FILE === undefined) delete process.env.FONTCONFIG_FILE;
-    else process.env.FONTCONFIG_FILE = fontEnvironment.FONTCONFIG_FILE;
+    const externalEnvironment = externalLauncherEnvironment();
+    for (const key of ['FONTCONFIG_FILE', 'GTK_IM_MODULE', 'XODUS_NEXUS_STEAM_IME']) {
+      if (externalEnvironment[key] === undefined) delete process.env[key];
+      else process.env[key] = externalEnvironment[key];
+    }
     app.relaunch({ execPath: launcherUpdater.targetPath, args: [] }); app.quit();
   });
   ipcMain.handle('check-game-updates', (_event, id?: string) => {
@@ -1286,7 +1290,7 @@ function registerIpc(): void {
   });
   ipcMain.handle('open-path', async (_event, target: string) => {
     await fs.access(target);
-    const error = await shell.openPath(target);
+    const error = await openDesktopTarget(target, () => shell.openPath(target));
     if (error) throw new Error(error);
   });
 }
@@ -1375,7 +1379,8 @@ async function createWindow(): Promise<void> {
     mainWindow.on('close', () => { if (mainWindow) saveWindowState(mainWindow); });
   }
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('https://')) void shell.openExternal(url);
+    if (url.startsWith('https://')) void openDesktopTarget(url, () => shell.openExternal(url))
+      .catch(() => console.warn('Could not open the external browser.'));
     return { action: 'deny' };
   });
   if (process.env.VITE_DEV_SERVER_URL) await mainWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}${smokeStore ? '#store' : ''}`);

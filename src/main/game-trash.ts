@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { promisify } from 'node:util';
-import { externalFontEnvironment } from './launcher-fonts.js';
+import { externalLauncherEnvironment } from './launcher-environment.js';
 
 const execute = promisify(execFile);
 type TrashOptions = {
@@ -11,7 +11,7 @@ type TrashOptions = {
 
 async function gioTrash(target: string): Promise<void> {
   await execute('/usr/bin/gio', ['trash', '--', target], {
-    env: externalFontEnvironment(), timeout: 60_000, maxBuffer: 16_384,
+    env: externalLauncherEnvironment(), timeout: 60_000, maxBuffer: 16_384,
   });
 }
 
