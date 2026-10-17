@@ -91,6 +91,7 @@ but have not been verified and may encounter compatibility issues.
 | Neon Abyss 2 | Yes | Playable. |
 | Hollow Knight: Voidheart Edition | Yes | Playable. |
 | Avowed | Yes | Playable. |
+| Mortal Shell: Enhanced Edition | Yes | Playable (user report). |
 | Sea of Thieves | Yes | Playable online; normal exit requires the unreleased runtime fix. |
 | The Witcher 3 | No | Currently crashes on launch. |
 
