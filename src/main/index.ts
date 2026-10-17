@@ -41,6 +41,7 @@ import { browserAuthViewFactory } from './auth-browser.js';
 import { fallbackAuthViewFactory } from './auth-fallback.js';
 import { installSelection, readInstallPlan } from './install-plan.js';
 import { adoptLauncherFonts, externalFontEnvironment } from './launcher-fonts.js';
+import { prepareGameModeKeyring } from './session-environment.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -1326,6 +1327,9 @@ async function createWindow(): Promise<void> {
 app.whenReady().then(async () => {
   if (!primaryInstance) return;
   if (startupError) { dialog.showErrorBox('Invalid Nexus shortcut', startupError.message); app.quit(); return; }
+  if (!demoMode && await prepareGameModeKeyring() === 'unavailable') {
+    console.warn('Game Mode keyring display preparation unavailable; using normal account checks.');
+  }
   shortcutOnly = Boolean(startupRequest.gameId) && !demoMode;
   store = new StateStore(app.getPath('userData'));
   await store.load();
