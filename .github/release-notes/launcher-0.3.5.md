@@ -10,3 +10,9 @@
 - Fix game startup failures during speech initialization.
 
 Update the Nexus runtime in **Settings** for the accompanying game-exit and license compatibility fixes.
+
+## Steam Deck support
+
+Steam Deck support is experimental. I'm currently testing and debugging on virtualized SteamOS, so I can't fully verify how everything behaves on real handheld hardware. Please report any issues you encounter.
+
+If you have an older handheld compatible with Bazzite or SteamOS that you'd be willing to sell, please get in touch. I'm looking for a device for development and testing. Cosmetic damage and signs of wear don't matter, as long as the device's basic functions work.
