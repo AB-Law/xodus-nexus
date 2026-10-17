@@ -12,6 +12,27 @@ const execute = promisify(execFile);
 const id = '0123456789abcdef';
 const game = { id, title: 'A game\nExec=unwanted', installState: 'ready' as const };
 
+it('writes safe persistent desktop descriptors for live Steam imports without touching user application menus', async () => {
+  const f = await fixture();
+  try {
+    await f.shortcuts.initialize();
+    const prepared = await f.shortcuts.steamDesktop(game);
+    const body = await fs.readFile(prepared.file, 'utf8');
+    expect(prepared.file).toBe(path.join(f.locations.userData, 'shortcuts/steam', id + '.desktop'));
+    expect(body.match(/^Exec=/gm)).toHaveLength(1);
+    expect(body).toContain('Name=A game Exec=unwanted\n');
+    expect(body).toContain(desktopArgument(path.join(f.locations.userData, 'shortcuts/launch-game')));
+    expect(body).toContain(desktopArgument(id));
+    expect((await fs.stat(prepared.file)).mode & 0o777).toBe(0o600);
+    await expect(fs.access(f.locations.applications)).rejects.toThrow();
+    const nexus = await f.shortcuts.steamDesktop();
+    expect(await fs.readFile(nexus.file, 'utf8')).toContain('Name=Xodus Nexus\n');
+    await fs.writeFile(prepared.file, 'unrelated user file');
+    await expect(f.shortcuts.steamDesktop(game)).rejects.toThrow('unrelated');
+    expect(await fs.readFile(prepared.file, 'utf8')).toBe('unrelated user file');
+  } finally { await fs.rm(f.root, { recursive: true, force: true }); }
+});
+
 it('creates Steam launch descriptions without unwanted desktop/menu entries and preserves profile arguments', async () => {
   const f = await fixture();
   try {

@@ -282,7 +282,7 @@ export function GameContextMenu({ x, y, game, options, busy, onBrowse, onSetting
     <button role="menuitem" onClick={onSettings}><Settings2 />Game settings</button>
     <button role="menuitem" disabled={!onShortcut || game.installState !== 'ready'} onClick={() => onShortcut?.('desktop')}><Plus />Create desktop shortcut</button>
     <button role="menuitem" disabled={!onShortcut || game.installState !== 'ready'} onClick={() => onShortcut?.('applications')}><Plus />Add to applications menu</button>
-    <button role="menuitem" disabled={!onShortcut || game.installState !== 'ready'} title="Close Steam before adding a shortcut. Includes available cover artwork." onClick={() => onShortcut?.('steam')}><Plus />Add to Steam</button>
+    <button role="menuitem" disabled={!onShortcut || game.installState !== 'ready'} title="Add a shortcut with available artwork, including while Steam is running." onClick={() => onShortcut?.('steam')}><Plus />Add to Steam</button>
     <button role="menuitem" disabled={busy || game.installState !== 'ready' || !options?.vcInstall} title={options?.vcReason} onClick={onInstallVc}><Download />Install / update VC++</button>
     <button role="menuitem" className="danger" onClick={onRemove}><Trash2 />Remove game…</button>
   </div>;
@@ -590,7 +590,7 @@ export function LibraryPage({ data, toast, filters, onFiltersChange }: Pick<Acco
       onShortcut={(destination) => {
         setMenu(undefined);
         void (destination === 'steam' ? window.launcher.addToSteam(menuGame.id) : window.launcher.createGameShortcut(menuGame.id, destination))
-          .then(() => toast({ kind: 'success', message: destination === 'steam' ? 'Game added to Steam with available artwork. Open Steam to see it.' : destination === 'desktop' ? 'Desktop shortcut created. Your desktop may ask you to allow launching it.' : 'Game added to applications menu.' }))
+          .then(() => toast({ kind: 'success', message: destination === 'steam' ? 'Game added to Steam with available artwork.' : destination === 'desktop' ? 'Desktop shortcut created. Your desktop may ask you to allow launching it.' : 'Game added to applications menu.' }))
           .catch((error) => toast({ kind: 'error', message: errorMessage(error) }));
       }}
       onInstallVc={() => { setMenu(undefined); void installVc(menuGame); }}
@@ -707,7 +707,7 @@ export function SettingsPage({ data, toast }: { data: AppSnapshot; toast: (value
         {data.launcherUpdate?.restartRequired ? <button className="primary" onClick={() => invoke('launcher-restart', () => window.launcher.restartLauncher())}><RefreshCw />Restart launcher</button> : null}
         {data.launcherUpdate?.canRollback ? <button className="secondary" disabled={data.launcherUpdate.updating || Boolean(busy)} onClick={() => { if (window.confirm('Restore the previous launcher AppImage? Your settings and games will not change.')) void invoke('launcher-rollback', () => window.launcher.rollbackLauncherUpdate()); }}>Restore previous launcher</button> : null}
         <button className="secondary" disabled={data.launcherUpdate?.checking || data.launcherUpdate?.updating || data.launcherUpdate?.restartRequired} onClick={() => invoke('update-check', () => window.launcher.checkLauncherUpdate(), 'Update check finished.')}>{data.launcherUpdate?.checking ? <LoaderCircle className="spin" /> : <RefreshCw />}Check for updates</button>
-        <button className="secondary" disabled={Boolean(busy)} title="Close Steam before adding Nexus and its artwork." onClick={() => invoke('steam-launcher', () => window.launcher.addToSteam(), 'Nexus added to Steam. Open Steam to see it.')}><Plus />Add Nexus to Steam</button>
+        <button className="secondary" disabled={Boolean(busy)} title="Add Nexus with artwork, including while Steam is running." onClick={() => invoke('steam-launcher', () => window.launcher.addToSteam(), 'Nexus added to Steam.')}><Plus />Add Nexus to Steam</button>
       </div>
     </section>
 

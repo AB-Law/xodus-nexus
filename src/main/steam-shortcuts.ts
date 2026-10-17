@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { commandWords } from '../shared/launch-tools.js';
 
 interface Field { type: number; key: string; value: string | number | Field[]; start: number; end: number }
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
@@ -50,6 +51,19 @@ export function steamArgument(value: string): string {
   return '"' + value.replace(/["`$\\]/g, '\\$&') + '"';
 }
 export interface SteamLaunch { title: string; executable: string; options: string; directory: string; identity: string; icon: string }
+export function findSteamLaunch(bytes: Buffer, launch: SteamLaunch): number | undefined {
+  const sameWords = (left: unknown, right: string) => {
+    if (typeof left !== 'string') return false;
+    try { return JSON.stringify(commandWords(left)) === JSON.stringify(commandWords(right)); }
+    catch { return left === right; }
+  };
+  for (const entry of parse(bytes)) {
+    const fields = entry.value as Field[];
+    if (!sameWords(field(fields, 'Exe'), launch.executable) || !sameWords(field(fields, 'LaunchOptions'), launch.options)) continue;
+    const appid = field(fields, 'appid');
+    if (typeof appid === 'number' && (appid & 0x80000000)) return appid;
+  }
+}
 export function planSteamShortcut(original: Buffer | undefined, launch: SteamLaunch): { bytes: Buffer; appid: number; added: boolean } {
   const bytes = original ?? empty, entries = parse(bytes);
   if ([launch.title, launch.executable, launch.options, launch.directory, launch.identity, launch.icon].some(value => /\0/.test(value) || value.length > 4096)) throw Error('Invalid Steam shortcut data.');
@@ -97,7 +111,7 @@ async function safeDirectory(directory: string): Promise<void> {
   const stat = await fs.lstat(directory);
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid?.() || (stat.mode & 0o022)) throw Error('Unsafe Steam configuration directory.');
 }
-async function readShortcuts(file: string): Promise<Buffer | undefined> {
+export async function readSteamShortcuts(file: string): Promise<Buffer | undefined> {
   try {
     const stat = await fs.lstat(file);
     if (!stat.isFile() || stat.nlink !== 1 || stat.uid !== process.getuid?.() || (stat.mode & 0o022) || stat.size > 8 * 1024 * 1024) throw Error('Unsafe Steam shortcuts file.');
@@ -121,6 +135,19 @@ export async function steamAccounts(home: string): Promise<string[]> {
   }
   return [...accounts];
 }
+export async function writeSteamArtwork(config: string, appid: number, artwork: { cover?: Buffer; wide?: Buffer }): Promise<void> {
+  if (!Number.isInteger(appid) || appid < 0x80000000 || appid > 0xffffffff) throw Error('Invalid Steam shortcut ID.');
+  await safeDirectory(config);
+  const grid = path.join(config, 'grid');
+  await fs.mkdir(grid, { mode: 0o700 }).catch(error => { if (error.code !== 'EEXIST') throw error; });
+  await safeDirectory(grid);
+  const art = [[`${appid}p.png`, artwork.cover], [`${appid}.png`, artwork.wide ?? artwork.cover],
+    [`${appid}_hero.png`, artwork.wide ?? artwork.cover]] as const;
+  for (const [name, bytes] of art) if (png(bytes)) {
+    try { await fs.writeFile(path.join(grid, name), bytes!, { flag: 'wx', mode: 0o600 }); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
+  }
+}
 export async function addSteamShortcut(config: string, launch: SteamLaunch, artwork: { cover?: Buffer; wide?: Buffer },
   running = steamRunning): Promise<string> {
   const stopped = async () => { if (await running()) throw Error('Close Steam completely, then try Add to Steam again. Nexus will not close Steam for you.'); };
@@ -129,24 +156,16 @@ export async function addSteamShortcut(config: string, launch: SteamLaunch, artw
   const lock = await fs.open(lockPath, 'wx', 0o600).catch(() => { throw Error('Another Steam shortcut update is in progress.'); });
   const file = path.join(config, 'shortcuts.vdf'), temp = file + '.nexus-' + randomUUID();
   try {
-    const original = await readShortcuts(file);
+    const original = await readSteamShortcuts(file);
     const planned = planSteamShortcut(original, launch);
-    const grid = path.join(config, 'grid');
-    await fs.mkdir(grid, { mode: 0o700 }).catch(error => { if (error.code !== 'EEXIST') throw error; });
-    await safeDirectory(grid);
-    const art = [ [`${planned.appid}p.png`, artwork.cover], [`${planned.appid}.png`, artwork.wide ?? artwork.cover],
-      [`${planned.appid}_hero.png`, artwork.wide ?? artwork.cover] ] as const;
     await stopped();
     // Existing custom artwork is always preserved, including artwork on an
     // already-added shortcut. Exclusive creation never follows existing links.
-    for (const [name, bytes] of art) if (png(bytes)) {
-      try { await fs.writeFile(path.join(grid, name), bytes!, { flag: 'wx', mode: 0o600 }); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
-    }
+    await writeSteamArtwork(config, planned.appid, artwork);
     if (planned.added) {
       await fs.writeFile(temp, planned.bytes, { flag: 'wx', mode: 0o600 });
       if (original) await fs.writeFile(file + '.nexus-backup-' + randomUUID(), original, { flag: 'wx', mode: 0o600 });
-      const current = await readShortcuts(file);
+      const current = await readSteamShortcuts(file);
       if (original ? !current?.equals(original) : current !== undefined) throw Error('Steam shortcuts changed concurrently. Try again after closing Steam.');
       await stopped();
       if (original) await fs.rename(temp, file);

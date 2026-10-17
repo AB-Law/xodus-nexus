@@ -189,6 +189,17 @@ export class GameShortcuts {
       directory: path.dirname(entry), identity: this.profileId + ':' + (game?.id ?? 'launcher'),
       icon: game ? await this.gameIcon(game.id, png) : this.icon };
   }
+  async steamDesktop(game?: Pick<Game, 'id' | 'title' | 'installState'>, png?: Buffer): Promise<{ launch: SteamLaunch; file: string }> {
+    const launch = await this.steamLaunch(game, png);
+    const directory = path.join(this.locations.userData, 'shortcuts', 'steam');
+    await this.directory(directory);
+    const file = path.join(directory, `${game?.id ?? 'launcher'}.desktop`);
+    const identity = `X-Xodus-Nexus-Steam=${game?.id ?? 'launcher'}`;
+    const entry = game ? this.entry! : this.nexusEntry!;
+    const body = `[Desktop Entry]\nType=Application\nName=${desktopValue(launch.title)}\nExec=/bin/sh ${desktopArgument(entry)}${game ? ' ' + desktopArgument(game.id) : ''}\nPath=${desktopValue(launch.directory)}\nIcon=${desktopValue(launch.icon)}\nTerminal=false\nCategories=Game;\n${this.marker}\n${identity}\n`;
+    await this.write(file, body, 0o600, [this.marker, identity]);
+    return { launch, file };
+  }
   async create(game: Pick<Game, 'id' | 'title' | 'installState'>, destination: ShortcutDestination, png?: Buffer): Promise<string> {
     if (!this.entry || !this.icon) throw new Error(this.reason);
     if (destination !== 'desktop' && destination !== 'applications') throw new Error('Invalid shortcut destination.');

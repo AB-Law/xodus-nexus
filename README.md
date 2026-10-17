@@ -47,7 +47,7 @@ Flatpak version available through Discover. Other browsers are not supported.
 - **Manage content** installs licensed add-ons and campaign packages.
 - **Install Queue** supports pause and resume, including after restarting the launcher.
 - Right-click an installed game for settings, VC++ prerequisites, shortcuts or removal.
-- Choose **Add to Steam** in the game menu, or **Add Nexus to Steam** in Settings, to create a Non-Steam shortcut with available artwork. Close Steam completely first. Requires native Linux Steam; Flatpak Steam is not yet supported.
+- Choose **Add to Steam** in the game menu, or **Add Nexus to Steam** in Settings, to create a Non-Steam shortcut with available artwork. Steam can stay running, including in Game Mode. Requires native Linux Steam; Flatpak Steam is not yet supported.
 - Update the launcher, backend and runtime in **Settings**.
 
 [Documentation](https://github.com/domsvoboda/xodus-nexus/wiki) ·

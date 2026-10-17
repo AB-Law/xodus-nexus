@@ -30,7 +30,7 @@ it('offers both game shortcut destinations only for ready installations', () => 
       onBrowse={() => {}} onSettings={() => {}} onInstallVc={() => {}} onRemove={() => {}} onShortcut={() => {}} />);
     expect(html).toContain('Create desktop shortcut'); expect(html).toContain('Add to applications menu');
     expect(html).toContain('Add to Steam');
-    expect(html).toMatch(installState === 'ready' ? /<button role="menuitem" title="Close Steam[^]*?Add to Steam/ : /<button role="menuitem" disabled="" title="Close Steam[^]*?Add to Steam/);
+    expect(html).toMatch(installState === 'ready' ? /<button role="menuitem" title="Add a shortcut[^]*?Add to Steam/ : /<button role="menuitem" disabled="" title="Add a shortcut[^]*?Add to Steam/);
     expect(html).toMatch(installState === 'ready' ? /<button role="menuitem"><svg[^]*?Create desktop shortcut/ : /<button role="menuitem" disabled=""><svg[^]*?Create desktop shortcut/);
   }
 });

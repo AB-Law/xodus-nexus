@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Add games and Nexus to Steam with library artwork. Steam must be closed when adding shortcuts.
+- Add games and Nexus to Steam with library artwork, including while Steam is running.
 - Fix access to the KDE keyring when launching game shortcuts in Steam Game Mode.
 - Fix launcher startup from Steam Game Mode when the Steam overlay is injected.
 - Support Store game-license change subscriptions in the shared runtime.

@@ -43,7 +43,8 @@ import { installSelection, readInstallPlan } from './install-plan.js';
 import { adoptLauncherFonts, externalFontEnvironment } from './launcher-fonts.js';
 import { prepareGameModeKeyring } from './session-environment.js';
 import { addSteamShortcut, steamAccounts, steamRunning } from './steam-shortcuts.js';
-import { nexusSteamArtwork } from './steam-artwork.js';
+import { gameSteamPortrait, nexusSteamArtwork } from './steam-artwork.js';
+import { activeSteamAccount, addLiveSteamShortcut } from './steam-live.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -1109,11 +1110,12 @@ function registerIpc(): void {
     if (id !== undefined && typeof id !== 'string') throw Error('Invalid game ID.');
     const game = id === undefined ? undefined : store.games.find(entry => entry.id === id);
     if (id !== undefined && (!game || game.installState !== 'ready')) throw Error('Only installed, ready games can be added to Steam.');
-    if (await steamRunning()) throw Error('Close Steam completely, then try Add to Steam again. Nexus will not close Steam for you.');
     const accounts = await steamAccounts(os.homedir());
-    if (!accounts.length) throw Error('No Steam profile found. Open Steam and sign in once, then close it and try again.');
+    if (!accounts.length) throw Error('No Steam profile found. Open Steam, sign in, then try again.');
     let selected = 0;
-    if (accounts.length > 1) {
+    const running = await steamRunning();
+    if (running) selected = accounts.indexOf(await activeSteamAccount(accounts));
+    else if (accounts.length > 1) {
       const choice = await dialog.showMessageBox(mainWindow!, { type: 'question', title: 'Choose Steam profile',
         message: 'Which Steam profile should receive this shortcut?', cancelId: accounts.length, defaultId: accounts.length,
         buttons: [...accounts.map(account => `${account.includes('com.valvesoftware.Steam') ? 'Flatpak Steam' : 'Steam'} profile ${path.basename(path.dirname(account))}`), 'Cancel'] });
@@ -1132,11 +1134,13 @@ function registerIpc(): void {
       const result = image.resize({ width: Math.max(1, Math.round(size.width * scale)), height: Math.max(1, Math.round(size.height * scale)) }).toPNG();
       return result.length <= 4 * 1024 * 1024 ? result : undefined;
     };
-    const cover = game ? await loadShortcutIcon(game, normalize) : undefined;
-    const launch = await shortcuts.steamLaunch(game, cover);
+    const cover = game ? await loadShortcutIcon({ coverUrl: game.coverUrl }, normalize) ?? await loadShortcutIcon({ coverDataUrl: game.coverDataUrl }, normalize) : undefined;
+    const { launch, file: desktop } = await shortcuts.steamDesktop(game, cover);
     const fallback = await fs.readFile(launch.icon);
     const wide = game?.heroUrl ? await loadShortcutIcon({ coverUrl: game.heroUrl }, normalize) : undefined;
-    const artwork = game ? { cover: cover ?? fallback, wide } : await nexusSteamArtwork(fallback).catch(() => ({ cover: fallback, wide: fallback }));
+    const artwork = game ? { cover: await gameSteamPortrait(cover ?? fallback).catch(() => cover ?? fallback), wide: wide ?? cover ?? fallback }
+      : await nexusSteamArtwork(fallback).catch(() => ({ cover: fallback, wide: fallback }));
+    if (await steamRunning()) return addLiveSteamShortcut(accounts[selected], launch, desktop, artwork);
     return addSteamShortcut(accounts[selected], launch, artwork);
   });
   ipcMain.handle('create-game-shortcut', async (_event, id: string, destination: ShortcutDestination) => {
