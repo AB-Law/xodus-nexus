@@ -21,7 +21,8 @@ const bootstrap = process.argv[2]?.endsWith('/font-bootstrap/bootstrap.mjs');
 const selected = ['LD_PRELOAD', 'LD_LIBRARY_PATH', 'SteamAppId', 'SteamGameId',
   'STEAM_COMPAT_APP_ID', 'DISPLAY', 'WAYLAND_DISPLAY', 'ELECTRON_RUN_AS_NODE',
   'FONTCONFIG_FILE', 'XODUS_NEXUS_FONTCONFIG', 'XODUS_NEXUS_FONTCONFIG_ORIGINAL',
-  'XODUS_NEXUS_FONTCONFIG_ORIGINAL_SET'];
+  'XODUS_NEXUS_FONTCONFIG_ORIGINAL_SET', 'GTK_IM_MODULE', 'QT_IM_MODULE',
+  'XDG_CURRENT_DESKTOP', 'XODUS_NEXUS_STEAM_IME'];
 fs.appendFileSync(process.env.NEXUS_TEST_CAPTURE, JSON.stringify({
   bootstrap: !!bootstrap, pid: process.pid, args: process.argv.slice(2),
   env: Object.fromEntries(selected.map(key => [key, process.env[key] ?? null]))
@@ -35,7 +36,8 @@ else process.exitCode = Number(process.env.NEXUS_TEST_EXIT || 0);
   const env: NodeJS.ProcessEnv = { ...process.env, NEXUS_TEST_CAPTURE: capture };
   for (const key of ['LD_PRELOAD', 'ELECTRON_RUN_AS_NODE', 'FONTCONFIG_FILE',
     'XODUS_NEXUS_FONTCONFIG', 'XODUS_NEXUS_FONTCONFIG_ORIGINAL',
-    'XODUS_NEXUS_FONTCONFIG_ORIGINAL_SET']) delete env[key];
+    'XODUS_NEXUS_FONTCONFIG_ORIGINAL_SET', 'GTK_IM_MODULE', 'QT_IM_MODULE',
+    'XDG_CURRENT_DESKTOP', 'XODUS_NEXUS_STEAM_IME']) delete env[key];
   Object.assign(env, environment);
   const result = spawnSync('/bin/sh', [wrapper, ...args], { env, cwd: root, encoding: 'utf8', timeout: 10_000 });
   expect(result.error).toBeUndefined();
@@ -45,6 +47,45 @@ else process.exitCode = Number(process.env.NEXUS_TEST_EXIT || 0);
 }
 
 describe('packaged Linux launcher bootstrap', () => {
+  it.each(['gamescope', 'Gamescope', 'steam:GaMeScOpE'])
+  ('selects simple IME before Electron starts only in Game Mode: %s', desktop => {
+    const { records, main, args, result } = launch({ XDG_CURRENT_DESKTOP: desktop,
+      GTK_IM_MODULE: 'Steam', QT_IM_MODULE: 'steam', SteamGameId: '456' });
+    expect(result.status).toBe(0);
+    for (const record of records) {
+      expect(record.env.GTK_IM_MODULE).toBe('simple');
+      expect(record.env.XODUS_NEXUS_STEAM_IME).toBe('1');
+      expect(record.env.QT_IM_MODULE).toBe('steam');
+      expect(record.env.SteamGameId).toBe('456');
+    }
+    expect(main.args).toEqual(args);
+    expect(main.pid).toBe(result.pid);
+  });
+
+  it.each(['KDE', 'GNOME', 'KDE:gamescope-nested', 'notgamescope', ''])
+  ('does not change desktop input even when Steam is running: %s', desktop => {
+    const { main } = launch({ XDG_CURRENT_DESKTOP: desktop, GTK_IM_MODULE: 'Steam',
+      SteamGameId: '456', XODUS_NEXUS_STEAM_IME: '1' });
+    expect(main.env.GTK_IM_MODULE).toBe('Steam');
+    expect(main.env.XODUS_NEXUS_STEAM_IME).toBeNull();
+  });
+
+  it.each([undefined, '', 'simple', 'ibus', 'fcitx', 'steam', 'Steam;$(false)'])
+  ('preserves custom or unset IME in Game Mode: %j', ime => {
+    const { main } = launch({ XDG_CURRENT_DESKTOP: 'gamescope', GTK_IM_MODULE: ime });
+    expect(main.env.GTK_IM_MODULE).toBe(ime ?? null);
+    expect(main.env.XODUS_NEXUS_STEAM_IME).toBeNull();
+  });
+
+  it('does not change native Node helper input or arguments', () => {
+    const { records, main } = launch({ ELECTRON_RUN_AS_NODE: '1',
+      XDG_CURRENT_DESKTOP: 'gamescope', GTK_IM_MODULE: 'Steam' }, ['--native-helper']);
+    expect(records).toHaveLength(1);
+    expect(main.env.GTK_IM_MODULE).toBe('Steam');
+    expect(main.env.XODUS_NEXUS_STEAM_IME).toBeNull();
+    expect(main.args).toEqual(['--native-helper']);
+  });
+
   it('preserves an unset preload, arguments, exit code and exec process identity', () => {
     const { result, main, args, records } = launch({ NEXUS_TEST_EXIT: '37' });
     expect(result.status).toBe(37);

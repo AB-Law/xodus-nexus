@@ -1,6 +1,6 @@
 import { spawnTracked, type RunOptions } from './process.js';
 import { execFile } from 'node:child_process';
-import { externalFontEnvironment } from './launcher-fonts.js';
+import { externalLauncherEnvironment } from './launcher-environment.js';
 
 export interface GameLifecycle {
   /** Generated Proton runner control; its environment targets one game prefix. */
@@ -50,7 +50,7 @@ export async function spawnGameProcess(
   const stopPrefix = () => prefixStop ??= new Promise<void>((resolve, reject) => {
     if (!lifecycle.stopPrefix) { resolve(); return; }
     execFile(lifecycle.stopPrefix.command, lifecycle.stopPrefix.args, {
-      env: externalFontEnvironment(options.env), timeout: 5_000, maxBuffer: 16_384,
+      env: externalLauncherEnvironment(options.env), timeout: 5_000, maxBuffer: 16_384,
     }, (error) => error ? reject(new Error(`Could not stop the game's Wine prefix: ${error.message}`)) : resolve());
   });
   return {
