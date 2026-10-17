@@ -92,7 +92,7 @@ but have not been verified and may encounter compatibility issues.
 | Hollow Knight: Voidheart Edition | Yes | Playable. |
 | Avowed | Yes | Playable. |
 | Mortal Shell: Enhanced Edition | Yes | Playable (user report). |
-| Sea of Thieves | Yes | Playable online; normal exit requires the unreleased runtime fix. |
+| Sea of Thieves | Yes | Playable online. |
 | ARC Raiders | No | Launches but cannot connect to online services. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/100)) |
 | Hogwarts Legacy | Yes | Playable. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/110)) |
 | Halo: Campaign Evolved | Yes | Playable; may remain running after quitting. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/97)) |
