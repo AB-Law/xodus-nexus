@@ -13,6 +13,7 @@ import { defaultLaunchTools, normalizeLaunchTools } from '../shared/launch-tools
 import type { GameLaunchTools } from '../shared/types';
 import { PackageInstallProvider, usePackageInstall } from './PackageInstall';
 import { defaultLibraryFilters, loadLibraryFilters, saveLibraryFilters, type LibraryFilters } from './library-preferences';
+import { InstallQueueShortcut } from './InstallQueueShortcut';
 export type { LibraryFilters } from './library-preferences';
 
 const emptySnapshot: AppSnapshot = {
@@ -58,14 +59,13 @@ function NavItem({ active, icon, label, badge, onClick }: {
   </button>;
 }
 
-export function Sidebar({ data, page, go }: { data: AppSnapshot; page: Page; go: (page: Page) => void }) {
-  const count = data.downloads.filter(task => ['queued', 'running', 'paused'].includes(task.status)).length;
+export function Sidebar({ data, page, go, openGame }: { data: AppSnapshot; page: Page; go: (page: Page) => void; openGame?: (id: string) => void }) {
   const account = data.auth.gamertag ?? data.auth.username ?? (data.auth.stored === true ? 'Microsoft account' : 'Sign in');
   return <aside className="sidebar">
     <button className="account-summary" onClick={() => go('settings')}><AccountAvatar auth={data.auth} /><span><strong>{account}</strong><AccountMembership auth={data.auth} /></span><ChevronRight /></button>
     <nav><NavItem active={page === 'home'} icon={<Home />} label="Home" onClick={() => go('home')} /><NavItem active={page === 'library'} icon={<Library />} label="My Library" onClick={() => go('library')} /><NavItem active={page === 'store'} icon={<Store />} label="Store" onClick={() => go('store')} /></nav>
-    {data.games.length > 0 ? <div className="recents"><span>Most recent</span>{data.games.slice(0, 5).map(game => <button key={game.id} onClick={() => go('library')}><Cover game={game} /><GameTitle title={game.title} /></button>)}</div> : null}
-    <div className="sidebar-bottom"><NavItem active={page === 'settings'} icon={<Cog />} label="Settings" onClick={() => go('settings')} /><button className={`queue-summary ${page === 'downloads' ? 'active' : ''}`} aria-current={page === 'downloads' ? 'page' : undefined} onClick={() => go('downloads')}><Download /><span><strong>Install Queue{count ? ` · ${count}` : ''}</strong><small>{count ? `${count} active installation${count === 1 ? '' : 's'}` : 'Manage installations'}</small></span></button></div>
+    {data.games.length > 0 ? <div className="recents"><span>Most recent</span>{data.games.slice(0, 5).map(game => <button key={game.id} onClick={() => openGame ? openGame(game.id) : go('library')}><Cover game={game} /><GameTitle title={game.title} /></button>)}</div> : null}
+    <div className="sidebar-bottom"><NavItem active={page === 'settings'} icon={<Cog />} label="Settings" onClick={() => go('settings')} /><InstallQueueShortcut downloads={data.downloads} games={data.games} active={page === 'downloads'} openQueue={() => go('downloads')} /></div>
   </aside>;
 }
 
@@ -460,7 +460,7 @@ export function GameLaunchToolFields({ value, change }: { value: GameLaunchTools
   </fieldset>;
 }
 
-export function LibraryPage({ data, toast, filters, onFiltersChange }: Pick<AccountGamesProps, 'data' | 'toast' | 'filters' | 'onFiltersChange'>) {
+export function LibraryPage({ data, toast, filters, onFiltersChange, selection }: Pick<AccountGamesProps, 'data' | 'toast' | 'filters' | 'onFiltersChange'> & { selection?: { id: string } }) {
   const [selectedId, setSelectedId] = useState<string>();
   const [menu, setMenu] = useState<{ id: string; x: number; y: number }>();
   const [dialogGame, setDialogGame] = useState<{ id: string; kind: 'settings' | 'remove' }>();
@@ -473,6 +473,11 @@ export function LibraryPage({ data, toast, filters, onFiltersChange }: Pick<Acco
   const [contentGameId, setContentGameId] = useState<string>();
   const selected = data.games.find((game) => game.id === selectedId) ?? data.games[0];
   useEffect(() => { if (!selectedId && data.games[0]) setSelectedId(data.games[0].id); }, [data.games, selectedId]);
+  useEffect(() => {
+    if (!selection || !data.games.some(game => game.id === selection.id)) return;
+    setSelectedId(selection.id);
+    setMenu(undefined);
+  }, [selection]);
   useEffect(() => {
     if (!menu) return;
     const close = () => setMenu(undefined);
@@ -824,7 +829,7 @@ export function FirstRunWizard({ data, toast }: { data: AppSnapshot; toast: (val
 
 export function GlobalSearch({ games, page, query, change, submit, select }: {
   games: Game[]; page: Page; query: string; change: (value: string) => void;
-  submit: (value: string) => void; select: () => void;
+  submit: (value: string) => void; select: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [page]);
@@ -838,7 +843,7 @@ export function GlobalSearch({ games, page, query, change, submit, select }: {
     if (event.key === 'Enter' && term.length >= 2) { setOpen(false); submit(query.trim()); }
   }} aria-expanded={visible} aria-controls={visible ? 'global-search-results' : undefined} placeholder="Search games, add-ons and your library" />
     {query ? <button aria-label="Clear search" onClick={() => { change(''); setOpen(false); }}><X /></button> : null}
-    {visible ? <div className="search-results" id="global-search-results">{results.map(game => <button key={game.id} onClick={() => { setOpen(false); change(''); select(); }}><Cover game={game} /><span><GameTitle title={game.title} /><small>{game.storeId ?? game.path}</small></span></button>)}</div> : null}
+    {visible ? <div className="search-results" id="global-search-results">{results.map(game => <button key={game.id} onClick={() => { setOpen(false); change(''); select(game.id); }}><Cover game={game} /><span><GameTitle title={game.title} /><small>{game.storeId ?? game.path}</small></span></button>)}</div> : null}
   </div>;
 }
 
@@ -851,6 +856,7 @@ export default function App() {
   const [submittedSearch, setSubmittedSearch] = useState('');
   // App stays mounted while pages change, unlike LibraryPage/AccountGames.
   const [libraryFilters, setLibraryFilters] = useState<LibraryFilters>(() => loadLibraryFilters());
+  const [librarySelection, setLibrarySelection] = useState<{ id: string }>();
 
   useEffect(() => {
     void window.launcher.getSnapshot().then((value) => { setData(value); setLoading(false); }).catch((error) => { setToast({ kind: 'error', message: errorMessage(error) }); setLoading(false); });
@@ -872,16 +878,24 @@ export default function App() {
     if (!saveLibraryFilters(filters)) setToast({ kind: 'error', message: 'Library filters could not be saved. They may reset after restarting Nexus.' });
   }
 
+  function openLibraryGame(id: string) {
+    if (!data.games.some(game => game.id === id)) return;
+    setLibrarySelection({ id });
+    setSearch('');
+    changeLibraryFilters({ ...defaultLibraryFilters, playState: 'installed' });
+    setPage('library');
+  }
+
   function action(fn: () => Promise<unknown>, success?: string) { void fn().then(() => success && setToast({ kind: 'success', message: success })).catch((error) => setToast({ kind: 'error', message: errorMessage(error) })); }
 
   if (loading) return <div className="boot"><div className="brand-mark">X</div><LoaderCircle className="spin" /><span>Loading Xodus Nexus</span></div>;
   return <PackageInstallProvider><div className="app-shell">
     {!data.settings.firstRunCompleted ? <FirstRunWizard data={data} toast={(value) => setToast(value)} /> : null}
-    <Sidebar data={data} page={page} go={setPage} />
+    <Sidebar data={data} page={page} go={setPage} openGame={openLibraryGame} />
 
     <section className="content-shell">
-      <header className="topbar"><GlobalSearch games={data.games} page={page} query={search} change={setSearch} submit={value => { setSubmittedSearch(value); setPage('store'); }} select={() => setPage('library')} /><TopStatus data={data} go={setPage} /></header>
-      <div className="page-scroll">{page === 'home' ? <HomePage data={data} go={setPage} action={action} /> : null}{page === 'store' ? <StorePage data={data} toast={setToast} go={setPage} initialQuery={submittedSearch} /> : null}{page === 'library' ? <LibraryPage data={data} toast={setToast} filters={libraryFilters} onFiltersChange={changeLibraryFilters} /> : null}{page === 'downloads' ? <DownloadsPage data={data} toast={setToast} /> : null}{page === 'settings' ? <SettingsPage data={data} toast={setToast} /> : null}</div>
+      <header className="topbar"><GlobalSearch games={data.games} page={page} query={search} change={setSearch} submit={value => { setSubmittedSearch(value); setPage('store'); }} select={openLibraryGame} /><TopStatus data={data} go={setPage} /></header>
+      <div className="page-scroll">{page === 'home' ? <HomePage data={data} go={setPage} action={action} /> : null}{page === 'store' ? <StorePage data={data} toast={setToast} go={setPage} initialQuery={submittedSearch} /> : null}{page === 'library' ? <LibraryPage data={data} toast={setToast} filters={libraryFilters} onFiltersChange={changeLibraryFilters} selection={librarySelection} /> : null}{page === 'downloads' ? <DownloadsPage data={data} toast={setToast} /> : null}{page === 'settings' ? <SettingsPage data={data} toast={setToast} /> : null}</div>
     </section>
     {toast ? <div className={`toast ${toast.kind}`}>{toast.kind === 'success' ? <Check /> : toast.kind === 'error' ? <CircleAlert /> : <Terminal />}<span>{toast.message}</span><button onClick={() => setToast(undefined)}><X /></button></div> : null}
   </div></PackageInstallProvider>;

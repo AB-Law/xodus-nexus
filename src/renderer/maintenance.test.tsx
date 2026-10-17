@@ -4,7 +4,7 @@ import { demoSnapshot } from '../shared/demo-data';
 import { DiagnosticDialog, DownloadsPage, LibraryPage, SettingsPage, Sidebar, TopStatus } from './App';
 it('has one sidebar queue entry below Settings', () => {
   const html = renderToStaticMarkup(<Sidebar data={demoSnapshot()} page="downloads" go={() => {}} />);
-  expect(html.match(/Install Queue/g)).toHaveLength(1); expect(html.indexOf('Settings')).toBeLessThan(html.indexOf('Install Queue')); expect(html).toContain('aria-current="page"');
+  expect(html.match(/class="queue-summary /g)).toHaveLength(1); expect(html.indexOf('Settings')).toBeLessThan(html.indexOf('Install Queue')); expect(html).toContain('aria-current="page"');
 });
 it('keeps backend health and launcher update notices distinct', () => {
   const data = demoSnapshot(); data.launcherUpdate!.latestVersion = '0.3.1';

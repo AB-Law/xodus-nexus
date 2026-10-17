@@ -14,7 +14,8 @@ it('counts waiting installations in the queue shortcut while a game is running',
   const data = demoSnapshot();
   data.downloads = [{ ...data.downloads[0], status: 'running' }, { ...data.downloads[0], id: 'waiting', status: 'queued' }];
   const html = renderToStaticMarkup(<Sidebar data={data} page="library" go={() => {}} />);
-  expect(html).toContain('Install Queue · 2');
+  expect(html).toContain('Downloading (1/2)');
+  expect(html).toContain('2 active installations');
 });
 it('restores the parent-owned filters after the library is recreated',()=>{
   const filters: LibraryFilters = { kind: 'owned', playState: 'installed', query: 'Edition' };
