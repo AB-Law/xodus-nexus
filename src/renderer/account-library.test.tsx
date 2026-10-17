@@ -9,6 +9,13 @@ it('keeps one My Library and Store navigation, no separate Game Pass page',()=>{
   expect(html).toContain('My Library'); expect(html).toContain('Store');
   expect(html).not.toContain('<span>Game Pass</span>');
 });
+
+it('counts waiting installations in the queue shortcut while a game is running', () => {
+  const data = demoSnapshot();
+  data.downloads = [{ ...data.downloads[0], status: 'running' }, { ...data.downloads[0], id: 'waiting', status: 'queued' }];
+  const html = renderToStaticMarkup(<Sidebar data={data} page="library" go={() => {}} />);
+  expect(html).toContain('Install Queue · 2');
+});
 it('restores the parent-owned filters after the library is recreated',()=>{
   const filters: LibraryFilters = { kind: 'owned', playState: 'installed', query: 'Edition' };
   const data=demoSnapshot(); data.auth={running:false,stored:false,note:''};
@@ -78,4 +85,15 @@ it('offers saved per-game overlay options and Steam-style environment and argume
   expect(html).toContain('Gamescope options'); expect(html).toContain('requires mangoapp');
   expect(html).toContain('Launch options'); expect(html).toContain('PROTON_ENABLE_WAYLAND=1 %command% --launcher-skip');
   expect(html).toContain('checked');
+});
+
+it('offers DualSense compatibility per game, off by default and with feature limitations', () => {
+  const render = (enabled: boolean) => renderToStaticMarkup(<GameLaunchToolFields value={{ ...defaultLaunchTools, dualSenseCompatibility:enabled }} change={() => {}} />);
+  const off = render(false), on = render(true);
+  expect(off).toContain('DualSense compatibility mode');
+  expect(off).not.toContain('checked');
+  expect(on).toContain('checked');
+  expect(on).toContain('for this game only');
+  expect(on).toContain('Does not change Xbox controller settings');
+  expect(on).toContain('adaptive triggers may be unavailable');
 });

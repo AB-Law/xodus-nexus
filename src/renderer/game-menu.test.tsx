@@ -29,6 +29,18 @@ it('offers both game shortcut destinations only for ready installations', () => 
     const html = renderToStaticMarkup(<GameContextMenu x={0} y={0} game={{ ...demoSnapshot().games[0], installState }} busy={false}
       onBrowse={() => {}} onSettings={() => {}} onInstallVc={() => {}} onRemove={() => {}} onShortcut={() => {}} />);
     expect(html).toContain('Create desktop shortcut'); expect(html).toContain('Add to applications menu');
+    expect(html).toContain('Add to Steam');
+    expect(html).toMatch(installState === 'ready' ? /<button role="menuitem" title="Add a shortcut[^]*?Add to Steam/ : /<button role="menuitem" disabled="" title="Add a shortcut[^]*?Add to Steam/);
     expect(html).toMatch(installState === 'ready' ? /<button role="menuitem"><svg[^]*?Create desktop shortcut/ : /<button role="menuitem" disabled=""><svg[^]*?Create desktop shortcut/);
   }
+});
+
+it('marks single-click menu triggers and menu boundaries for outside-pointer dismissal', () => {
+  const data = demoSnapshot();
+  const library = renderToStaticMarkup(<LibraryPage data={data} toast={() => {}} />);
+  expect(library).toContain('data-game-menu-trigger');
+  expect(library).toContain('aria-haspopup="menu"');
+  const menu = renderToStaticMarkup(<GameContextMenu x={0} y={0} game={data.games[0]} busy={false}
+    onBrowse={() => {}} onSettings={() => {}} onInstallVc={() => {}} onRemove={() => {}} />);
+  expect(menu).toContain('data-game-menu'); expect(menu).toContain('role="menu"');
 });

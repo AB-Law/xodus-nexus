@@ -45,8 +45,10 @@ Flatpak version available through Discover. Other browsers are not supported.
 - **My Library** combines owned, Game Pass and installed games, with Access, Play state and title filters.
 - **Store** lets you browse and install supported PC games.
 - **Manage content** installs licensed add-ons and campaign packages.
-- **Install Queue** supports pause and resume, including after restarting the launcher.
+- **Install Queue** downloads games one at a time and lets you add more while downloading or playing another game. Pause and resume are supported, including manual resume after restarting the launcher.
 - Right-click an installed game for settings, VC++ prerequisites, shortcuts or removal.
+- Game settings offer an optional **DualSense compatibility mode** if a standard DualSense is not detected. It applies only to that game and may disable advanced haptics and adaptive triggers.
+- Choose **Add to Steam** in the game menu, or **Add Nexus to Steam** in Settings, to create a Non-Steam shortcut with available artwork. Steam can stay running, including in Game Mode. Requires native Linux Steam; Flatpak Steam is not yet supported.
 - Update the launcher, backend and runtime in **Settings**.
 
 [Documentation](https://github.com/domsvoboda/xodus-nexus/wiki) ·
@@ -89,6 +91,7 @@ but have not been verified and may encounter compatibility issues.
 | Neon Abyss 2 | Yes | Playable. |
 | Hollow Knight: Voidheart Edition | Yes | Playable. |
 | Avowed | Yes | Playable. |
+| Mortal Shell: Enhanced Edition | Yes | Playable (user report). |
 | Sea of Thieves | Yes | Playable online; normal exit requires the unreleased runtime fix. |
 | The Witcher 3 | No | Currently crashes on launch. |
 

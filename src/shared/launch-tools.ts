@@ -1,6 +1,6 @@
 import type { GameLaunchTools } from './types.js';
 
-export const defaultLaunchTools: GameLaunchTools = { mangoHud: false, gamescope: false, gamescopeArgs: '', launchOptions: '' };
+export const defaultLaunchTools: GameLaunchTools = { dualSenseCompatibility: false, mangoHud: false, gamescope: false, gamescopeArgs: '', launchOptions: '' };
 
 /** Command words only, never a shell program. Quotes group literal arguments. */
 export function commandWords(input: string): string[] {
@@ -46,7 +46,8 @@ export function normalizeLaunchTools(value: unknown): GameLaunchTools {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('Invalid game launch tools.');
   const tools = value as Record<string, unknown>;
   if (typeof tools.mangoHud !== 'boolean' || typeof tools.gamescope !== 'boolean' || typeof tools.gamescopeArgs !== 'string' || typeof tools.launchOptions !== 'string') throw Error('Invalid game launch tools.');
-  const result = { mangoHud: tools.mangoHud, gamescope: tools.gamescope, gamescopeArgs: tools.gamescopeArgs.trim(), launchOptions: tools.launchOptions.trim() };
+  if (tools.dualSenseCompatibility !== undefined && typeof tools.dualSenseCompatibility !== 'boolean') throw Error('Invalid DualSense compatibility setting.');
+  const result = { dualSenseCompatibility: tools.dualSenseCompatibility ?? false, mangoHud: tools.mangoHud, gamescope: tools.gamescope, gamescopeArgs: tools.gamescopeArgs.trim(), launchOptions: tools.launchOptions.trim() };
   const args = commandWords(result.gamescopeArgs);
   if (args.includes('--') || args.some(arg => arg.includes('%command%'))) throw Error('Gamescope options must not include -- or %command%; Nexus adds the game command.');
   parseLaunchOptions(result.launchOptions);

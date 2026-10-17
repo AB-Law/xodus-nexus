@@ -2,6 +2,7 @@ import { constants, promises as fs } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { Game } from '../shared/types.js';
+import { steamArgument, type SteamLaunch } from './steam-shortcuts.js';
 
 export type ShortcutDestination = 'desktop' | 'applications';
 const validId = (id: string) => /^[a-f0-9]{16}$/.test(id);
@@ -69,6 +70,7 @@ interface Locations { userData: string; desktop: string; applications: string; l
 export class GameShortcuts {
   private entry?: string;
   private icon?: string;
+  private nexusEntry?: string;
   private readonly profileId: string;
   constructor(private locations: Locations) {
     this.profileId = createHash('sha256').update(path.resolve(locations.userData)).digest('hex').slice(0, 12);
@@ -107,11 +109,13 @@ export class GameShortcuts {
     await this.directory(directory);
     const entry = path.join(directory, 'launch-game');
     // No tokens or runtime paths in shortcuts. Refresh after moving/updating the app.
-    const body = `#!/bin/sh\n# ${this.marker}\nunset APPIMAGE APPDIR ARGV0 OWD ELECTRON_RUN_AS_NODE VITE_DEV_SERVER_URL XODUS_DEMO XODUS_DEMO_TOUR XODUS_DEMO_CAPTURE_DIR XODUS_SMOKE_SCREENSHOT\nexec ${shellQuote(launcher)} --nexus-profile ${shellQuote(this.locations.userData)} --launch-game "$@"\n`;
-    await this.write(entry, body, 0o700, `# ${this.marker}`);
+    const body = (game: boolean) => `#!/bin/sh\n# ${this.marker}\nunset APPIMAGE APPDIR ARGV0 OWD ELECTRON_RUN_AS_NODE VITE_DEV_SERVER_URL XODUS_DEMO XODUS_DEMO_TOUR XODUS_DEMO_CAPTURE_DIR XODUS_SMOKE_SCREENSHOT\nexec ${shellQuote(launcher)} --nexus-profile ${shellQuote(this.locations.userData)}${game ? ' --launch-game' : ''} "$@"\n`;
+    await this.write(entry, body(true), 0o700, `# ${this.marker}`);
+    const nexusEntry = path.join(directory, 'launch-nexus');
+    await this.write(nexusEntry, body(false), 0o700, `# ${this.marker}`);
     const icon = path.join(directory, 'nexus.png');
     await this.write(icon, await fs.readFile(this.locations.icon), 0o600);
-    this.entry = entry; this.icon = icon;
+    this.entry = entry; this.icon = icon; this.nexusEntry = nexusEntry;
   }
   private legacyFilename(id: string): string {
     if (!validId(id)) throw new Error('Invalid game shortcut ID.');
@@ -159,16 +163,10 @@ export class GameShortcuts {
       throw Error('No free shortcut filename could be found for this game.');
     } finally { await fs.rm(temporary, { force: true }); }
   }
-  async create(game: Pick<Game, 'id' | 'title' | 'installState'>, destination: ShortcutDestination, png?: Buffer): Promise<string> {
-    if (!this.entry || !this.icon) throw new Error(this.reason);
-    if (destination !== 'desktop' && destination !== 'applications') throw new Error('Invalid shortcut destination.');
-    if (game.installState !== 'ready') throw new Error('Only installed, ready games can have launch shortcuts.');
-    if (!validId(game.id)) throw new Error('Invalid game shortcut ID.');
-    const directory = this.locations[destination];
-    await this.directory(directory);
+  private async gameIcon(id: string, png?: Buffer): Promise<string> {
     const iconDirectory = path.join(this.locations.userData, 'shortcuts', 'icons');
-    const gameIcon = path.join(iconDirectory, `${game.id}.png`);
-    let icon = this.icon;
+    const gameIcon = path.join(iconDirectory, `${id}.png`);
+    let icon = this.icon!;
     if (png?.length && png.length <= 4 * 1024 * 1024 && png.subarray(0, 8).toString('hex') === '89504e470d0a1a0a') {
       await this.directory(iconDirectory);
       await this.write(gameIcon, png, 0o600);
@@ -180,6 +178,36 @@ export class GameShortcuts {
             (await fs.readFile(gameIcon)).subarray(0, 8).toString('hex') === '89504e470d0a1a0a') icon = gameIcon;
       } catch { /* No cached artwork, keep the Nexus fallback. */ }
     }
+    return icon;
+  }
+  async steamLaunch(game?: Pick<Game, 'id' | 'title' | 'installState'>, png?: Buffer): Promise<SteamLaunch> {
+    if (!this.entry || !this.icon || !this.nexusEntry) throw new Error(this.reason);
+    if (game && (game.installState !== 'ready' || !validId(game.id))) throw Error('Only installed, ready games can be added to Steam.');
+    const entry = game ? this.entry : this.nexusEntry;
+    return { title: game ? game.title.replace(/[\x00-\x1f\x7f]/g, ' ').trim().slice(0, 256) || 'Xodus Nexus game' : 'Xodus Nexus',
+      executable: steamArgument('/bin/sh'), options: steamArgument(entry) + (game ? ' ' + steamArgument(game.id) : ''),
+      directory: path.dirname(entry), identity: this.profileId + ':' + (game?.id ?? 'launcher'),
+      icon: game ? await this.gameIcon(game.id, png) : this.icon };
+  }
+  async steamDesktop(game?: Pick<Game, 'id' | 'title' | 'installState'>, png?: Buffer): Promise<{ launch: SteamLaunch; file: string }> {
+    const launch = await this.steamLaunch(game, png);
+    const directory = path.join(this.locations.userData, 'shortcuts', 'steam');
+    await this.directory(directory);
+    const file = path.join(directory, `${game?.id ?? 'launcher'}.desktop`);
+    const identity = `X-Xodus-Nexus-Steam=${game?.id ?? 'launcher'}`;
+    const entry = game ? this.entry! : this.nexusEntry!;
+    const body = `[Desktop Entry]\nType=Application\nName=${desktopValue(launch.title)}\nExec=/bin/sh ${desktopArgument(entry)}${game ? ' ' + desktopArgument(game.id) : ''}\nPath=${desktopValue(launch.directory)}\nIcon=${desktopValue(launch.icon)}\nTerminal=false\nCategories=Game;\n${this.marker}\n${identity}\n`;
+    await this.write(file, body, 0o600, [this.marker, identity]);
+    return { launch, file };
+  }
+  async create(game: Pick<Game, 'id' | 'title' | 'installState'>, destination: ShortcutDestination, png?: Buffer): Promise<string> {
+    if (!this.entry || !this.icon) throw new Error(this.reason);
+    if (destination !== 'desktop' && destination !== 'applications') throw new Error('Invalid shortcut destination.');
+    if (game.installState !== 'ready') throw new Error('Only installed, ready games can have launch shortcuts.');
+    if (!validId(game.id)) throw new Error('Invalid game shortcut ID.');
+    const directory = this.locations[destination];
+    await this.directory(directory);
+    const icon = await this.gameIcon(game.id, png);
     const title = game.title.replace(/[\0\r\n\t]/g, ' ').trim() || 'Xodus Nexus game';
     // Keep the executable field constant: desktop loaders may check it before
     // expanding %% in arguments. /bin/sh runs a file, never a shell -c string.
