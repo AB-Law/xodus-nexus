@@ -23,6 +23,7 @@ const defaultSettings: Settings = {
 };
 
 export class StateStore {
+  private writes: Promise<void> = Promise.resolve();
   private state: PersistedState = { games: [], downloads: [], settings: defaultSettings };
   private readonly file: string;
 
@@ -41,7 +42,7 @@ export class StateStore {
           };
           return current;
         }) : [],
-        downloads: Array.isArray(parsed.downloads) ? parsed.downloads.slice(-30).map((task: DownloadTask) =>
+        downloads: Array.isArray(parsed.downloads) ? parsed.downloads.map((task: DownloadTask) =>
           ['running', 'paused', 'queued'].includes(task.status) ? {
             ...task, status: 'paused' as const, canPause: true, controlPending: false,
             transferRate: undefined, phase: 'Paused — resume to reconnect and restore saved download checkpoints',
@@ -57,11 +58,16 @@ export class StateStore {
   get downloads(): DownloadTask[] { return this.state.downloads; }
   get settings(): Settings { return this.state.settings; }
 
-  async save(): Promise<void> {
-    await fs.mkdir(path.dirname(this.file), { recursive: true });
-    const temporary = `${this.file}.tmp`;
-    await fs.writeFile(temporary, JSON.stringify(this.state, null, 2), { mode: 0o600 });
-    await fs.rename(temporary, this.file);
+  save(): Promise<void> {
+    const data = JSON.stringify(this.state, null, 2);
+    const write = this.writes.then(async () => {
+      await fs.mkdir(path.dirname(this.file), { recursive: true });
+      const temporary = `${this.file}.tmp`;
+      await fs.writeFile(temporary, data, { mode: 0o600 });
+      await fs.rename(temporary, this.file);
+    });
+    this.writes = write.catch(() => {});
+    return write;
   }
 
   async setSettings(patch: Partial<Settings>): Promise<Settings> {
@@ -93,7 +99,8 @@ export class StateStore {
 
   async addDownload(task: DownloadTask): Promise<void> {
     this.state.downloads.unshift(task);
-    this.state.downloads = this.state.downloads.slice(0, 30);
+    let finished = 0;
+    this.state.downloads = this.state.downloads.filter(entry => ['running', 'queued', 'paused'].includes(entry.status) || finished++ < 30);
     await this.save();
   }
 

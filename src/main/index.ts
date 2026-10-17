@@ -29,6 +29,7 @@ import { LauncherUpdater } from './launcher-update.js';
 import { readDiagnosticTail } from './diagnostic-log.js';
 import { queryGameUpdate } from './game-updates.js';
 import { DownloadProgress, PROGRESS_PREFIX } from './download-progress.js';
+import { InstallQueue, assertActivityCompatible, assertInstallDestination, canonicalInstallPath, installPathsOverlap } from './install-queue.js';
 import { GameShortcuts, shortcutArguments, shortcutInstanceData, shortcutInstanceRequest, type ShortcutDestination } from './game-shortcuts.js';
 import { ShortcutLaunch } from './shortcut-launch.js';
 import { loadShortcutIcon } from './shortcut-icon.js';
@@ -55,6 +56,7 @@ const operations = new Map<string, ChildProcessWithoutNullStreams>();
 const gameProcesses = new Map<string, GameProcess>();
 const cancelledDownloads = new Set<string>();
 const downloadControls = new Map<string, (paused: boolean) => Promise<void>>();
+const installQueue = new InstallQueue(() => finishShortcutSession());
 const serviceSessions = new Map<string, XodusServiceSession>();
 const preparationControllers = new Map<string, AbortController>();
 let gameOperation: GameOperation | undefined;
@@ -130,7 +132,7 @@ async function shortcutError(error: unknown): Promise<void> {
 }
 function finishShortcutSession(): void {
   // Account service and game-process cleanup must finish before normal quit.
-  if (shortcutOnly && !shortcutLaunch.preparing && !preparingLaunch && !finalizingGame && operations.size === 0 && serviceSessions.size === 0) app.quit();
+  if (shortcutOnly && !shortcutLaunch.preparing && !preparingLaunch && !finalizingGame && installQueue.size === 0 && operations.size === 0 && serviceSessions.size === 0) app.quit();
 }
 function receiveLaunchRequest(id?: string): void {
   if (!launchReady) { pendingRequests.push(id); return; }
@@ -214,7 +216,7 @@ function requireBackend(command: keyof typeof backend.current.capabilities): str
   return status.binaryPath;
 }
 
-function ensureIdle(): void {
+function ensureIdle(mode?: 'install' | 'launch'): void {
   if (authState.running) throw Error('A sign-in operation is already in progress.');
   if (shutdownStarted) throw Error('The launcher is closing.');
   if (preparingInstall || preparingContent) throw new Error('An installation is being prepared.');
@@ -223,9 +225,7 @@ function ensureIdle(): void {
   if (launcherUpdater?.state.updating) throw new Error('The launcher is being updated.');
   if (checkingGameUpdates) throw new Error('A game update check is in progress.');
   if (gameRemovalInProgress) throw new Error('A game is being removed. Wait for it to finish.');
-  if (operations.size > 0 || (gameOperation && ['preparing', 'running', 'stopping'].includes(gameOperation.status))) {
-    throw new Error('Another Xodus operation is active. Wait for it to finish or stop it first.');
-  }
+  assertActivityCompatible(operations.keys(), store.downloads, gameOperation, installQueue.size, mode);
   if (backend.current.updating) throw new Error('The backend is being updated.');
   if (runtime.current.updating) throw new Error('Xodus Runtime is being installed.');
 }
@@ -325,7 +325,7 @@ function requestAuth(command: 'login' | 'logout'): Promise<void> {
 }
 
 async function startInstall(request: InstallRequest, updateGame?: Game): Promise<string> {
-  ensureIdle();
+  ensureIdle(updateGame ? undefined : 'install');
   preparingInstall = true;
   try { return await prepareInstall(request, updateGame); }
   finally { preparingInstall = false; }
@@ -381,8 +381,14 @@ async function prepareInstall(request: InstallRequest, updateGame?: Game, conten
     } else selectedContentId = installSelection(await readInstallPlan(binary, productId, market));
     if (binary !== backend.current.binaryPath || market !== currentMarket()) throw Error('Backend or Store market changed. Try installing again.');
   }
-  const destination = path.resolve(request.destination.trim());
-  if (!path.isAbsolute(destination)) throw new Error('The destination must be an absolute path.');
+  const activeTasks = store.downloads.filter(task => ['running', 'queued', 'paused'].includes(task.status));
+  if (activeTasks.length >= 100) throw Error('The install queue is full. Cancel an installation before adding another.');
+  if (activeTasks.some(task => task.productId === productId)) throw Error('This game is already in the install queue.');
+  const destination = await assertInstallDestination(request.destination.trim(), [
+    ...activeTasks.map(task => task.destination),
+    ...store.games.filter(game => game.id !== updateGame?.id && game.id !== content?.game.id).map(game => game.path),
+    app.getPath('userData'), store.settings.runtimeRoot,
+  ]);
   if (updateGame) {
     const actual = await fs.realpath(destination);
     if (actual !== await fs.realpath(updateGame.path)) throw new Error('Update destination differs from the installed game.');
@@ -395,7 +401,7 @@ async function prepareInstall(request: InstallRequest, updateGame?: Game, conten
       return (/xodus-cli\s+run\s/.test(command) || /(?:wine|proton)/.test(command) &&
         (command.includes(actual.toLowerCase()) || executable.length > 0 && command.includes(executable)));
     })) throw new Error('A game process is active. Close the game before updating files in place.');
-  } else await fs.mkdir(destination, { recursive: true });
+  }
   const id = randomUUID();
   const task: DownloadTask = {
     id,
@@ -406,13 +412,42 @@ async function prepareInstall(request: InstallRequest, updateGame?: Game, conten
     selectedContentId,
     selectionMarket: selectedContentId ? market : undefined,
     destination,
-    status: 'running',
+    status: 'queued',
     progress: null,
-    phase: updateGame ? 'Checking installed files with Xodus…' : 'Starting Xodus streaming…',
+    phase: 'Waiting in install queue',
     log: [],
     startedAt: new Date().toISOString(),
   };
   await store.addDownload(task);
+  const identity = `${authState.username}:${binary}:${market}`;
+  const isCancelled = () => task.status === 'cancelled';
+  installQueue.enqueue({ id, run: async () => {
+    if (shutdownStarted) throw Error('The launcher is closing.');
+    if (identity !== `${authState.username}:${backend.current.binaryPath}:${currentMarket()}`) throw Error('Account, backend or Store market changed. Retry the installation.');
+    if (await backend.externalDownloadRunning()) throw Error('Another Xodus download is running outside this queue.');
+    await assertInstallDestination(destination, store.games.filter(game => game.id !== updateGame?.id && game.id !== content?.game.id).map(game => game.path));
+    if (gameOperation && ['preparing', 'running', 'stopping'].includes(gameOperation.status)) {
+      const playing = store.games.find(game => game.id === gameOperation?.gameId);
+      if (playing && (playing.id === content?.game.id || installPathsOverlap(destination, await canonicalInstallPath(playing.path)))) throw Error('Close this game before changing its installed files.');
+    }
+    if (shutdownStarted || isCancelled()) return;
+    await fs.mkdir(destination, { recursive: true });
+    if (shutdownStarted || isCancelled()) return;
+    await store.updateDownload(id, { status: 'running', phase: updateGame ? 'Checking installed files with Xodus…' : 'Starting Xodus streaming…' });
+    if (shutdownStarted || isCancelled()) return;
+    await runDownload(task, binary, market, updateGame, content);
+  }, failed: async error => {
+    if (isCancelled()) return;
+    task.status = 'failed'; task.error = (error as Error).message; task.phase = 'Installation could not be started';
+    task.finishedAt = new Date().toISOString();
+    await store.updateDownload(id, task); emitSnapshot();
+  } });
+  emitSnapshot();
+  return id;
+}
+
+async function runDownload(task: DownloadTask, binary: string, market: string, updateGame?: Game, content?: { game: Game; pkg: ContentPackage; manager: GameContent }): Promise<void> {
+  const { id, productId, destination, selectedContentId } = task;
   const structured = Boolean(backend.current.capabilities.streamingProgressJson);
   const controllable = structured && Boolean(backend.current.capabilities.streamingControls);
   if (!structured) task.log.push('Update the Nexus backend in Settings for numeric progress and Pause/Resume. This download can continue without them.');
@@ -484,7 +519,7 @@ async function prepareInstall(request: InstallRequest, updateGame?: Game, conten
     if (pending) { clearTimeout(pending.timer); pending.reject(new Error('The download has ended.')); pending = undefined; }
     task.canPause = false; task.controlPending = false;
   };
-  void tracked.result.then(async (result) => {
+  await tracked.result.then(async (result) => {
     finishControls();
     const cancelled = cancelledDownloads.delete(id);
     task.exitCode = result.code;
@@ -527,7 +562,7 @@ async function prepareInstall(request: InstallRequest, updateGame?: Game, conten
     await store.updateDownload(id, task);
     emitSnapshot();
   });
-  return id;
+  finishShortcutSession();
 }
 
 async function importGame(input?: string): Promise<Game | null> {
@@ -581,7 +616,7 @@ async function gameTitleId(game: Game): Promise<string | undefined> {
 }
 
 async function launchGame(id: string): Promise<void> {
-  ensureIdle();
+  ensureIdle('launch');
   preparingLaunch = true;
   try { await prepareGameLaunch(id); }
   finally { preparingLaunch = false; }
@@ -590,6 +625,10 @@ async function launchGame(id: string): Promise<void> {
 async function prepareGameLaunch(id: string): Promise<void> {
   const game = store.games.find((entry) => entry.id === id);
   if (!game) throw new Error('Game not found.');
+  const target = await canonicalInstallPath(game.path);
+  for (const task of store.downloads.filter(task => ['running', 'queued', 'paused'].includes(task.status))) {
+    if (task.gameId === id || installPathsOverlap(target, await canonicalInstallPath(task.destination))) throw Error('Finish or cancel this game\'s installation before playing it.');
+  }
   const inspected = await inspectGameDirectory(game.path);
   await store.patchGame(id, {
     installState: inspected.installState,
@@ -1024,8 +1063,9 @@ function registerIpc(): void {
     const child = operations.get(id);
     if (!child) {
       const task = store.downloads.find(entry => entry.id === id);
-      if (task?.status !== 'paused') throw new Error('The download is no longer running.');
-      await store.updateDownload(id, { status: 'cancelled', canPause: false, phase: 'Cancelled; downloaded files and checkpoints were kept.' });
+      if (!task || task.status !== 'paused' && task.status !== 'queued' && !(task.status === 'running' && installQueue.has(id))) throw new Error('The download is no longer running.');
+      installQueue.cancel(id);
+      await store.updateDownload(id, { status: 'cancelled', canPause: false, finishedAt: new Date().toISOString(), phase: 'Cancelled; downloaded files and checkpoints were kept.' });
       emitSnapshot(); return;
     }
     cancelledDownloads.add(id);
@@ -1182,6 +1222,7 @@ function registerIpc(): void {
     emitSnapshot();
   });
   ipcMain.handle('update-settings', async (_event, patch: Partial<Settings>) => {
+    if ((['market', 'winePath', 'externalXodusRoot', 'runtimeRoot'] as const).some(key => patch[key] !== undefined && patch[key] !== store.settings[key])) ensureIdle();
     const allowed: Partial<Settings> = {};
     if (typeof patch.installRoot === 'string') allowed.installRoot = path.resolve(patch.installRoot);
     if (typeof patch.market === 'string' && /^[A-Za-z-]{2,20}$/.test(patch.market)) allowed.market = patch.market;
@@ -1427,8 +1468,8 @@ app.whenReady().then(async () => {
       });
     } catch { /* Keep an unavailable imported entry visible. */ }
   }
-  runtime = new RuntimeManager(store.settings.runtimeRoot, emitLog, () => operations.size > 0 || backend?.current.updating === true);
-  backend = new BackendManager(app.getPath('userData'), store.settings.externalXodusRoot, emitLog, () => operations.size > 0 || runtime?.current.updating === true);
+  runtime = new RuntimeManager(store.settings.runtimeRoot, emitLog, () => operations.size > 0 || installQueue.size > 0 || preparingInstall || backend?.current.updating === true);
+  backend = new BackendManager(app.getPath('userData'), store.settings.externalXodusRoot, emitLog, () => operations.size > 0 || installQueue.size > 0 || preparingInstall || runtime?.current.updating === true);
   await backend.refresh();
   await runtime.refresh();
   void backend.checkUpdate().then(async () => {
@@ -1468,9 +1509,11 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', (event) => {
+  installQueue.stop();
+  installQueue.stop();
   accountLibrary.reset();
   accountProfile?.cancel();
-  if (shutdownStarted || (!authJob && operations.size === 0 && serviceSessions.size === 0 && !checkingGameUpdates && !launcherUpdater?.state.updating)) return;
+  if (shutdownStarted || (!authJob && !preparingInstall && installQueue.size === 0 && operations.size === 0 && serviceSessions.size === 0 && !checkingGameUpdates && !launcherUpdater?.state.updating)) return;
   event.preventDefault();
   shutdownStarted = true;
   void (async () => {
