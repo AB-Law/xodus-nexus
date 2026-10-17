@@ -9,6 +9,13 @@ it('keeps one My Library and Store navigation, no separate Game Pass page',()=>{
   expect(html).toContain('My Library'); expect(html).toContain('Store');
   expect(html).not.toContain('<span>Game Pass</span>');
 });
+
+it('counts waiting installations in the queue shortcut while a game is running', () => {
+  const data = demoSnapshot();
+  data.downloads = [{ ...data.downloads[0], status: 'running' }, { ...data.downloads[0], id: 'waiting', status: 'queued' }];
+  const html = renderToStaticMarkup(<Sidebar data={data} page="library" go={() => {}} />);
+  expect(html).toContain('Install Queue · 2');
+});
 it('restores the parent-owned filters after the library is recreated',()=>{
   const filters: LibraryFilters = { kind: 'owned', playState: 'installed', query: 'Edition' };
   const data=demoSnapshot(); data.auth={running:false,stored:false,note:''};

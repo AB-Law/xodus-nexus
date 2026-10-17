@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Keep library cards in place when loading more games and fix opening game options with a single click or tap. Thanks @Techzilla44 for reporting these issues.
 - Queue multiple game installations and download other games while playing. Keep queued installations cancellable.
 - Preserve cover proportions in Steam portrait library cards.
 - Add games and Nexus to Steam with library artwork, including while Steam is running.

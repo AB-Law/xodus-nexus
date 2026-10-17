@@ -34,3 +34,13 @@ it('offers both game shortcut destinations only for ready installations', () => 
     expect(html).toMatch(installState === 'ready' ? /<button role="menuitem"><svg[^]*?Create desktop shortcut/ : /<button role="menuitem" disabled=""><svg[^]*?Create desktop shortcut/);
   }
 });
+
+it('marks single-click menu triggers and menu boundaries for outside-pointer dismissal', () => {
+  const data = demoSnapshot();
+  const library = renderToStaticMarkup(<LibraryPage data={data} toast={() => {}} />);
+  expect(library).toContain('data-game-menu-trigger');
+  expect(library).toContain('aria-haspopup="menu"');
+  const menu = renderToStaticMarkup(<GameContextMenu x={0} y={0} game={data.games[0]} busy={false}
+    onBrowse={() => {}} onSettings={() => {}} onInstallVc={() => {}} onRemove={() => {}} />);
+  expect(menu).toContain('data-game-menu'); expect(menu).toContain('role="menu"');
+});
