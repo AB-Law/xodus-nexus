@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, screen, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, powerSaveBlocker, screen, shell } from 'electron';
 import { constants, createWriteStream, promises as fs, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -30,6 +30,7 @@ import { readDiagnosticTail } from './diagnostic-log.js';
 import { queryGameUpdate } from './game-updates.js';
 import { DownloadProgress, PROGRESS_PREFIX } from './download-progress.js';
 import { InstallQueue, assertActivityCompatible, assertInstallDestination, canonicalInstallPath, installPathsOverlap } from './install-queue.js';
+import { GameDisplayBlocker } from './game-display.js';
 import { GameShortcuts, shortcutArguments, shortcutInstanceData, shortcutInstanceRequest, type ShortcutDestination } from './game-shortcuts.js';
 import { ShortcutLaunch } from './shortcut-launch.js';
 import { loadShortcutIcon } from './shortcut-icon.js';
@@ -57,6 +58,7 @@ const gameProcesses = new Map<string, GameProcess>();
 const cancelledDownloads = new Set<string>();
 const downloadControls = new Map<string, (paused: boolean) => Promise<void>>();
 const installQueue = new InstallQueue(() => finishShortcutSession());
+const gameDisplay = new GameDisplayBlocker(powerSaveBlocker);
 const serviceSessions = new Map<string, XodusServiceSession>();
 const preparationControllers = new Map<string, AbortController>();
 let gameOperation: GameOperation | undefined;
@@ -690,6 +692,7 @@ async function prepareGameLaunch(id: string): Promise<void> {
   emitSnapshot();
   let serviceSession: XodusServiceSession | undefined;
   let launchWrapper: GameWrapper | undefined;
+  let releaseDisplay = () => {};
   try {
     const legacyPrefixRoot = path.join(dataRoot, 'prefixes', game.id);
     const compatibilityDataPath = path.join(dataRoot, 'compatdata', game.id);
@@ -738,6 +741,7 @@ async function prepareGameLaunch(id: string): Promise<void> {
     }, { stopPrefix: protonRunner?.stopPrefix });
     operations.set(operationId, tracked.child);
     gameProcesses.set(operationId, tracked);
+    releaseDisplay = gameDisplay.acquire();
     gameOperation.status = 'running';
     gameOperation.phase = 'Xodus is running; waiting for the game window…';
     emitSnapshot();
@@ -762,6 +766,7 @@ async function prepareGameLaunch(id: string): Promise<void> {
       gameOperation.phase = gameOperation.error;
       gameOperation.finishedAt = new Date().toISOString();
     }).finally(async () => {
+      releaseDisplay();
       finalizingGame = true;
       try {
         operations.delete(operationId);
@@ -779,6 +784,7 @@ async function prepareGameLaunch(id: string): Promise<void> {
       } finally { finalizingGame = false; finishShortcutSession(); }
     });
   } catch (error) {
+    releaseDisplay();
     await launchWrapper?.cleanup().catch(() => undefined);
     if (serviceSession) {
       await serviceSession.stop().catch(() => undefined);
@@ -1507,6 +1513,8 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin' && !shortcutOnly) app.quit();
 });
+
+app.on('will-quit', () => gameDisplay.stop());
 
 app.on('before-quit', (event) => {
   installQueue.stop();

@@ -20,6 +20,18 @@ it('leaves the default launch command unchanged without creating files',async()=
   expect((await prepareGameWrapper(wine,undefined,dir)).command).toBe(wine);
   await expect(stat(dir)).rejects.toThrow();
 });
+it('applies the DualSense HIDRAW workaround per game without changing inherited Steam Input or other controllers', async () => {
+  const { root, wine, env } = await setup();
+  await writeFile(wine, '#!/bin/sh\nprintf "%s\\n" "$PROTON_DISABLE_HIDRAW" "$SteamGameId" "$SDL_GAMECONTROLLERCONFIG"\n');
+  const source = { ...env, PROTON_DISABLE_HIDRAW: '1', SteamGameId: '16968485195965530112', SDL_GAMECONTROLLERCONFIG: 'mapping with spaces' };
+  const wrapper = await prepareGameWrapper(wine, { ...defaultLaunchTools, launchOptions: 'PROTON_DISABLE_HIDRAW=0x054c/0x0ce6 %command%' }, path.join(root, 'wrappers'), source);
+  const changed = await run(wrapper.command, [], { env: source });
+  expect(changed.code).toBe(0);
+  expect(changed.output.trimEnd()).toBe('0x054c/0x0ce6\n16968485195965530112\nmapping with spaces');
+  const unmodified = await prepareGameWrapper(wine, undefined, path.join(root, 'other'), source);
+  expect((await run(unmodified.command, [], { env: source })).output.trimEnd()).toBe('1\n16968485195965530112\nmapping with spaces');
+  expect(source.PROTON_DISABLE_HIDRAW).toBe('1');
+});
 it('preserves quoted environment, literal arguments, original identity and actual exit status',async()=>{
   const {root,wine,env}=await setup();
   const wrapper=await prepareGameWrapper(wine,{...defaultLaunchTools,launchOptions:'DXVK_HUD="fps,frametimes" WINEDLLOVERRIDES="dxgi=n,b;winhttp=b" %command% --launcher-skip "two words" "literal $HOME"'},path.join(root,'wrappers'),env);

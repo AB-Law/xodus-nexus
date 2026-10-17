@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   downloads: [] as { args: string[]; progress: (paused?: boolean, phase?: string) => void; finish: (code: number) => void }[],
   game: undefined as undefined | { finish: () => void },
   quit: vi.fn(),
+  blockDisplay: vi.fn(() => 7), releaseDisplay: vi.fn(() => true),
 }));
 vi.mock('electron', () => ({
   app: { requestSingleInstanceLock: () => true, getPath: (name: string) => path.join(h.root, name),
@@ -23,7 +24,7 @@ vi.mock('electron', () => ({
   BrowserWindow: class { webContents = { on: vi.fn(), send: vi.fn(), setWindowOpenHandler: vi.fn() };
     on() {} once() {} show() {} focus() {} isDestroyed() { return false; } async loadFile() {} },
   screen: { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } }) },
-  dialog: {}, nativeImage: {}, shell: {},
+  dialog: {}, nativeImage: {}, shell: {}, powerSaveBlocker: { start: h.blockDisplay, stop: h.releaseDisplay },
 }));
 vi.mock('./backend.js', () => ({ LINUX_RUN_PATCH: 'test-patch', BackendManager: class {
   get current() { return h.backend; } async refresh() {} async checkUpdate() {} async externalDownloadRunning() { return false; }
@@ -85,7 +86,9 @@ afterAll(async () => {
 
 it('runs real queue IPC, pause/cancel/failure/restart and simultaneous play/download safely', async () => {
   const first = await install('A'); await vi.waitFor(() => expect(h.downloads).toHaveLength(1));
+  expect(h.blockDisplay).not.toHaveBeenCalled();
   await ipc('launch-game', 'sample'); expect(snapshot().gameOperation.status).toBe('running');
+  expect(h.blockDisplay).toHaveBeenCalledWith('prevent-display-sleep');
   const cancel = await install('B'), next = await install('C');
   expect(h.downloads).toHaveLength(1); expect(snapshot().downloads.find((task: any) => task.id === next).status).toBe('queued');
   await expect(install('C')).rejects.toThrow('already in');
@@ -110,4 +113,5 @@ it('runs real queue IPC, pause/cancel/failure/restart and simultaneous play/down
   await install('F'); const preventDefault = vi.fn(); h.events.get('before-quit')!({ preventDefault });
   await vi.waitFor(() => expect(h.quit).toHaveBeenCalled()); expect(preventDefault).toHaveBeenCalled();
   expect(h.downloads).toHaveLength(4);
+  expect(h.releaseDisplay).toHaveBeenCalledWith(7);
 });
