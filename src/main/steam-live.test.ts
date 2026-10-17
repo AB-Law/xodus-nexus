@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { constants, promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { activeSteamAccount, addLiveSteamShortcut, recentSteamUser, requestSteamImport } from './steam-live.js';
-import { findSteamLaunch, planSteamShortcut, type SteamLaunch } from './steam-shortcuts.js';
+import { addLiveSteamShortcut, requestSteamImport } from './steam-live.js';
+import { findSteamLaunch, findSteamLaunches, planSteamShortcut, type SteamLaunch } from './steam-shortcuts.js';
 
 const { execute } = vi.hoisted(() => ({ execute: vi.fn() }));
 vi.mock('node:child_process', async original => ({ ...await original<typeof import('node:child_process')>(), execFile: execute }));
@@ -20,7 +20,7 @@ const uri = `steam://rungameid/${(0xf1234567n << 32n) | 0x02000000n}`;
 describe('live Steam confirmation', () => {
   it('waits for Steam to write its real assigned ID, never modifying its VDF itself', async () => {
     const request = vi.fn(async () => { await fs.writeFile(path.join(root, 'shortcuts.vdf'), assigned(), { mode: 0o600 }); });
-    expect(await addLiveSteamShortcut(root, launch, '/private/game.desktop', {}, request)).toBe(uri);
+    expect(await addLiveSteamShortcut([root], launch, '/private/game.desktop', {}, request)).toBe(uri);
     expect(request).toHaveBeenCalledWith('/private/game.desktop');
     expect(await fs.readFile(path.join(root, 'shortcuts.vdf'))).toEqual(assigned());
     expect((await fs.readdir(root)).some(file => file.includes('backup') || file.includes('lock'))).toBe(false);
@@ -31,53 +31,135 @@ describe('live Steam confirmation', () => {
     expect(findSteamLaunch(actual, launch)).toBe(0xf1234567);
     await fs.writeFile(path.join(root, 'shortcuts.vdf'), actual, { mode: 0o600 });
     const request = vi.fn();
-    expect(await addLiveSteamShortcut(root, launch, '/private/game.desktop', {}, request)).toBe(uri);
+    const choose = vi.fn(async () => root);
+    expect(await addLiveSteamShortcut([root], launch, '/private/game.desktop', {}, request, 0, choose)).toBe(uri);
+    expect(choose).toHaveBeenCalledWith([root]);
     expect(request).not.toHaveBeenCalled();
     expect(await fs.readFile(path.join(root, 'shortcuts.vdf'))).toEqual(actual);
   });
   it('does not pretend an accepted URI alone means the game was added', async () => {
     const request = vi.fn(async () => {});
-    await expect(addLiveSteamShortcut(root, launch, '/private/game.desktop', {}, request, 0)).rejects.toThrow('has not confirmed');
+    await expect(addLiveSteamShortcut([root], launch, '/private/game.desktop', {}, request, 0)).rejects.toThrow('has not confirmed');
     expect(request).toHaveBeenCalled();
     expect(await fs.readdir(root)).toEqual([]);
   });
   it('releases its import guard after a request failure', async () => {
-    await expect(addLiveSteamShortcut(root, launch, '/private/game.desktop', {}, async () => { throw Error('request failed'); })).rejects.toThrow('request failed');
-    expect(await addLiveSteamShortcut(root, launch, '/private/game.desktop', {}, async () => {
+    await expect(addLiveSteamShortcut([root], launch, '/private/game.desktop', {}, async () => { throw Error('request failed'); })).rejects.toThrow('request failed');
+    expect(await addLiveSteamShortcut([root], launch, '/private/game.desktop', {}, async () => {
       await fs.writeFile(path.join(root, 'shortcuts.vdf'), assigned(), { mode: 0o600 });
     })).toBe(uri);
   });
   it('rejects overlapping imports rather than racing the shared client handshake', async () => {
     let release: () => void = () => {};
     const request = vi.fn(() => new Promise<void>(resolve => { release = resolve; }));
-    const first = addLiveSteamShortcut(root, launch, '/private/game.desktop', {}, request);
+    const first = addLiveSteamShortcut([root], launch, '/private/game.desktop', {}, request);
     await vi.waitFor(() => expect(request).toHaveBeenCalled());
-    await expect(addLiveSteamShortcut(root, launch, '/other.desktop', {}, request)).rejects.toThrow('in progress');
+    await expect(addLiveSteamShortcut([root], launch, '/other.desktop', {}, request)).rejects.toThrow('in progress');
     await fs.writeFile(path.join(root, 'shortcuts.vdf'), assigned(), { mode: 0o600 });
     release(); expect(await first).toBe(uri);
   });
 });
 
-describe('active Steam profile', () => {
-  const metadata = (recent = '1') => `"users" { "76561197960265851" { "AccountName" "not logged" "PersonaName" "Name with {braces} and \\\"quotes\\\"" "MostRecent" "${recent}" } }`;
-  it('reads the recent account ID without exposing names and handles quoted braces/comments', () => {
-    expect(recentSteamUser('// comment\n' + metadata())).toBe('123');
-    expect(recentSteamUser(metadata('0'))).toBeUndefined();
-  });
-  it.each(['', 'not a VDF', '"users" {', '"users" {} trailing', '"users" {} "users" {}'])('rejects malformed metadata or has no active profile: %j', value => {
-    if (value === '') expect(recentSteamUser(value)).toBeUndefined();
-    else expect(() => recentSteamUser(value)).toThrow();
-  });
-  it('selects only the currently used profile from several existing accounts', async () => {
-    const steam = path.join(root, 'Steam');
-    const accounts = ['123', '456'].map(id => path.join(steam, 'userdata', id, 'config'));
+describe('Steam-owned profile selection', () => {
+  async function profiles() {
+    const accounts = ['123', '456'].map(id => path.join(root, 'userdata', id, 'config'));
     for (const account of accounts) await fs.mkdir(account, { recursive: true, mode: 0o700 });
-    await fs.mkdir(path.join(steam, 'config'), { mode: 0o700 });
-    await fs.writeFile(path.join(steam, 'config/loginusers.vdf'), metadata(), { mode: 0o600 });
-    expect(await activeSteamAccount(accounts)).toBe(accounts[0]);
+    return accounts;
+  }
+  const cover = Buffer.from('89504e470d0a1a0a', 'hex');
+  it('observes the current session import across saved profiles without reading login preferences', async () => {
+    const accounts = await profiles();
+    // No loginusers.vdf, MostRecent, AutoLogin or registry is required.
+    const request = vi.fn(async () => { await fs.writeFile(path.join(accounts[1], 'shortcuts.vdf'), assigned(), { mode: 0o600 }); });
+    expect(await addLiveSteamShortcut(accounts, launch, '/private/game.desktop', { cover }, request, 0)).toBe(uri);
+    expect(request).toHaveBeenCalledOnce();
+    expect(await fs.readFile(path.join(accounts[1], 'grid/4045620583p.png'))).toEqual(cover);
+    expect(await fs.readdir(accounts[0])).toEqual([]);
   });
-  it('does not silently choose an ambiguous profile', async () => {
-    await expect(activeSteamAccount([path.join(root, 'one'), path.join(root, 'two')])).rejects.toThrow('identify');
+  it('never treats an inactive existing shortcut as acknowledgment of a new import', async () => {
+    const accounts = await profiles();
+    await fs.writeFile(path.join(accounts[0], 'shortcuts.vdf'), assigned(), { mode: 0o600 });
+    const choose = vi.fn(async () => undefined);
+    const request = vi.fn(async () => { await fs.writeFile(path.join(accounts[1], 'shortcuts.vdf'), assigned(), { mode: 0o600 }); });
+    expect(await addLiveSteamShortcut(accounts, launch, '/private/game.desktop', { cover }, request, 0, choose)).toBe(uri);
+    expect(choose).toHaveBeenCalledWith([accounts[0]]);
+    expect(await fs.readdir(accounts[0])).toEqual(['shortcuts.vdf']);
+    expect(await fs.readFile(path.join(accounts[1], 'grid/4045620583p.png'))).toEqual(cover);
+  });
+  it('requires explicit reuse and never duplicates a shortcut after account switching', async () => {
+    const accounts = await profiles();
+    for (const account of accounts) await fs.writeFile(path.join(account, 'shortcuts.vdf'), assigned(), { mode: 0o600 });
+    const request = vi.fn();
+    await expect(addLiveSteamShortcut(accounts, launch, '/private/game.desktop', {}, request, 0)).rejects.toThrow('Choose');
+    expect(await addLiveSteamShortcut(accounts, launch, '/private/game.desktop', { cover }, request, 0, async existing => existing[1])).toBe(uri);
+    expect(request).not.toHaveBeenCalled();
+    expect(await fs.readdir(accounts[0])).toEqual(['shortcuts.vdf']);
+  });
+  it('ignores old matches and detects a newly assigned ID even in a profile with a duplicate', async () => {
+    const [account] = await profiles();
+    const old = assigned(); await fs.writeFile(path.join(account, 'shortcuts.vdf'), old, { mode: 0o600 });
+    // Append a second real matching entry with another Steam-assigned ID.
+    const block = Buffer.from(old.subarray(Buffer.byteLength('\0shortcuts\0'), -2));
+    block[1] = '1'.charCodeAt(0);
+    block.writeUInt32LE(0xf1234568, block.indexOf(Buffer.from('appid\0')) + 6);
+    const doubled = Buffer.concat([old.subarray(0, -2), block, old.subarray(-2)]);
+    expect(findSteamLaunches(doubled, launch)).toEqual([0xf1234567, 0xf1234568]);
+    const request = async () => { await fs.writeFile(path.join(account, 'shortcuts.vdf'), doubled); };
+    expect(await addLiveSteamShortcut([account], launch, '/private/game.desktop', {}, request, 0, async () => undefined))
+      .toBe(`steam://rungameid/${(0xf1234568n << 32n) | 0x02000000n}`);
+  });
+  it('rejects more than one changed profile without writing artwork or guessing', async () => {
+    const accounts = await profiles();
+    const request = async () => { for (const account of accounts) await fs.writeFile(path.join(account, 'shortcuts.vdf'), assigned(), { mode: 0o600 }); };
+    await expect(addLiveSteamShortcut(accounts, launch, '/private/game.desktop', { cover }, request, 0)).rejects.toThrow('more than one');
+    for (const account of accounts) expect(await fs.readdir(account)).toEqual(['shortcuts.vdf']);
+  });
+  it('offers explicit selection if more than one profile confirms a new entry', async () => {
+    const accounts = await profiles();
+    const request = async () => { for (const account of accounts) await fs.writeFile(path.join(account, 'shortcuts.vdf'), assigned(), { mode: 0o600 }); };
+    const choose = vi.fn(async (matching: string[]) => matching[1]);
+    expect(await addLiveSteamShortcut(accounts, launch, '/private/game.desktop', { cover }, request, 0, choose)).toBe(uri);
+    expect(choose).toHaveBeenCalledWith(accounts);
+    expect(await fs.readdir(accounts[0])).toEqual(['shortcuts.vdf']);
+  });
+  it('retries partially written profile files and never writes optional artwork before a complete read', async () => {
+    const accounts = await profiles();
+    let repaired: Promise<void> = Promise.resolve();
+    const request = async () => {
+      await fs.writeFile(path.join(accounts[0], 'shortcuts.vdf'), assigned(), { mode: 0o600 });
+      await fs.writeFile(path.join(accounts[1], 'shortcuts.vdf'), 'partial', { mode: 0o600 });
+      repaired = new Promise<void>((resolve, reject) => setTimeout(() => {
+        fs.writeFile(path.join(accounts[1], 'shortcuts.vdf'), planSteamShortcut(undefined, { ...launch, options: 'other' }).bytes)
+          .then(resolve, reject);
+      }, 30));
+    };
+    expect(await addLiveSteamShortcut(accounts, launch, '/private/game.desktop', { cover }, request, 1000)).toBe(uri);
+    await repaired;
+    expect(await fs.readdir(accounts[1])).toEqual(['shortcuts.vdf']);
+  });
+  it('does not confuse an existing entry or an unrelated file change with import success', async () => {
+    const accounts = await profiles();
+    await fs.writeFile(path.join(accounts[0], 'shortcuts.vdf'), assigned(), { mode: 0o600 });
+    const request = async () => { await fs.writeFile(path.join(accounts[1], 'shortcuts.vdf'), planSteamShortcut(undefined, { ...launch, options: 'other-game' }).bytes, { mode: 0o600 }); };
+    await expect(addLiveSteamShortcut(accounts, launch, '/private/game.desktop', {}, request, 0, async () => undefined)).rejects.toThrow('has not confirmed');
+  });
+  it('handles cancelled/invalid reuse and preserves the import guard', async () => {
+    const accounts = await profiles();
+    await fs.writeFile(path.join(accounts[0], 'shortcuts.vdf'), assigned(), { mode: 0o600 });
+    const request = vi.fn();
+    await expect(addLiveSteamShortcut(accounts, launch, '/private/game.desktop', {}, request, 0, async () => { throw Error('cancelled'); })).rejects.toThrow('cancelled');
+    await expect(addLiveSteamShortcut(accounts, launch, '/private/game.desktop', {}, request, 0, async () => '/wrong')).rejects.toThrow('Invalid');
+    expect(request).not.toHaveBeenCalled();
+    expect(await addLiveSteamShortcut(accounts, launch, '/private/game.desktop', {}, request, 0, async existing => existing[0])).toBe(uri);
+  });
+  it('does not create duplicates for repeated account paths and fails closed on unreadable snapshots', async () => {
+    const accounts = await profiles();
+    const request = async () => { await fs.writeFile(path.join(accounts[0], 'shortcuts.vdf'), assigned(), { mode: 0o600 }); };
+    expect(await addLiveSteamShortcut([accounts[0], accounts[0]], launch, '/private/game.desktop', {}, request, 0)).toBe(uri);
+    await fs.writeFile(path.join(accounts[1], 'shortcuts.vdf'), 'malformed', { mode: 0o600 });
+    const untouched = vi.fn();
+    await expect(addLiveSteamShortcut(accounts, launch, '/private/game.desktop', {}, untouched, 0)).rejects.toThrow();
+    expect(untouched).not.toHaveBeenCalled();
   });
 });
 

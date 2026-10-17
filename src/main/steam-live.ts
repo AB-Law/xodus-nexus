@@ -2,69 +2,11 @@ import { execFile } from 'node:child_process';
 import { constants, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { externalFontEnvironment } from './launcher-fonts.js';
-import { findSteamLaunch, readSteamShortcuts, writeSteamArtwork, type SteamLaunch } from './steam-shortcuts.js';
+import { findSteamLaunches, readSteamShortcuts, writeSteamArtwork, type SteamLaunch } from './steam-shortcuts.js';
 
 let importing = false;
 const sentinel = '/tmp/addnonsteamgamefile';
 const runUri = (appid: number) => `steam://rungameid/${(BigInt(appid) << 32n) | 0x02000000n}`;
-
-/** A small strict KeyValues reader for loginusers.vdf, never account tokens. */
-export function recentSteamUser(text: string): string | undefined {
-  if (text.length > 1024 * 1024) throw Error('Steam profile metadata is too large.');
-  let offset = 0;
-  const space = () => { for (;;) {
-    while (/\s/.test(text[offset] ?? '') && offset < text.length) offset++;
-    if (text.slice(offset, offset + 2) !== '//') return;
-    const end = text.indexOf('\n', offset); offset = end < 0 ? text.length : end + 1;
-  } };
-  const string = () => {
-    space(); if (text[offset++] !== '"') throw Error('Invalid Steam profile metadata.');
-    let value = '';
-    while (offset < text.length) {
-      const char = text[offset++];
-      if (char === '"') return value;
-      if (char === '\\') { if (offset >= text.length) break; value += text[offset++]; }
-      else value += char;
-    }
-    throw Error('Truncated Steam profile metadata.');
-  };
-  type KV = Map<string, string | KV>;
-  const object = (nested: boolean, depth: number): KV => {
-    if (depth > 5) throw Error('Invalid Steam profile nesting.');
-    const result: KV = new Map();
-    for (;;) {
-      space();
-      if (nested && text[offset] === '}') { offset++; return result; }
-      if (offset === text.length && !nested) return result;
-      const key = string(); space();
-      if (result.has(key)) throw Error('Duplicate Steam profile field.');
-      if (text[offset] === '{') { offset++; result.set(key, object(true, depth + 1)); }
-      else result.set(key, string());
-    }
-  };
-  const users = object(false, 0).get('users');
-  if (!(users instanceof Map)) return;
-  const recent = [...users].filter(([id, value]) => /^\d{17}$/.test(id) && value instanceof Map && value.get('MostRecent') === '1');
-  if (recent.length !== 1) return;
-  const id = BigInt(recent[0][0]) - 76561197960265728n;
-  return id > 0n && id <= 0xffffffffn ? String(id) : undefined;
-}
-
-export async function activeSteamAccount(accounts: string[]): Promise<string> {
-  const selected: string[] = [];
-  for (const account of accounts) {
-    const root = path.resolve(account, '../../..');
-    try {
-      const file = path.join(root, 'config', 'loginusers.vdf');
-      const stat = await fs.lstat(file);
-      if (!stat.isFile() || stat.uid !== process.getuid?.() || stat.size > 1024 * 1024) continue;
-      if (recentSteamUser(await fs.readFile(file, 'utf8')) === path.basename(path.dirname(account))) selected.push(account);
-    } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-  }
-  if (selected.length === 1) return selected[0];
-  if (accounts.length === 1) return accounts[0];
-  throw Error('Could not identify the active Steam profile. Sign in to native Steam and try again.');
-}
 
 export async function requestSteamImport(file: string): Promise<void> {
   if (!path.isAbsolute(file) || /[\0\r\n]/.test(file) || !file.endsWith('.desktop')) throw Error('Invalid Steam import launcher.');
@@ -87,28 +29,64 @@ export async function requestSteamImport(file: string): Promise<void> {
 
 /** Steam owns its live shortcut database. Read back its actual assigned ID
  * before writing optional artwork, never manufacture a successful import. */
-export async function addLiveSteamShortcut(config: string, launch: SteamLaunch, desktop: string,
-  artwork: { cover?: Buffer; wide?: Buffer }, request = requestSteamImport, confirmationMs = 15000): Promise<string> {
+export async function addLiveSteamShortcut(configs: string[], launch: SteamLaunch, desktop: string,
+  artwork: { cover?: Buffer; wide?: Buffer }, request = requestSteamImport, confirmationMs = 15000,
+  chooseExisting?: (profiles: string[]) => Promise<string | undefined>): Promise<string> {
   if (importing) throw Error('Another Steam import is in progress. Please wait.');
   importing = true;
   try {
-    const file = path.join(config, 'shortcuts.vdf');
-    const lookup = async () => {
-      const bytes = await readSteamShortcuts(file);
-      return bytes ? findSteamLaunch(bytes, launch) : undefined;
+    const accounts = [...new Set(configs)];
+    if (!accounts.length) throw Error('No native Steam profile found. Open Steam and sign in first.');
+    const lookup = async (config: string) => {
+      const bytes = await readSteamShortcuts(path.join(config, 'shortcuts.vdf'));
+      return bytes ? findSteamLaunches(bytes, launch) : [];
     };
-    let appid = await lookup();
-    if (appid === undefined) {
-      await request(desktop);
-      const deadline = performance.now() + Math.min(15000, Math.max(0, confirmationMs));
-      while (performance.now() < deadline) {
-        try { appid = await lookup(); } catch { /* Steam may be mid-write. Retry only reads. */ }
-        if (appid !== undefined) break;
-        await new Promise(resolve => setTimeout(resolve, 250));
+    const before = new Map<string, number[]>();
+    for (const config of accounts) before.set(config, await lookup(config));
+    const existing = accounts.filter(config => before.get(config)!.length);
+    if (existing.length) {
+      // A saved shortcut is not proof that its profile is currently signed in.
+      // Explicitly let the user reuse it, or request a new import in Steam's
+      // current session. Never infer identity from auto-login preferences.
+      if (!chooseExisting) throw Error('A shortcut already exists. Choose a Steam profile to reuse it.');
+      const selected = await chooseExisting(existing);
+      if (selected !== undefined) {
+        if (!existing.includes(selected)) throw Error('Invalid Steam profile selection.');
+        const appid = (await lookup(selected))[0];
+        if (appid === undefined) throw Error('The existing Steam shortcut changed. Try Add to Steam again.');
+        await writeSteamArtwork(selected, appid, artwork);
+        return runUri(appid);
       }
     }
-    if (appid === undefined) throw Error('Steam has not confirmed the shortcut yet. Check Steam, then try Add to Steam again.');
-    await writeSteamArtwork(config, appid, artwork);
-    return runUri(appid);
+    await request(desktop);
+    const deadline = performance.now() + Math.min(15000, Math.max(0, confirmationMs));
+    do {
+      const added: { config: string; appid: number }[] = [];
+      let complete = true;
+      for (const config of accounts) {
+        try {
+          for (const appid of await lookup(config)) if (!before.get(config)!.includes(appid)) added.push({ config, appid });
+        } catch { complete = false; /* Steam may be mid-write. Retry reads only. */ }
+      }
+      if (complete && added.length > 1) {
+        const profiles = [...new Set(added.map(match => match.config))];
+        if (chooseExisting && profiles.length === added.length) {
+          const selected = await chooseExisting(profiles);
+          const match = added.find(entry => entry.config === selected);
+          if (match) {
+            await writeSteamArtwork(match.config, match.appid, artwork);
+            return runUri(match.appid);
+          }
+        }
+        throw Error('Steam changed more than one matching shortcut. Check Steam, then try Add to Steam again.');
+      }
+      if (complete && added.length === 1) {
+        await writeSteamArtwork(added[0].config, added[0].appid, artwork);
+        return runUri(added[0].appid);
+      }
+      if (performance.now() >= deadline) break;
+      await new Promise(resolve => setTimeout(resolve, 250));
+    } while (performance.now() < deadline);
+    throw Error('Steam has not confirmed the shortcut yet. Check Steam, then try Add to Steam again.');
   } finally { importing = false; }
 }
