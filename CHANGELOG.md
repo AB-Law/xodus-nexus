@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Search all pages of the account library automatically instead of only the games already loaded.
+- Open the selected game from Most recent and library search results.
+- Retry failed Linux Trash moves with the alternative system helper and show useful errors without permanently deleting files.
+- Preview installation progress when hovering over Install Queue and show a desktop notification when a download completes.
+- Allow removing an unrelated game while another game downloads, keeping active installation folders protected.
+- Ignore commented-out manifest examples when importing games and reading runtime package metadata.
+
 ## 0.3.5
 
 - Add an optional per-game DualSense compatibility mode for controllers not detected through native HIDRAW input.

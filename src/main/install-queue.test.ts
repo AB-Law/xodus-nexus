@@ -57,15 +57,19 @@ describe('activity guards', () => {
   const game = { id: 'game', kind: 'launch', status: 'running' } as GameOperation;
   it('allows a new install alongside downloads and a running game, but keeps exclusive mutations blocked', () => {
     expect(() => assertActivityCompatible(['download', 'game'], downloads, game, 3, 'install')).not.toThrow();
+    expect(() => assertActivityCompatible(['download', 'game'], downloads, game, 3, 'remove')).not.toThrow();
+    expect(() => assertActivityCompatible(['download'], downloads, undefined, 2, 'remove')).not.toThrow();
     expect(() => assertActivityCompatible(['download'], downloads, undefined, 2, 'launch')).not.toThrow();
     expect(() => assertActivityCompatible(['download', 'game'], downloads, game, 2)).toThrow();
     expect(() => assertActivityCompatible([], [], undefined, 1)).toThrow();
   });
   it('still blocks a second game, prerequisites, sign-in and unknown processes', () => {
     expect(() => assertActivityCompatible(['game'], [], game, 0, 'launch')).toThrow();
-    for (const mode of ['launch', 'install'] as const) expect(() => assertActivityCompatible(['auth'], [], undefined, 0, mode)).toThrow();
+    for (const mode of ['launch', 'install', 'remove'] as const) expect(() => assertActivityCompatible(['auth'], [], undefined, 0, mode)).toThrow();
     for (const status of ['preparing', 'stopping'] as const) expect(() => assertActivityCompatible(['game'], [], { ...game, status }, 0, 'install')).toThrow();
+    for (const status of ['preparing', 'stopping'] as const) expect(() => assertActivityCompatible(['game'], [], { ...game, status }, 0, 'remove')).toThrow();
     expect(() => assertActivityCompatible(['game'], [], { ...game, kind: 'prerequisite' }, 0, 'install')).toThrow();
+    expect(() => assertActivityCompatible(['game'], [], { ...game, kind: 'prerequisite' }, 0, 'remove')).toThrow();
   });
 });
 
@@ -81,5 +85,16 @@ describe('installation destination locks', () => {
     await expect(assertInstallDestination(path.join(root, 'alias', 'new'), [path.join(root, 'game')])).rejects.toThrow('overlaps');
     expect(await assertInstallDestination(path.join(root, 'other'), [path.join(root, 'game')])).toBe(path.join(root, 'other'));
     await expect(canonicalInstallPath('relative')).rejects.toThrow('absolute');
+  });
+
+  it('reserves future paths behind dangling relative and chained symlinks', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-queue-link-')); directories.push(root);
+    await fs.mkdir(path.join(root, 'game'));
+    await fs.symlink('game/future', path.join(root, 'alias'));
+    await fs.symlink('alias', path.join(root, 'chained'));
+    expect(await canonicalInstallPath(path.join(root, 'chained', 'content'))).toBe(path.join(root, 'game/future/content'));
+    await expect(assertInstallDestination(path.join(root, 'alias', 'content'), [path.join(root, 'game')])).rejects.toThrow('overlaps');
+    await fs.symlink('loop', path.join(root, 'loop'));
+    await expect(canonicalInstallPath(path.join(root, 'loop', 'content'))).rejects.toThrow();
   });
 });

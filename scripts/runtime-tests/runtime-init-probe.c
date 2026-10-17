@@ -27,7 +27,9 @@ int main(int argc, char **argv)
     HRESULT (WINAPI *query)(const GUID *, const GUID *, void **) = (void *)GetProcAddress(dll, "QueryApiImpl");
     CHECK(initialize && query);
     if (!initialize || !query) return 1;
-    const char *xml = "<Game><Identity Name=\"Nexus.Init.Inline\" Publisher=\"CN=NexusProbe\"/><TitleId>1234</TitleId></Game>";
+    const char *xml = "<Game><!-- example -> <Identity Name=\"Wrong.Example\" Publisher=\"CN=Wrong\"/>"
+        "<MSAAppId>wrong</MSAAppId><TitleId>0000</TitleId><StoreId>000000000000</StoreId> -->"
+        "<Identity Name=\"Nexus.Init.Inline\" Publisher=\"CN=NexusProbe\"/><TitleId>1234</TitleId></Game>";
     Options options = {1, TRUE, xml};
     if (argc > 1 && !strcmp(argv[1], "retry")) {
         Options bad = {1, TRUE, "<invalid>"};

@@ -14,7 +14,8 @@ it('counts waiting installations in the queue shortcut while a game is running',
   const data = demoSnapshot();
   data.downloads = [{ ...data.downloads[0], status: 'running' }, { ...data.downloads[0], id: 'waiting', status: 'queued' }];
   const html = renderToStaticMarkup(<Sidebar data={data} page="library" go={() => {}} />);
-  expect(html).toContain('Install Queue · 2');
+  expect(html).toContain('Downloading (1/2)');
+  expect(html).toContain('2 active installations');
 });
 it('restores the parent-owned filters after the library is recreated',()=>{
   const filters: LibraryFilters = { kind: 'owned', playState: 'installed', query: 'Edition' };
@@ -77,6 +78,25 @@ it('keeps pagination loading inside the button, without the oversized Store load
   const initial=renderToStaticMarkup(<LibraryPagination loading={true} hasMore={false} load={()=>{}} />);
   expect(initial).toContain('role="status"'); expect(initial).not.toContain('catalog-loading');
   expect(renderToStaticMarkup(<LibraryPagination loading={false} hasMore={false} load={()=>{}} />)).toBe('');
+});
+
+it('shows account-wide search progress instead of asking to load more pages', () => {
+  for (const loading of [false, true]) {
+    const html = renderToStaticMarkup(<LibraryPagination loading={loading} hasMore searching load={() => {}} />);
+    expect(html).toContain('Searching all library games');
+    expect(html).toContain('role="status"');
+    expect(html).not.toContain('<button');
+    expect(html).not.toContain('Load more games');
+  }
+});
+
+it('keeps installed-only and offline searches local and immediately available', () => {
+  const data = demoSnapshot(); data.auth = { running: false, stored: false, note: '' };
+  const html = renderToStaticMarkup(<AccountGames data={data} toast={() => {}}
+    filters={{ kind: 'all', playState: 'installed', query: data.games[0].title }} />);
+  expect(html).toContain(data.games[0].title);
+  expect(html).not.toContain('Searching all library games');
+  expect(html).not.toContain('No games match');
 });
 
 it('offers saved per-game overlay options and Steam-style environment and arguments',()=>{

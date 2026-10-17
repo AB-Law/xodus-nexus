@@ -1,14 +1,18 @@
+import { parsePackageXml } from './package-xml.js';
+import { manifestAttribute, manifestElements, manifestText } from './manifest-xml.js';
+
 export function manifestLocales(xml: string): string[] {
   const found = new Map<string, string>();
-  for (const tag of xml.matchAll(/<Resource\b[^>]*>/gi)) {
-    const locale = tag[0].match(/\bLanguage=["']([A-Za-z0-9-]+)["']/i)?.[1];
+  for (const tag of manifestElements(xml ? parsePackageXml(xml) : undefined, 'Resource')) {
+    const locale = manifestAttribute(tag, 'Language');
     if (locale && /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(locale)) found.set(locale.toLowerCase(), locale);
   }
   return [...found.values()];
 }
 
 export function manifestTitleId(xml: string): string | undefined {
-  return xml.match(/<TitleId>\s*([0-9A-Fa-f]+)\s*<\/TitleId>/i)?.[1];
+  const value = manifestText(xml ? parsePackageXml(xml) : undefined, 'TitleId');
+  return value && /^[0-9A-Fa-f]+$/.test(value) ? value : undefined;
 }
 
 export function supportedGameLocale(requested: string, locales: string[]): string | undefined {

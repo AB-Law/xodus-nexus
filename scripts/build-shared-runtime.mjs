@@ -139,10 +139,14 @@ await buildPlayFabSessionProbe(path.join(tests,'playfab-session'),[
   '-I',path.join(build,'include'),'-I',path.join(source,'include')]);
 await fs.mkdir(initTests);
 run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-Wextra', '-Werror', path.join(project, 'scripts/runtime-tests/runtime-init-probe.c'), '-o', path.join(initTests, 'runtime-init-probe.exe')], work);
-await fs.writeFile(path.join(initTests, 'MicrosoftGame.config'), '<Game><Identity Name="Nexus.Init.Inline" Publisher="CN=NexusProbe"/><TitleId>1234</TitleId></Game>');
+await fs.writeFile(path.join(initTests, 'MicrosoftGame.config'), '<Game><!-- <Identity Name="Wrong.Example" Publisher="CN=Wrong"/><TitleId>0000</TitleId> --><Identity Name="Nexus.Init.Inline" Publisher="CN=NexusProbe"/><TitleId>1234</TitleId></Game>');
 for (const test of ['taskqueue-teardown', 'taskqueue-contract', 'async-provider-contract', 'async-completion-lifetime', 'async-schedule', 'gamesave-files']) {
   run('x86_64-w64-mingw32-gcc', ['-D__WINESRC__', '-O2', '-Wall', '-I', path.join(build, 'dlls/xgameruntime'), '-I', path.join(source, 'dlls/xgameruntime'), '-I', path.join(build, 'include'), '-I', path.join(source, 'include'), path.join(project, `scripts/runtime-tests/${test}-probe.c`), '-o', path.join(tests, `${test}-probe.exe`)], work);
 }
+run('x86_64-w64-mingw32-gcc', ['-D__WINESRC__', '-O2', '-Wall', '-Wextra', '-Werror',
+  '-I', path.join(build, 'dlls/xgameruntime'), '-I', path.join(source, 'dlls/xgameruntime'),
+  '-I', path.join(build, 'include'), '-I', path.join(source, 'include'),
+  path.join(project, 'scripts/runtime-tests/package-identity-probe.c'), '-o', path.join(tests, 'package-identity-probe.exe')], work);
 // windows.web generated these WinRT headers from the pinned IDL sources.
 run('x86_64-w64-mingw32-gcc', ['-D__WINESRC__', '-O2', '-Wall', '-I', path.join(build, 'dlls/xgameruntime'), '-I', path.join(source, 'dlls/xgameruntime'), '-I', path.join(build, 'include'), '-I', path.join(source, 'include'), path.join(project, 'scripts/runtime-tests/token-dispatch-probe.c'), '-o', path.join(tests, 'token-dispatch-probe.exe'), '-lruntimeobject'], work);
 // Compile the exact entitlement helpers with a test-only failing license bridge.

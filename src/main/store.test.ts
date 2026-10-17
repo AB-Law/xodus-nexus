@@ -7,6 +7,73 @@ import type { DownloadTask } from '../shared/types.js';
 
 const created: string[] = [];
 
+describe('manifest XML comments', () => {
+  it('imports only active metadata and never changes the manifest', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'nexus-xml-comments-'));
+    created.push(directory);
+    const xml = `<?xml version="1.0"?>
+      <!-- examples -> \x1b[32m <Identity Name="Example" Version="0.0.0.0"/>
+        <ShellVisuals DefaultDisplayName="Example" Square480x480Logo="wrong.png"/>
+        <Executable Name="Wrong.exe"/><StoreId>000000000000</StoreId>
+        <KnownDependency Name="VC14"/> -->
+      <Game><Identity Name='Actual.Package' Version='1.2.3.4'/>
+        <ShellVisuals DefaultDisplayName="Actual &amp; Game" PublisherDisplayName="Publisher"
+          Square480x480Logo="actual.png"/>
+        <ExecutableList><Executable Name='Game.exe'/></ExecutableList>
+        <StoreId>9AAAAA<!-- annotation -->AAAAAA</StoreId></Game>`;
+    await writeFile(path.join(directory, 'MicrosoftGame.config'), xml);
+    await writeFile(path.join(directory, 'Game.exe'), 'MZ fixture');
+    await writeFile(path.join(directory, '.xodus-streaming.msixvc'), 'fixture');
+    await writeFile(path.join(directory, 'actual.png'), 'actual image');
+    await mkdir(path.join(directory, 'Engine/Extras/Redist/en-us'), { recursive: true });
+    await writeFile(path.join(directory, 'Engine/Extras/Redist/en-us/vc_redist.x64.exe'), 'encrypted fixture');
+    expect(await inspectGameDirectory(directory)).toMatchObject({
+      title: 'Actual & Game', storeId: '9AAAAAAAAAAA', packageName: 'Actual.Package',
+      installedVersion: '1.2.3.4', executable: 'Game.exe', publisher: 'Publisher',
+      coverDataUrl: `data:image/png;base64,${Buffer.from('actual image').toString('base64')}`,
+      vcRedistEncrypted: false, installState: 'ready',
+    });
+    expect(await readFile(path.join(directory, 'MicrosoftGame.config'), 'utf8')).toBe(xml);
+  });
+
+  it('does not invent missing metadata from comments or CDATA', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'nexus-xml-absent-'));
+    created.push(directory);
+    await writeFile(path.join(directory, 'MicrosoftGame.config'), `<Game>
+      <!-- <StoreId>000000000000</StoreId><Executable Name="Wrong.exe"/> -->
+      <Description><![CDATA[<StoreId>111111111111</StoreId>]]></Description></Game>`);
+    const game = await inspectGameDirectory(directory);
+    expect(game.storeId).toBeUndefined();
+    expect(game.executable).toBeUndefined();
+    expect(game.installState).toBe('imported');
+  });
+
+  it('reads appx metadata without commented examples, preserving namespaces and quotes', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'nexus-appx-comments-'));
+    created.push(directory);
+    await writeFile(path.join(directory, 'appxmanifest.xml'), `<Package xmlns:uap="urn:test">
+      <!-- <Identity Name="Wrong"/><DisplayName>Wrong</DisplayName>
+        <Application Executable="Wrong.exe"/><uap:VisualElements Square150x150Logo="wrong.png"/> -->
+      <Identity Name="Actual.Appx" Version="2.0.0.0"/>
+      <Properties><DisplayName>Actual &gt; Example</DisplayName><PublisherDisplayName>Actual</PublisherDisplayName></Properties>
+      <Applications><Application Executable='Actual.exe'><uap:VisualElements Description="a > b"
+        Square150x150Logo='actual.png'/></Application></Applications></Package>`);
+    await writeFile(path.join(directory, 'actual.png'), 'actual');
+    expect(await inspectGameDirectory(directory)).toMatchObject({
+      title: 'Actual > Example', packageName: 'Actual.Appx', executable: 'Actual.exe',
+      publisher: 'Actual', installedVersion: '2.0.0.0',
+      coverDataUrl: `data:image/png;base64,${Buffer.from('actual').toString('base64')}`,
+    });
+  });
+
+  it('rejects an unterminated comment rather than importing example tags', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'nexus-xml-malformed-'));
+    created.push(directory);
+    await writeFile(path.join(directory, 'MicrosoftGame.config'), '<Game><!-- <StoreId>000000000000</StoreId></Game>');
+    await expect(inspectGameDirectory(directory)).rejects.toThrow();
+  });
+});
+
 afterEach(async () => {
   await Promise.all(created.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });

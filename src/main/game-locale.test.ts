@@ -2,6 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { gameLocaleEnvironment, manifestLocales, manifestTitleId, supportedGameLocale } from './game-locale.js';
 
 describe('game locale', () => {
+  it('ignores commented locale and title examples, including arrows and terminal escapes', () => {
+    const xml = `<Game><!-- example -> \x1b[31m <TitleId>0000</TitleId><Resource Language="fr-FR"/> -->
+      <TitleId>6BE4<!-- annotation -->1AB5</TitleId><Resources><Resource Language='en'/>
+      <!-- <Resource Language="de-DE"/> --><Resource Language="cs-CZ"/></Resources></Game>`;
+    expect(manifestTitleId(xml)).toBe('6BE41AB5');
+    expect(manifestLocales(xml)).toEqual(['en', 'cs-CZ']);
+    expect(manifestTitleId('<Game><!-- <TitleId>0000</TitleId> --></Game>')).toBeUndefined();
+    expect(manifestLocales('<Game><![CDATA[<Resource Language="fr-FR"/>]]></Game>')).toEqual([]);
+  });
+
   const xml = '<Resources><Resource Language="en"/><Resource Language="cs-CZ"/><Resource Language="cs-CZ"/></Resources>';
 
   it('reads declared languages without duplicates', () => {
