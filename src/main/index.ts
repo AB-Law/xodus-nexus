@@ -46,7 +46,7 @@ import { adoptLauncherFonts, externalFontEnvironment } from './launcher-fonts.js
 import { prepareGameModeKeyring } from './session-environment.js';
 import { addSteamShortcut, steamAccounts, steamRunning } from './steam-shortcuts.js';
 import { gameSteamPortrait, nexusSteamArtwork } from './steam-artwork.js';
-import { activeSteamAccount, addLiveSteamShortcut } from './steam-live.js';
+import { addLiveSteamShortcut } from './steam-live.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -1157,21 +1157,13 @@ function registerIpc(): void {
     if (id !== undefined && typeof id !== 'string') throw Error('Invalid game ID.');
     const game = id === undefined ? undefined : store.games.find(entry => entry.id === id);
     if (id !== undefined && (!game || game.installState !== 'ready')) throw Error('Only installed, ready games can be added to Steam.');
-    const accounts = await steamAccounts(os.homedir());
+    let accounts = await steamAccounts(os.homedir());
     if (!accounts.length) throw Error('No Steam profile found. Open Steam, sign in, then try again.');
-    let selected = 0;
-    const running = await steamRunning();
-    if (running) selected = accounts.indexOf(await activeSteamAccount(accounts));
-    else if (accounts.length > 1) {
-      const choice = await dialog.showMessageBox(mainWindow!, { type: 'question', title: 'Choose Steam profile',
-        message: 'Which Steam profile should receive this shortcut?', cancelId: accounts.length, defaultId: accounts.length,
-        buttons: [...accounts.map(account => `${account.includes('com.valvesoftware.Steam') ? 'Flatpak Steam' : 'Steam'} profile ${path.basename(path.dirname(account))}`), 'Cancel'] });
-      selected = choice.response;
-      if (selected >= accounts.length) throw Error('Add to Steam cancelled.');
-    }
-    if (accounts[selected].includes('/.var/app/com.valvesoftware.Steam/')) {
+    const nativeAccounts = accounts.filter(account => !account.includes('/.var/app/com.valvesoftware.Steam/'));
+    if (!nativeAccounts.length) {
       throw Error('Adding shortcuts currently requires native Linux Steam. Flatpak Steam is not yet supported.');
     }
+    accounts = nativeAccounts;
     const normalize = (bytes: Buffer) => {
       const image = nativeImage.createFromBuffer(bytes);
       if (image.isEmpty()) return;
@@ -1187,7 +1179,23 @@ function registerIpc(): void {
     const wide = game?.heroUrl ? await loadShortcutIcon({ coverUrl: game.heroUrl }, normalize) : undefined;
     const artwork = game ? { cover: await gameSteamPortrait(cover ?? fallback).catch(() => cover ?? fallback), wide: wide ?? cover ?? fallback }
       : await nexusSteamArtwork(fallback).catch(() => ({ cover: fallback, wide: fallback }));
-    if (await steamRunning()) return addLiveSteamShortcut(accounts[selected], launch, desktop, artwork);
+    if (await steamRunning()) return addLiveSteamShortcut(accounts, launch, desktop, artwork, undefined, undefined, async existing => {
+      const choice = await dialog.showMessageBox(mainWindow!, { type: 'question', title: 'Steam shortcut already exists',
+        message: 'Reuse an existing shortcut, or ask Steam to add it for the currently signed-in account?',
+        detail: 'Choose an existing profile to avoid creating a duplicate in that account.',
+        cancelId: existing.length + 1, defaultId: existing.length + 1,
+        buttons: [...existing.map(account => `Use Steam profile ${path.basename(path.dirname(account))}`), 'Add for signed-in account', 'Cancel'] });
+      if (!Number.isInteger(choice.response) || choice.response < 0 || choice.response > existing.length) throw Error('Add to Steam cancelled.');
+      return choice.response === existing.length ? undefined : existing[choice.response];
+    });
+    let selected = 0;
+    if (accounts.length > 1) {
+      const choice = await dialog.showMessageBox(mainWindow!, { type: 'question', title: 'Choose Steam profile',
+        message: 'Which Steam profile should receive this shortcut?', cancelId: accounts.length, defaultId: accounts.length,
+        buttons: [...accounts.map(account => `Steam profile ${path.basename(path.dirname(account))}`), 'Cancel'] });
+      selected = choice.response;
+      if (selected >= accounts.length) throw Error('Add to Steam cancelled.');
+    }
     return addSteamShortcut(accounts[selected], launch, artwork);
   });
   ipcMain.handle('create-game-shortcut', async (_event, id: string, destination: ShortcutDestination) => {

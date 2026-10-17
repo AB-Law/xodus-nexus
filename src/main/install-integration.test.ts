@@ -15,6 +15,8 @@ const h = vi.hoisted(() => ({
   game: undefined as undefined | { finish: () => void },
   quit: vi.fn(),
   blockDisplay: vi.fn(() => 7), releaseDisplay: vi.fn(() => true),
+  steamProfiles: [] as string[], steamIsRunning: true,
+  liveImport: vi.fn(), offlineImport: vi.fn(), showMessage: vi.fn(),
 }));
 vi.mock('electron', () => ({
   app: { requestSingleInstanceLock: () => true, getPath: (name: string) => path.join(h.root, name),
@@ -24,7 +26,7 @@ vi.mock('electron', () => ({
   BrowserWindow: class { webContents = { on: vi.fn(), send: vi.fn(), setWindowOpenHandler: vi.fn() };
     on() {} once() {} show() {} focus() {} isDestroyed() { return false; } async loadFile() {} },
   screen: { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } }) },
-  dialog: {}, nativeImage: {}, shell: {}, powerSaveBlocker: { start: h.blockDisplay, stop: h.releaseDisplay },
+  dialog: { showMessageBox: h.showMessage }, nativeImage: {}, shell: {}, powerSaveBlocker: { start: h.blockDisplay, stop: h.releaseDisplay },
 }));
 vi.mock('./backend.js', () => ({ LINUX_RUN_PATCH: 'test-patch', BackendManager: class {
   get current() { return h.backend; } async refresh() {} async checkUpdate() {} async externalDownloadRunning() { return false; }
@@ -36,7 +38,13 @@ vi.mock('./launcher-update.js', () => ({ LauncherUpdater: class { state = {}; as
 vi.mock('./launcher-fonts.js', () => ({ adoptLauncherFonts: () => undefined, externalFontEnvironment: (env: unknown) => env }));
 vi.mock('./session-environment.js', () => ({ prepareGameModeKeyring: async () => 'skipped' }));
 vi.mock('./game-shortcuts.js', () => ({ shortcutArguments: () => ({}), shortcutInstanceData: () => ({}), shortcutInstanceRequest: () => ({}),
-  GameShortcuts: class { async initialize() {} } }));
+  GameShortcuts: class { async initialize() {} async steamDesktop() { return { file: path.join(h.root, 'game.desktop'),
+    launch: { icon: h.wine, title: 'Sample game', executable: '/bin/sh', options: 'fixture', directory: h.root, identity: 'fixture' } }; } } }));
+vi.mock('./steam-shortcuts.js', async original => ({ ...await original<typeof import('./steam-shortcuts.js')>(),
+  steamAccounts: async () => h.steamProfiles, steamRunning: async () => h.steamIsRunning, addSteamShortcut: h.offlineImport }));
+vi.mock('./steam-live.js', () => ({ addLiveSteamShortcut: h.liveImport }));
+vi.mock('./shortcut-icon.js', () => ({ loadShortcutIcon: async () => undefined }));
+vi.mock('./steam-artwork.js', () => ({ gameSteamPortrait: async (bytes: Buffer) => bytes, nexusSteamArtwork: async (bytes: Buffer) => ({ cover: bytes, wide: bytes }) }));
 vi.mock('./install-plan.js', () => ({ readInstallPlan: async () => ({}), installSelection: () => '11111111-1111-4111-8111-111111111111' }));
 vi.mock('./xodus-service.js', () => ({ cloudSaveRuntime: async () => false, unbridgedCloudSaveRuntime: async () => false,
   selectedWinePath: () => h.wine, storeContentRuntime: async () => false, startXodusService: vi.fn() }));
@@ -82,6 +90,29 @@ afterAll(async () => {
   h.game?.finish(); for (const job of h.downloads) job.finish(130);
   await new Promise(resolve => setTimeout(resolve, 50));
   await fs.rm(h.root, { recursive: true, force: true });
+});
+
+it('passes all native profiles to Steam-owned live import without login preferences, preserving offline choice', async () => {
+  const native = ['123', '456'].map(id => path.join(h.root, 'Steam/userdata', id, 'config'));
+  const flatpak = path.join(h.root, '.var/app/com.valvesoftware.Steam/userdata/789/config');
+  h.steamProfiles = [...native, flatpak]; h.liveImport.mockResolvedValue('live-uri');
+  expect(await ipc('add-to-steam', 'sample')).toBe('live-uri');
+  expect(h.showMessage).not.toHaveBeenCalled();
+  expect(h.liveImport.mock.calls[0][0]).toEqual(native);
+  const choose = h.liveImport.mock.calls[0][6];
+  h.showMessage.mockResolvedValueOnce({ response: 1 });
+  expect(await choose(native)).toBe(native[1]);
+  h.showMessage.mockResolvedValueOnce({ response: 2 });
+  expect(await choose(native)).toBeUndefined();
+  h.showMessage.mockResolvedValueOnce({ response: 3 });
+  await expect(choose(native)).rejects.toThrow('cancelled');
+  h.steamIsRunning = false; h.offlineImport.mockResolvedValue('offline-uri');
+  h.showMessage.mockResolvedValueOnce({ response: 1 });
+  expect(await ipc('add-to-steam', 'sample')).toBe('offline-uri');
+  expect(h.offlineImport.mock.calls[0][0]).toBe(native[1]);
+  h.steamIsRunning = true; h.steamProfiles = [flatpak];
+  await expect(ipc('add-to-steam', 'sample')).rejects.toThrow('Flatpak');
+  expect(h.liveImport).toHaveBeenCalledOnce();
 });
 
 it('runs real queue IPC, pause/cancel/failure/restart and simultaneous play/download safely', async () => {

@@ -73,17 +73,17 @@ but have not been verified and may encounter compatibility issues.
 | --- | --- | --- |
 | Gears of War: E-Day | Yes | Playable online. |
 | Deep Rock Galactic | Yes | Playable online. |
-| Minecraft Dungeons | Yes | Playable online with the unreleased launcher fix. |
+| Minecraft Dungeons | Yes | Playable online with launcher 0.3.5; [ownership failures](https://github.com/domsvoboda/xodus-nexus/issues/80) also reported on other setups. |
 | Minecraft Dungeons II | Yes | Playable online. |
 | Minecraft for Windows | Yes | Playable online. |
-| Minecraft Launcher | Yes | Sign-in, Java download and startup work with the unreleased launcher fix; Java online unverified. |
+| Minecraft Launcher | Yes | Sign-in and Java download/startup work with launcher 0.3.5; Java online unverified. [Login failure](https://github.com/domsvoboda/xodus-nexus/issues/107) also reported on another setup. |
 | No Man's Sky | Yes | Playable online. |
 | Valor Mortis | Yes | Fully playable. |
-| Forza Horizon 6 | Yes | Playable online. |
+| Forza Horizon 6 | Yes | Playable online; some setups need [VC++ prerequisites](https://github.com/domsvoboda/xodus-nexus/issues/96). [Loading failures](https://github.com/domsvoboda/xodus-nexus/issues/13) also reported. |
 | Palworld | Yes | Playable online. |
 | DOOM Eternal | Yes | Playable. |
 | DOOM: The Dark Ages | Yes | Playable (user report). |
-| Fallout 76 | Yes | Playable online. |
+| Fallout 76 | Yes | Playable online; [one reported setup](https://github.com/domsvoboda/xodus-nexus/issues/9#issuecomment-6227548598) requires gamescope to display correctly. |
 | The Outer Worlds 2 | Yes | Playable. |
 | Wolfenstein: The Old Blood | Yes | Playable. |
 | Wasteland Remastered | Yes | Playable. |
@@ -93,9 +93,49 @@ but have not been verified and may encounter compatibility issues.
 | Avowed | Yes | Playable. |
 | Mortal Shell: Enhanced Edition | Yes | Playable (user report). |
 | Sea of Thieves | Yes | Playable online; normal exit requires the unreleased runtime fix. |
+| ARC Raiders | No | Launches but cannot connect to online services. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/100)) |
+| Hogwarts Legacy | Yes | Playable. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/110)) |
+| Halo: Campaign Evolved | Yes | Playable; may remain running after quitting. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/97)) |
+| Resonance: A Plague Tale Legacy | Yes | Playable; black screen reported when ending a game on Steam Deck. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
+| Resident Evil 2 | Yes | Playable; may remain running after quitting. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/110)) |
+| Wreckfest | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
+| TUNIC | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
+| Hades | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
+| Hell Let Loose: Vietnam | No | Crashes after Easy Anti-Cheat initialization on Arch Linux with an Arc A770. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
+| Human: Fall Flat | Partial | Public online game search fails. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
+| Wolfenstein II: The New Colossus | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
+| The Dungeon of Naheulbeuk: The Amulet of Chaos | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
+| Soul Hackers 2 | No | Reaches the menu, but starting a new game or loading a save fails. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
+| Monster Boy and the Cursed Kingdom | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
+| Hollow Knight: Silksong | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
+| Teenage Mutant Ninja Turtles: Shredder's Revenge | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
+| DRAGON QUEST XI S: Echoes of an Elusive Age - Definitive Edition | No | Crashes after the first loading screen. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
+| ACA NEOGEO METAL SLUG | No | Crashes at launch. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
+| SIGNALIS | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
+| DREDGE | Yes | Playable. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/106)) |
+| Warhammer 40,000: Space Marine 2 | Yes | Playable; online unverified. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/106)) |
+| Indiana Jones and the Great Circle | No | Crashes after the publisher logo. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/78)) |
+| Microsoft Jewel | No | Crashes at launch. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
+| Microsoft Bubble | No | Crashes at launch. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
+| AI: THE SOMNIUM FILES - nirvanA Initiative | Yes | Playable; Store ID detection issue reported. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
+| Minecraft Legends | Yes | Playable; an online session starts, but play with friends is unverified. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
+| The Elder Scrolls: Arena | No | Crashes at launch. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
+| The Elder Scrolls II: Daggerfall | No | Crashes at launch. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
+| Wolfenstein: Enemy Territory | Partial | Playable, but cannot join PunkBuster-enabled servers. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
+| Hell Let Loose | No | Crashes at startup. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/105)) |
+| Kingdom Come: Deliverance II | No | Crashes at startup. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/112)) |
+| PAC-MAN MUSEUM+ | No | Stops after the opening logos. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/61)) |
+| Farming Simulator 25 | No | Startup failure reported; updated runtime retest pending. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/62)) |
+| PowerWash Simulator 2 | No | Stuck on the initial loading screen. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/69)) |
+| Young Souls | Unverified | Launches in Steam Deck Desktop Mode; gameplay unverified. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/8#issuecomment-6225913594)) |
+| Remnant II | Unverified | Starts and exits cleanly; gameplay and online were not detailed. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/34#issuecomment-6190973665)) |
 | The Witcher 3 | No | Currently crashes on launch. |
 
 [Full compatibility list](https://github.com/domsvoboda/xodus-nexus/wiki/Compatibility)
+
+User reports describe individual setups, not universal compatibility. The wiki
+links to report sources and the community spreadsheet. Launch-only reports do
+not confirm gameplay or online support.
 
 ## Screenshots
 

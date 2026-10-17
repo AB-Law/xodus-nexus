@@ -52,17 +52,22 @@ export function steamArgument(value: string): string {
 }
 export interface SteamLaunch { title: string; executable: string; options: string; directory: string; identity: string; icon: string }
 export function findSteamLaunch(bytes: Buffer, launch: SteamLaunch): number | undefined {
+  return findSteamLaunches(bytes, launch)[0];
+}
+export function findSteamLaunches(bytes: Buffer, launch: SteamLaunch): number[] {
   const sameWords = (left: unknown, right: string) => {
     if (typeof left !== 'string') return false;
     try { return JSON.stringify(commandWords(left)) === JSON.stringify(commandWords(right)); }
     catch { return left === right; }
   };
+  const matches = new Set<number>();
   for (const entry of parse(bytes)) {
     const fields = entry.value as Field[];
     if (!sameWords(field(fields, 'Exe'), launch.executable) || !sameWords(field(fields, 'LaunchOptions'), launch.options)) continue;
     const appid = field(fields, 'appid');
-    if (typeof appid === 'number' && (appid & 0x80000000)) return appid;
+    if (typeof appid === 'number' && (appid & 0x80000000)) matches.add(appid);
   }
+  return [...matches];
 }
 export function planSteamShortcut(original: Buffer | undefined, launch: SteamLaunch): { bytes: Buffer; appid: number; added: boolean } {
   const bytes = original ?? empty, entries = parse(bytes);
