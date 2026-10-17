@@ -52,6 +52,17 @@ Flatpak version available through Discover. Other browsers are not supported.
 - Choose **Add to Steam** in the game menu, or **Add Nexus to Steam** in Settings, to create a Non-Steam shortcut with available artwork. Steam can stay running, including in Game Mode. Requires native Linux Steam; Flatpak Steam is not yet supported.
 - Update the launcher, backend and runtime in **Settings**.
 
+Experimental gamepad navigation supports standard-mapped controllers: D-pad or
+left stick to move, A to select, B to go back, X for a game's menu, LB/RB to
+switch pages and the right stick to scroll. Mouse, touch and keyboard controls
+remain available. Moving through installed library games selects them and updates
+the detail; A focuses Play and B returns to the card. Home, My Library and Store
+switch on controller focus. Recent games, Settings, Install Queue and action
+buttons still require A. Up from the first library row reaches filters and search;
+Down returns to the games. Directional navigation scrolls the selected card into view.
+Use Steam + X for the on-screen keyboard in Game Mode;
+system file pickers and sign-in windows may still need mouse or touch input.
+
 [Documentation](https://github.com/domsvoboda/xodus-nexus/wiki) ·
 [Report an issue](https://github.com/domsvoboda/xodus-nexus/issues)
 
