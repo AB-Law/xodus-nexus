@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Clear My Library search on restart while remembering Access and Play state filters.
 - Prevent doubled keyboard input in Steam Game Mode without changing game input settings. Thanks @Techzilla44 for reporting the issue.
 - Search all pages of the account library automatically instead of only the games already loaded.
 - Open the selected game from Most recent and library search results.
