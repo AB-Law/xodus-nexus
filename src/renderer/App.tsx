@@ -294,7 +294,8 @@ interface AccountGamesProps {
   filters?: LibraryFilters; onFiltersChange?: (filters: LibraryFilters) => void;
 }
 
-export function LibraryPagination({ loading, hasMore, load }: { loading: boolean; hasMore: boolean; load: () => void }) {
+export function LibraryPagination({ loading, hasMore, load, searching = false }: { loading: boolean; hasMore: boolean; load: () => void; searching?: boolean }) {
+  if (searching) return <div className="library-pagination"><span className="library-loading" role="status"><LoaderCircle className="spin" />Searching all library games…</span></div>;
   if (!loading && !hasMore) return null;
   return <div className="library-pagination">
     {hasMore ? <button className="secondary" disabled={loading} onClick={load}>
@@ -316,6 +317,12 @@ export function AccountGames({ data, toast, selectedId, select, menu, filters, o
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [installing, setInstalling] = useState<string>();
+  const [searchTerm, setSearchTerm] = useState('');
+  useEffect(() => {
+    if (!query.trim()) { setSearchTerm(''); return; }
+    const timer = window.setTimeout(() => setSearchTerm(query.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
   const identity = `${data.auth.stored}:${data.auth.username}:${data.auth.running}:${data.settings.market}:${data.backend.binaryPath}:${kind}`;
   const currentIdentity = useRef(identity);
   currentIdentity.current = identity;
@@ -333,6 +340,13 @@ export function AccountGames({ data, toast, selectedId, select, menu, filters, o
   }, [identity, available]);
   // Never display the previous account's cards while the identity effect settles.
   const visible = loadedIdentity === identity ? result : undefined;
+  // Installed games are already in the snapshot. Account searches must also
+  // resolve every remaining licensed page before reporting no matches.
+  const searching = available && playState !== 'installed' && Boolean(query.trim()) && !error && (busy || Boolean(visible?.cursor));
+  useEffect(() => {
+    if (!searching || busy || !visible?.cursor || searchTerm !== query.trim()) return;
+    void load();
+  }, [identity, searching, busy, visible?.cursor, searchTerm, query]);
   const installed = new Set(data.games.flatMap(game => game.storeId?.toUpperCase() ?? []));
   const queued = new Set(data.downloads.filter(task => ['running', 'queued', 'paused'].includes(task.status)).map(task => task.productId.toUpperCase()));
   const products = (visible?.products ?? []).filter(product => !installed.has(product.productId) && !installed.has(product.installProductId ?? ''));
@@ -341,12 +355,13 @@ export function AccountGames({ data, toast, selectedId, select, menu, filters, o
     ...data.games.filter(game => playState !== 'installable' && (kind === 'all' || access(game) === kind)).sort((a, b) => a.title.localeCompare(b.title))
       .map(game => ({ id: game.id, title: game.title, game, product: undefined })),
     ...products.filter(() => playState !== 'installed').map(product => ({ id: product.productId, title: product.title, product, game: undefined })),
-  ].filter(row => row.title.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+  ].filter(row => row.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   async function load(refresh = false) {
     setBusy(true); setError(undefined);
     try {
       const next = await window.launcher.getAccountLibrary(kind, refresh ? undefined : visible?.cursor, refresh);
       if (currentIdentity.current !== identity) return;
+      if (!refresh && visible?.cursor && next.cursor === visible.cursor) throw Error('Library pagination did not advance. Refresh the library to try again.');
       // This instance is remounted on identity changes, so pending callbacks
       // cannot publish another account's products into the active component.
       setResult(old => ({ ...next, products: refresh ? next.products : [...(old?.products ?? []), ...next.products.filter(p => !old?.products.some(old => old.productId === p.productId))] }));
@@ -391,8 +406,8 @@ export function AccountGames({ data, toast, selectedId, select, menu, filters, o
           <button className="catalog-card-install" disabled={present || downloading || Boolean(installing) || !data.backend.capabilities.streaming} onClick={() => install(product)}>{present ? <Check /> : <Download />}{present ? 'Installed' : downloading ? 'In Install Queue' : installing === product.productId ? 'Preparing…' : 'Install'}</button>
         </article>;
       })}</div>
-      {!busy && !error && !rows.length ? <p>{visible?.cursor ? 'No games match these filters in the loaded results. Load more to continue.' : 'No games match these filters.'}</p> : null}
-      <LibraryPagination loading={busy} hasMore={Boolean(visible?.cursor)} load={() => { void load(); }} />
+      {!busy && !searching && !error && !rows.length ? <p>{visible?.cursor && playState !== 'installed' ? 'No games match these filters in the loaded results. Load more to continue.' : 'No games match these filters.'}</p> : null}
+      <LibraryPagination loading={busy} hasMore={Boolean(visible?.cursor)} searching={searching} load={() => { void load(); }} />
       <p className="account-library-note">Only licensed games with a verified, supported PC package are listed. Add-ons and unsupported packages are excluded. Installation checks your license again.</p>
     </div>
   </section>;
