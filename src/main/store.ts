@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import type { DownloadTask, Game, Settings } from '../shared/types.js';
 import { resolvePackageFile } from './windows-path.js';
+import { parsePackageXml } from './package-xml.js';
+import { manifestAttr as attr, manifestText as text, manifestElements, manifestAttribute } from './manifest-xml.js';
 
 interface PersistedState {
   games: Game[];
@@ -124,19 +126,6 @@ export class StateStore {
   }
 }
 
-function attr(xml: string, element: string, attribute: string): string | undefined {
-  // Windows manifests are case-insensitive and may carry a namespace prefix
-  // (for example uap:VisualElements in appxmanifest.xml).
-  const tag = xml.match(new RegExp(`<(?:[\\w.]+:)?${element}\\b[^>]*>`, 'i'))?.[0];
-  // The value may contain the other quote style ("No Man's Sky"), so the
-  // closing quote must match the opening one.
-  return tag?.match(new RegExp(`\\b${attribute}=(["'])(.*?)\\1`, 'i'))?.[2];
-}
-
-function text(xml: string, element: string): string | undefined {
-  return xml.match(new RegExp(`<${element}[^>]*>([^<]+)</${element}>`, 'i'))?.[1]?.trim();
-}
-
 async function readable(file: string): Promise<boolean> {
   try { await fs.access(file); return true; } catch { return false; }
 }
@@ -165,11 +154,13 @@ export async function inspectGameDirectory(directory: string): Promise<Game> {
   const findEntry = (name: string) => entries.find((entry) => entry.toLowerCase() === name);
   const gameConfig = path.join(canonical, findEntry('microsoftgame.config') ?? 'MicrosoftGame.config');
   const appxManifest = path.join(canonical, findEntry('appxmanifest.xml') ?? 'appxmanifest.xml');
-  const configXml = await fs.readFile(gameConfig, 'utf8').catch(() => '');
-  const appxXml = await fs.readFile(appxManifest, 'utf8').catch(() => '');
-  if (!configXml && !appxXml) {
+  const configSource = await fs.readFile(gameConfig, 'utf8').catch(() => '');
+  const appxSource = await fs.readFile(appxManifest, 'utf8').catch(() => '');
+  if (!configSource && !appxSource) {
     throw new Error('The selected directory does not contain MicrosoftGame.config or appxmanifest.xml.');
   }
+  const configXml = configSource ? parsePackageXml(configSource) : undefined;
+  const appxXml = appxSource ? parsePackageXml(appxSource) : undefined;
 
   const title = attr(configXml, 'ShellVisuals', 'DefaultDisplayName')
     ?? text(appxXml, 'DisplayName')
@@ -185,7 +176,8 @@ export async function inspectGameDirectory(directory: string): Promise<Game> {
   const hasTemporary = await readable(temporaryContainer);
   const exeExists = executable ? Boolean(await resolvePackageFile(canonical, executable)) : false;
   const vcRedistPath = path.join(canonical, 'Engine', 'Extras', 'Redist', 'en-us', 'vc_redist.x64.exe');
-  const vcRedistEncrypted = /<KnownDependency\b[^>]*\bName=["']VC14["']/i.test(configXml)
+  const vcRedistEncrypted = [...manifestElements(configXml, 'KnownDependency')]
+    .some(node => manifestAttribute(node, 'Name')?.toUpperCase() === 'VC14')
     && await readable(vcRedistPath) && !await beginsWithMz(vcRedistPath);
   let antiCheat: Game['antiCheat'];
   for (const eacDirectory of ['EasyAntiCheat', 'EasyAntiCheat_EOS']) {

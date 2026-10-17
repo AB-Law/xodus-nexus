@@ -12,10 +12,10 @@ function decode(text: string): string {
   });
 }
 export function parsePackageXml(xml: string): XmlNode {
-  if (!xml || xml.length > 1_048_576 || /\x00|<!DOCTYPE|<!ENTITY/i.test(xml)) throw Error('Unsupported package manifest.');
+  if (!xml || xml.length > 1_048_576 || xml.includes('\x00')) throw Error('Unsupported package manifest.');
   const container: XmlNode = { name: '', attributes: {}, children: [], text: '' }, stack = [container];
   let offset = 0, nodes = 0;
-  const token = /<!--[^]*?-->|<\?xml\s[^]*?\?>|<!\[CDATA\[[^]*?\]\]>|<\/?[A-Za-z_][^<>]*>|[^<]+/gy;
+  const token = /<!--[^]*?-->|<\?xml\s[^]*?\?>|<!\[CDATA\[[^]*?\]\]>|<\/?[A-Za-z_](?:[^<>"']|"[^"<]*"|'[^'<]*')*>|[^<]+/gy;
   while (offset < xml.length) {
     token.lastIndex = offset;
     const found = token.exec(xml);
@@ -27,7 +27,8 @@ export function parsePackageXml(xml: string): XmlNode {
     if (part.startsWith('<![CDATA[')) { parent.text += part.slice(9, -3); continue; }
     if (!part.startsWith('<')) { parent.text += decode(part); continue; }
     if (part.startsWith('</')) {
-      if (stack.length < 2 || part !== `</${parent.name}>`) throw Error('Mismatched package XML tag.');
+      const closing = part.match(/^<\/([A-Za-z_][\w.:-]*)\s*>$/);
+      if (stack.length < 2 || closing?.[1] !== parent.name) throw Error('Mismatched package XML tag.');
       stack.pop(); continue;
     }
     const opening = part.match(/^<([A-Za-z_][\w.:-]*)([^]*?)(\/?)>$/);

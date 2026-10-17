@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "release",
+  "status": "development",
   "sources": {
     "wine": {
       "url": "https://github.com/xodus-gaming/wine.git",
@@ -116,6 +116,10 @@
     {
       "file": "assets/xgameruntime-game-license-events.patch",
       "sha256": "a97084c5ca22cf14d35538e9add8a2d820388f4133dbe158c74160034fe3be83"
+    },
+    {
+      "file": "assets/xgameruntime-manifest-comments.patch",
+      "sha256": "9f9d4469ab1358db1a3e0146c279c2614b076ebcbe7d67027b504eb8810296df"
     }
   ],
   "expectedXgameruntimeSources": {
@@ -131,7 +135,7 @@
     "dlls/xgameruntime/xgamesave.c": "5d78ee9c7b102c24a8e3c08dae66ed88f3de529ede9d182cf2f0635d79ad90d0",
     "dlls/xgameruntime/xgamesave.idl": "544319e88951f65b21c74f785fb9376c10cac8b1d57e98c7aa3079348162ccab",
     "dlls/xgameruntime/xnetworking.c": "cfd8d0110b7ebd622f62317d3134dd866e6538e4a697b06912fa752517fe7caa",
-    "dlls/xgameruntime/xpackage.c": "3721f60de1790957f5141bcc26a1a8f8cc6bef6e6db44254e1695fed4a2b63b6",
+    "dlls/xgameruntime/xpackage.c": "4aa6252d00a06023d2dbf62c5b6c82c0b1e563c5839fe78b961c0a487cc36a03",
     "dlls/xgameruntime/xpackage_content.h": "d3addb58053e44848bfb2be29d3568019196568ad98b605544b3506c03ed1c2f",
     "dlls/xgameruntime/xpackage.idl": "afb602c0f76a97f6358950baf48e7a49df61e150134989b676879e7001a60108",
     "dlls/xgameruntime/xpersistentlocalstorage.c": "48111212dcfe4ef328fa482dc8b426ef853b7c961d575aefeaa3b559788809b2",
