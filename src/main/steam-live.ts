@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { constants, promises as fs } from 'node:fs';
 import path from 'node:path';
-import { externalFontEnvironment } from './launcher-fonts.js';
+import { externalLauncherEnvironment } from './launcher-environment.js';
 import { findSteamLaunches, readSteamShortcuts, writeSteamArtwork, type SteamLaunch } from './steam-shortcuts.js';
 
 let importing = false;
@@ -22,7 +22,7 @@ export async function requestSteamImport(file: string): Promise<void> {
   } finally { await handle.close(); }
   await new Promise<void>((resolve, reject) => {
     execFile('/usr/bin/steam', ['steam://addnonsteamgame/' + encodeURIComponent(file)], {
-      env: externalFontEnvironment(), timeout: 5000, killSignal: 'SIGKILL', maxBuffer: 8192,
+      env: externalLauncherEnvironment(), timeout: 5000, killSignal: 'SIGKILL', maxBuffer: 8192,
     }, error => error ? reject(Error('Could not send the shortcut to the running Steam client.')) : resolve());
   });
 }

@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { constants, promises as fs } from 'node:fs';
 import path from 'node:path';
-import { externalFontEnvironment } from './launcher-fonts.js';
+import { externalLauncherEnvironment } from './launcher-environment.js';
 
 /** Only a top-level Gamescope session needs this repair, not nested desktop games. */
 export function gameModeDisplayEnvironment(environment: NodeJS.ProcessEnv, platform = process.platform): Record<string, string> | undefined {
@@ -35,7 +35,7 @@ export async function prepareGameModeKeyring(environment: NodeJS.ProcessEnv = pr
     await new Promise<void>((resolve, reject) => {
       execFile('/usr/bin/dbus-update-activation-environment', ['--systemd',
         ...Object.entries(display).map(([key, value]) => `${key}=${value}`)], {
-        env: externalFontEnvironment(environment), timeout: 2000, killSignal: 'SIGKILL', maxBuffer: 4096,
+        env: externalLauncherEnvironment(environment), timeout: 2000, killSignal: 'SIGKILL', maxBuffer: 4096,
       }, error => error ? reject(error) : resolve());
     });
     return 'updated';

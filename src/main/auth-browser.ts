@@ -7,7 +7,7 @@ import type { Readable, Writable } from 'node:stream';
 import { AuthCdp, type CdpEvent } from './auth-cdp.js';
 import { AUTH_HOSTS, trustedAuthUrl, type AuthFrame } from './auth-protocol.js';
 import type { AuthView, AuthViewFactory } from './auth-transport.js';
-import { externalFontEnvironment } from './launcher-fonts.js';
+import { externalLauncherEnvironment } from './launcher-environment.js';
 
 type Open = Extract<AuthFrame, { type: 'open' }>;
 export type AuthBrowser = { kind: 'native'; binary: string } | { kind: 'flatpak'; binary: string; installation: '--user' | '--system'; ref: string };
@@ -29,7 +29,7 @@ export async function findAuthBrowser(environment: NodeJS.ProcessEnv = process.e
     for (const installation of ['--user', '--system'] as const) {
       try {
         const stdout = await new Promise<string>((resolve, reject) => execFile(binary, ['info', installation, '--show-ref', 'com.google.Chrome'], {
-          env: externalFontEnvironment(environment), timeout: 3000, maxBuffer: 4096, encoding: 'utf8',
+          env: externalLauncherEnvironment(environment), timeout: 3000, maxBuffer: 4096, encoding: 'utf8',
         }, (error, stdout) => error ? reject(error) : resolve(stdout)));
         const ref = stdout.trim();
         if (/^app\/com\.google\.Chrome\/(?:x86_64|aarch64)\/stable$/.test(ref)) return { kind: 'flatpak', binary, installation, ref };
@@ -130,7 +130,7 @@ export function createBrowserAuthViewFactory(browser: AuthBrowser | string, envi
       if (disposed) return;
       const launch = browserLaunch(typeof browser === 'string' ? { kind: 'native', binary: browser } : browser, profile, options.headless);
       chrome = spawn(launch.command, launch.args, {
-        env: { ...externalFontEnvironment(environment), TMPDIR: path.join(profile, 'tmp') }, stdio: launch.input === 0 ? ['pipe', 'pipe', 'ignore'] : ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'], shell: false, detached: true,
+        env: { ...externalLauncherEnvironment(environment), TMPDIR: path.join(profile, 'tmp') }, stdio: launch.input === 0 ? ['pipe', 'pipe', 'ignore'] : ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'], shell: false, detached: true,
       });
       chrome.once('error', failure);
       chrome.once('exit', () => { if (!disposed) { if (frame) cancel(frame.session); else failure(); } });
