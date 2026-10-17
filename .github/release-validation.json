@@ -180,6 +180,24 @@
       "approved": true,
       "approvedBy": "domsvoboda",
       "evidence": "Explicit 2026-10-15 request to publish pending changes including backend 0.2.2, followed by authorization to finish while the user is away. Main CI 38781431880 passed all pinned-source build, native/parser/cache/streaming checks and packaged binaries plus corresponding source. Exact candidate identity, SHA-256/SHA-512, recipe metadata, archive entries and packaged binary/LICENSE hashes verified against commit 40ec993. Exact CLI library and streaming help confirm account-library and durable progress/control interfaces without account or service startup. Production namespace is preserved; no diagnostic account namespace is present. The source recipe matches the locally checked account library and prior accepted download fixes. No new real-account, cloud or game operation was performed on these exact CI bytes. Publish unchanged candidate bytes."
+    },
+    {
+      "kind": "launcher",
+      "runId": "39053571074",
+      "commit": "8db16a9cd0dd27a76f3df935e2432dff33fa6468",
+      "manifestSha256": "ace66f35eeaae6b00e56229e3671a6c5094829a84d007ea76c183fe910357520",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit stable-release authorization on 2026-10-17, including an explicit choice to publish after final CI AppImage checks without another game run. Main CI 39053571074 succeeded. Exact final AppImage and candidate manifest passed SHA-256/SHA-512 and source/run identity checks; these unchanged bytes booted in an isolated demo profile with the normal Electron sandbox, rendered the Home page and exited 0. Source build451/runtime-tools25/CI-tools22 passed. Native production Steam import, explicit reuse without duplication and actual game-specific artwork were verified with running Steam and multiple saved profiles; the user confirmed the final artwork. Gears was confirmed working with the preceding CI launcher39047551963 and the same exact runtime38973220039, not this final AppImage. No additional real game, account or cloud operation was performed with these final launcher bytes. Publish the exact final candidate without rebuilding."
+    },
+    {
+      "kind": "runtime",
+      "runId": "38973220039",
+      "commit": "813b4694a528eeb91b3d8d4579d2c2c0006abb70",
+      "manifestSha256": "5d7b7409e56199ccee046690031937ab7be57e45811bc27f63a8047271524f98",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit stable-release authorization on 2026-10-17 after the user selected and confirmed Gears of War: E-Day working with this exact downloaded CI runtime in an isolated copied prefix and explicitly authorized shared Xbox cloud synchronization. Successful clean main CI38973220039 passed5673 native checks across15 probes with zero failures/timeouts, HTTP2 14checks/0 and bundled H264/AAC checks. Binary and corresponding-source archives passed candidate identity and SHA-256/SHA-512 checks; packaged metadata, ordered25patches, source/base/media locks and all five installed component hashes matched. No new multiplayer-match, cloud-restore roundtrip or normal-exit acknowledgment is inferred from the concise game confirmation. Approve only the metadata development-to-release transition with unchanged build/source/base/media inputs and unchanged candidate bytes; no production runtime activation."
     }
   ]
 }
