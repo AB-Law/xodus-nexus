@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fix launcher startup from Steam Game Mode when the Steam overlay is injected.
 - Support Store game-license change subscriptions in the shared runtime.
 - Support Google Chrome installed through Discover/Flatpak for browser sign-in. Thanks @quentingeorgel for reporting the issue.
 - Fix games remaining active after a normal exit.
