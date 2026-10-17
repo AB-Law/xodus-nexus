@@ -46,6 +46,14 @@ describe('gameLoggingEnvironment', () => {
 });
 
 describe('gameWindowEnvironment', () => {
+  it('preserves Steam Input identity, mappings and explicit controller overrides unchanged', () => {
+    const source = { SteamAppId: '3950783330', SteamGameId: '16968485195965530112',
+      SteamVirtualGamepadInfo: '/sample/virtual-pad', SteamVirtualGamepadInfo_Proton: '/sample/proton-pad',
+      SDL_GAMECONTROLLERCONFIG: 'sample mapping', SDL_GAMECONTROLLER_IGNORE_DEVICES: '0x054c/0x0ce6',
+      PROTON_DISABLE_HIDRAW: '0x054c/0x0ce6' };
+    expect(gameWindowEnvironment(source)).toEqual(source);
+    expect(gameWindowEnvironment({})).toEqual({});
+  });
   it('drops launcher identity but preserves the display and cloud bridge', () => {
     expect(gameWindowEnvironment({ DESKTOP_STARTUP_ID: 'launcher', XDG_ACTIVATION_TOKEN: 'launcher-token', XDG_DESKTOP_FILE_NAME: 'xodus-nexus', GIO_LAUNCHED_DESKTOP_FILE: '/tmp/xodus.desktop', APPDIR: '/tmp/.mount_Xodus', APPIMAGE: '/tmp/Xodus.AppImage', DISPLAY: ':0', WAYLAND_DISPLAY: 'wayland-0', XODUS_BRIDGE_KEY: 'secret' }))
       .toEqual({ DISPLAY: ':0', WAYLAND_DISPLAY: 'wayland-0', XODUS_BRIDGE_KEY: 'secret' });

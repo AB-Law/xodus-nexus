@@ -1,7 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.3.5
 
+- Add an optional per-game DualSense compatibility mode for controllers not detected through native HIDRAW input.
+- Prevent automatic display sleep while a game is running, including when playing with a controller.
+- Keep library cards in place when loading more games and fix opening game options with a single click or tap. Thanks @Techzilla44 for reporting these issues.
+- Queue multiple game installations and download other games while playing. Keep queued installations cancellable.
+- Preserve cover proportions in Steam portrait library cards.
+- Add games and Nexus to Steam with library artwork, including while Steam is running.
+- Fix access to the KDE keyring when launching game shortcuts in Steam Game Mode.
+- Fix launcher startup from Steam Game Mode when the Steam overlay is injected.
 - Support Store game-license change subscriptions in the shared runtime.
 - Support Google Chrome installed through Discover/Flatpak for browser sign-in. Thanks @quentingeorgel for reporting the issue.
 - Fix games remaining active after a normal exit.

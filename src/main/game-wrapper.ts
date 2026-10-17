@@ -22,6 +22,12 @@ export async function prepareGameWrapper(wine: string, value: GameLaunchTools | 
   root: string, env: NodeJS.ProcessEnv = process.env, cwd = process.cwd()): Promise<GameWrapper> {
   const tools = normalizeLaunchTools(value);
   const { prefix: custom, environment, gameArgs } = parseLaunchOptions(tools.launchOptions);
+  if (tools.dualSenseCompatibility) {
+    const disabled = environment.PROTON_DISABLE_HIDRAW ?? env.PROTON_DISABLE_HIDRAW ?? '';
+    // Keep other device overrides and a deliberate all-device opt-out intact.
+    environment.PROTON_DISABLE_HIDRAW = disabled === '1' || /0x054c\/0x0ce6/i.test(disabled)
+      ? disabled : [disabled === '0' ? '' : disabled, '0x054c/0x0ce6'].filter(Boolean).join(',');
+  }
   if (!tools.mangoHud && !tools.gamescope && custom.length === 0 && !Object.keys(environment).length && !gameArgs.length) return { command: wine, cleanup: async () => {} };
   const words: string[] = [];
   if (Object.keys(environment).length) words.push(await executable('env', env, cwd), ...Object.entries(environment).map(([key, value]) => `${key}=${value}`));

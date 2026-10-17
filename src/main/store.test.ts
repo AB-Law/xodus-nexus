@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { inspectGameDirectory, StateStore } from './store.js';
+import type { DownloadTask } from '../shared/types.js';
 
 const created: string[] = [];
 
@@ -28,7 +29,7 @@ describe('inspectGameDirectory anti-cheat support', () => {
     const root=await mkdtemp(path.join(tmpdir(),'nexus-game-tool-state-')); created.push(root);
     const store=new StateStore(root);
     const game={id:'test-tools',title:'Synthetic game',path:'/sample/game',installState:'ready' as const,addedAt:'2026-10-16T00:00:00Z'};
-    const launchTools={mangoHud:true,gamescope:false,gamescopeArgs:'',launchOptions:'DXVK_HUD=fps %command% --launcher-skip'};
+    const launchTools={dualSenseCompatibility:true,mangoHud:true,gamescope:false,gamescopeArgs:'',launchOptions:'DXVK_HUD=fps %command% --launcher-skip'};
     await store.upsertGame(game); await store.patchGame(game.id,{launchTools});
     const reopened=new StateStore(root); await reopened.load();
     expect(reopened.games[0].launchTools).toEqual(launchTools);
@@ -111,6 +112,19 @@ describe('new profile defaults', () => {
 });
 
 describe('install queue history', () => {
+  it('keeps all pending rows beyond the history limit and serializes concurrent saves', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'xodus-queue-persist-')); created.push(directory);
+    const store = new StateStore(directory);
+    const base: DownloadTask = { id: '', title: 'Sample', productId: '9AAAAAAAAAAA', destination: '/sample', status: 'queued', progress: null, phase: 'Waiting', log: [], startedAt: new Date().toISOString() };
+    await Promise.all(Array.from({ length: 40 }, (_, index) => store.addDownload({ ...base, id: `pending-${index}` })));
+    await Promise.all(Array.from({ length: 35 }, (_, index) => store.addDownload({ ...base, id: `done-${index}`, status: 'complete' })));
+    expect(store.downloads.filter(task => task.status === 'queued')).toHaveLength(40);
+    expect(store.downloads.filter(task => task.status === 'complete')).toHaveLength(30);
+    const loaded = new StateStore(directory); await loaded.load();
+    expect(loaded.downloads).toHaveLength(70);
+    expect(loaded.downloads.filter(task => task.status === 'paused')).toHaveLength(40);
+    expect(loaded.downloads.find(task => task.id === 'pending-0')?.canPause).toBe(true);
+  });
   it('removes only finished entries and never deletes install files', async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'xodus-nexus-queue-'));
     created.push(directory);
