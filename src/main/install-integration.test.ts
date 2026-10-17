@@ -17,8 +17,12 @@ const h = vi.hoisted(() => ({
   blockDisplay: vi.fn(() => 7), releaseDisplay: vi.fn(() => true),
   steamProfiles: [] as string[], steamIsRunning: true,
   liveImport: vi.fn(), offlineImport: vi.fn(), showMessage: vi.fn(),
+  trash: vi.fn(), removeShortcut: vi.fn(async () => {}), signals: [] as string[],
+  notifications: [] as { title: string; body: string }[],
+  posters: vi.fn(async (ids: string[]) => new Map(ids.map(id => [id, `https://store-images.s-microsoft.com/${id}`]))),
 }));
 vi.mock('electron', () => ({
+  Notification: class { static isSupported() { return true; } constructor(private options: { title: string; body: string }) {} on() {} show() { h.notifications.push(this.options); } },
   app: { requestSingleInstanceLock: () => true, getPath: (name: string) => path.join(h.root, name),
     setPath: vi.fn(), on: (name: string, callback: (...args: any[]) => any) => h.events.set(name, callback), once: vi.fn(),
     whenReady: () => Promise.resolve(), getVersion: () => '0.0.0', isPackaged: false, quit: h.quit },
@@ -26,19 +30,21 @@ vi.mock('electron', () => ({
   BrowserWindow: class { webContents = { on: vi.fn(), send: vi.fn(), setWindowOpenHandler: vi.fn() };
     on() {} once() {} show() {} focus() {} isDestroyed() { return false; } async loadFile() {} },
   screen: { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } }) },
-  dialog: { showMessageBox: h.showMessage }, nativeImage: {}, shell: {}, powerSaveBlocker: { start: h.blockDisplay, stop: h.releaseDisplay },
+  dialog: { showMessageBox: h.showMessage }, nativeImage: {}, shell: { trashItem: h.trash }, powerSaveBlocker: { start: h.blockDisplay, stop: h.releaseDisplay },
 }));
 vi.mock('./backend.js', () => ({ LINUX_RUN_PATCH: 'test-patch', BackendManager: class {
   get current() { return h.backend; } async refresh() {} async checkUpdate() {} async externalDownloadRunning() { return false; }
   setExternalRoot() {} } }));
 vi.mock('./runtime.js', () => ({ RuntimeManager: class { get current() { return h.runtime; } async refresh() {} async checkNexus() {} setRoot() {} } }));
-vi.mock('./catalog.js', () => ({ CatalogService: class { async artwork() { return new Map(); } async posters() { return new Map(); } } }));
+vi.mock('./catalog.js', () => ({ CatalogService: class { async artwork() { return new Map(); } posters = h.posters; } }));
 vi.mock('./account-profile.js', () => ({ AccountProfile: class { async select() {} cancel() {} } }));
 vi.mock('./launcher-update.js', () => ({ LauncherUpdater: class { state = {}; async initialize() {} async check() {} cancel() {} } }));
 vi.mock('./launcher-fonts.js', () => ({ adoptLauncherFonts: () => undefined, externalFontEnvironment: (env: unknown) => env }));
+// Never let failure fixtures invoke the host's real Trash helper.
+vi.mock('./game-trash.js', () => ({ moveGameToTrash: (target: string, native: (target: string) => Promise<void>) => native(target) }));
 vi.mock('./session-environment.js', () => ({ prepareGameModeKeyring: async () => 'skipped' }));
 vi.mock('./game-shortcuts.js', () => ({ shortcutArguments: () => ({}), shortcutInstanceData: () => ({}), shortcutInstanceRequest: () => ({}),
-  GameShortcuts: class { async initialize() {} async steamDesktop() { return { file: path.join(h.root, 'game.desktop'),
+  GameShortcuts: class { async initialize() {} remove = h.removeShortcut; async steamDesktop() { return { file: path.join(h.root, 'game.desktop'),
     launch: { icon: h.wine, title: 'Sample game', executable: '/bin/sh', options: 'fixture', directory: h.root, identity: 'fixture' } }; } } }));
 vi.mock('./steam-shortcuts.js', async original => ({ ...await original<typeof import('./steam-shortcuts.js')>(),
   steamAccounts: async () => h.steamProfiles, steamRunning: async () => h.steamIsRunning, addSteamShortcut: h.offlineImport }));
@@ -58,7 +64,7 @@ vi.mock('./process.js', () => ({
     const progress = (paused = false, phase = 'downloading') => options.onLine('NEXUS_PROGRESS ' + JSON.stringify({ schema: 1, event: 'progress', sequence: sequence++, phase,
       completedBytes: phase === 'complete' ? 100 : 20, totalBytes: 100, bytesPerSecond: 10, paused, canPause: phase === 'downloading' }));
     h.downloads.push({ args, progress, finish: code => resolve({ code, output: '' }) });
-    return { child: { stdin: { on() {}, write: (line: string) => progress(JSON.parse(line).command === 'pause') }, kill: () => resolve({ code: 130, output: '' }) }, result };
+    return { child: { stdin: { on() {}, write: (line: string) => progress(JSON.parse(line).command === 'pause') }, kill: (signal: string) => { h.signals.push(signal); resolve({ code: 130, output: '' }); } }, result };
   },
 }));
 vi.mock('./game-process.js', () => ({ spawnGameProcess: async () => {
@@ -83,6 +89,18 @@ beforeAll(async () => {
   await fs.writeFile(path.join(gamePath, 'Game.exe'), 'MZ fixture');
   await fs.writeFile(path.join(gamePath, '.xodus-streaming.msixvc'), 'synthetic container');
   await store.upsertGame({ ...data.games[0], id: 'sample', path: gamePath, storeId: '9ZZZZZZZZZZZ', executable: 'Game.exe', installState: 'ready' });
+  for (const id of ['remove-library', 'remove-trash', 'remove-fail', 'remove-playing-other']) {
+    const directory = path.join(h.root, id); await fs.mkdir(directory);
+    await fs.writeFile(path.join(directory, 'MicrosoftGame.config'), '<Game/>');
+    await fs.writeFile(path.join(directory, 'keep.txt'), 'synthetic game files');
+    await store.upsertGame({ ...data.games[0], id, path: directory, installState: 'ready' });
+  }
+  // Simulate Trash only inside this fixture. Never call the desktop Trash API.
+  await fs.mkdir(path.join(h.root, 'fixture-trash'));
+  h.trash.mockImplementation(async (directory: string) => {
+    if (path.dirname(directory) !== h.root) throw Error('Fixture refuses a non-test path');
+    await fs.rename(directory, path.join(h.root, 'fixture-trash', path.basename(directory)));
+  });
   await import('./index.js');
   await vi.waitFor(() => expect(h.handlers.has('start-install')).toBe(true));
 });
@@ -115,10 +133,69 @@ it('passes all native profiles to Steam-owned live import without login preferen
   expect(h.liveImport).toHaveBeenCalledOnce();
 });
 
+it('removes only unrelated games while downloading, without interrupting the queue', async () => {
+  const active = await install('Q'), queued = await install('R');
+  await vi.waitFor(() => expect(h.downloads).toHaveLength(1));
+  await vi.waitFor(() => {
+    expect(snapshot().downloads.find((task: any) => task.id === queued)?.coverUrl).toBe('https://store-images.s-microsoft.com/9RRRRRRRRRRR');
+    expect(snapshot().downloads.find((task: any) => task.id === active)?.coverUrl).toBe('https://store-images.s-microsoft.com/9QQQQQQQQQQQ');
+  });
+  expect(h.downloads).toHaveLength(1); // Waiting artwork never starts its process.
+  h.downloads[0].progress();
+  await ipc('pause-download', active);
+  const downloadsBefore = structuredClone(snapshot().downloads);
+  await ipc('remove-game', 'remove-library', 'library');
+  expect(await fs.readFile(path.join(h.root, 'remove-library/keep.txt'), 'utf8')).toBe('synthetic game files');
+  expect(h.trash).not.toHaveBeenCalled();
+
+  h.trash.mockRejectedValueOnce(Error('Synthetic Trash failure'));
+  await expect(ipc('remove-game', 'remove-fail', 'trash-files')).rejects.toThrow('Synthetic Trash failure');
+  expect(snapshot().games.some((game: any) => game.id === 'remove-fail')).toBe(true);
+  expect(await fs.readFile(path.join(h.root, 'remove-fail/keep.txt'), 'utf8')).toBe('synthetic game files');
+
+  let release!: () => void, entered!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const ready = new Promise<void>(resolve => { entered = resolve; });
+  h.trash.mockImplementationOnce(async (directory: string) => {
+    entered(); await gate;
+    await fs.rename(directory, path.join(h.root, 'fixture-trash', path.basename(directory)));
+  });
+  const removing = ipc('remove-game', 'remove-trash', 'trash-files');
+  await ready;
+  try {
+    await expect(install('S')).rejects.toThrow('being removed');
+    await expect(ipc('launch-game', 'sample')).rejects.toThrow('being removed');
+    await expect(ipc('remove-game', 'remove-fail', 'library')).rejects.toThrow('being removed');
+    await expect(ipc('update-settings', { runtimeRoot: path.join(h.root, 'other-runtime') })).rejects.toThrow('being removed');
+    await ipc('resume-download', active);
+    expect(snapshot().downloads.find((task: any) => task.id === active).status).toBe('running');
+  } finally { release(); }
+  await removing;
+  expect(h.trash).toHaveBeenLastCalledWith(path.join(h.root, 'remove-trash'));
+  expect(await fs.readFile(path.join(h.root, 'fixture-trash/remove-trash/keep.txt'), 'utf8')).toBe('synthetic game files');
+  expect(h.removeShortcut).toHaveBeenCalledWith('remove-library');
+  expect(h.removeShortcut).toHaveBeenCalledWith('remove-trash');
+  expect(h.signals).toEqual([]);
+  expect(h.downloads).toHaveLength(1);
+  expect(snapshot().downloads.find((task: any) => task.id === queued).status).toBe('queued');
+  expect(snapshot().downloads.map((task: any) => task.id)).toEqual(downloadsBefore.map((task: any) => task.id));
+  expect(snapshot().games.some((game: any) => ['remove-library', 'remove-trash'].includes(game.id))).toBe(false);
+  const persisted = new StateStore(path.join(h.root, 'userData')); await persisted.load();
+  expect(persisted.games.some(game => ['remove-library', 'remove-trash'].includes(game.id))).toBe(false);
+  await ipc('remove-game', 'remove-fail', 'library'); // failed Trash released the admission lock
+  await ipc('cancel-download', queued); h.downloads[0].finish(1);
+  await vi.waitFor(() => expect(snapshot().downloads.find((task: any) => task.id === active).status).toBe('failed'));
+  h.downloads.splice(0);
+  expect(h.notifications).toEqual([]);
+});
+
 it('runs real queue IPC, pause/cancel/failure/restart and simultaneous play/download safely', async () => {
   const first = await install('A'); await vi.waitFor(() => expect(h.downloads).toHaveLength(1));
   expect(h.blockDisplay).not.toHaveBeenCalled();
   await ipc('launch-game', 'sample'); expect(snapshot().gameOperation.status).toBe('running');
+  for (const mode of ['library', 'trash-files']) await expect(ipc('remove-game', 'sample', mode)).rejects.toThrow('Close this game');
+  await ipc('remove-game', 'remove-playing-other', 'library');
+  expect(snapshot().gameOperation.status).toBe('running');
   expect(h.blockDisplay).toHaveBeenCalledWith('prevent-display-sleep');
   const cancel = await install('B'), next = await install('C');
   expect(h.downloads).toHaveLength(1); expect(snapshot().downloads.find((task: any) => task.id === next).status).toBe('queued');
@@ -135,6 +212,8 @@ it('runs real queue IPC, pause/cancel/failure/restart and simultaneous play/down
   const fourth = await install('D'); expect(h.downloads).toHaveLength(2);
   await ipc('resume-download', next); h.downloads[1].progress(false, 'complete'); h.downloads[1].finish(0);
   await vi.waitFor(() => expect(h.downloads).toHaveLength(3));
+  expect(h.notifications).toHaveLength(1);
+  expect(h.notifications[0]).toMatchObject({ title: 'Download complete', body: 'Sample C has finished downloading.' });
   expect(h.downloads[2].args[1]).toBe('9DDDDDDDDDDD'); expect(snapshot().gameOperation.status).toBe('running');
   await install('E');
   const restarted = new StateStore(path.join(h.root, 'userData')); await restarted.load();
@@ -144,5 +223,6 @@ it('runs real queue IPC, pause/cancel/failure/restart and simultaneous play/down
   await install('F'); const preventDefault = vi.fn(); h.events.get('before-quit')!({ preventDefault });
   await vi.waitFor(() => expect(h.quit).toHaveBeenCalled()); expect(preventDefault).toHaveBeenCalled();
   expect(h.downloads).toHaveLength(4);
+  expect(h.notifications).toHaveLength(1); // no completion toast for cancelled/stopped jobs
   expect(h.releaseDisplay).toHaveBeenCalledWith(7);
 });

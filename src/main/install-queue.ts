@@ -39,10 +39,10 @@ export class InstallQueue {
 }
 
 export function assertActivityCompatible(operations: Iterable<string>, downloads: readonly DownloadTask[], game: GameOperation | undefined,
-  queued: number, mode?: 'install' | 'launch'): void {
+  queued: number, mode?: 'install' | 'launch' | 'remove'): void {
   const downloadIds = new Set(downloads.map(task => task.id));
   const gameActive = game && ['preparing', 'running', 'stopping'].includes(game.status);
-  const allowedGame = mode === 'install' && gameActive && game.kind === 'launch' && game.status === 'running';
+  const allowedGame = (mode === 'install' || mode === 'remove') && gameActive && game.kind === 'launch' && game.status === 'running';
   if ((!mode && queued > 0) || (gameActive && !allowedGame) || [...operations].some(id =>
     !(mode && downloadIds.has(id)) && !(allowedGame && game.id === id))) {
     throw Error('Another Xodus operation is active. Wait for it to finish or stop it first.');
@@ -56,6 +56,13 @@ export async function canonicalInstallPath(input: string): Promise<string> {
   try { return await fs.realpath(resolved); }
   catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    // realpath cannot resolve a dangling link, but its future destination still
+    // reserves real files under the target. Do not treat the link as a new folder.
+    const entry = await fs.lstat(resolved).catch(error => {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      return undefined;
+    });
+    if (entry?.isSymbolicLink()) return canonicalInstallPath(path.resolve(path.dirname(resolved), await fs.readlink(resolved)));
     const parent = path.dirname(resolved);
     if (parent === resolved) throw error;
     return path.join(await canonicalInstallPath(parent), path.basename(resolved));

@@ -55,9 +55,34 @@ code, .mono { font-family: "Cascadia Mono", "SFMono-Regular", monospace; }
 .queue-summary { min-height: 55px; border: 0; background: transparent; border-radius: 4px; display: grid; grid-template-columns: 28px 1fr; align-items: center; gap: 8px; padding: 7px 13px; text-align: left; cursor: pointer; }
 .queue-summary:hover { background: #30343a; }
 .queue-summary > svg { width: 20px; }
-.queue-summary span { display: grid; gap: 2px; }
+.queue-summary-copy { display: grid; gap: 3px; min-width: 0; }
+.queue-summary-copy > strong, .queue-summary-copy > small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.queue-summary:has(.queue-preview-art) { grid-template-columns: 44px minmax(0, 1fr); padding: 10px 8px; }
+.queue-summary .queue-preview-art { width: 44px; height: 44px; border-radius: 5px; }
+.queue-summary:has(.queue-preview-art) .queue-summary-copy { grid-template-rows: 16px 12px 10px; gap: 3px; }
+.queue-summary-copy > strong { line-height: 16px; }
+.queue-summary-copy > small { line-height: 12px; }
+.queue-summary .queue-preview-progress { margin-top: 0; gap: 6px; }
+.queue-summary .queue-preview-progress > span { font-size: 9px; line-height: 10px; }
 .queue-summary strong { font-size: 12px; }
 .queue-summary small { font-size: 9px; color: var(--muted); }
+.queue-shortcut { position: relative; }
+.queue-shortcut .queue-summary { width: 100%; }
+.queue-preview { position: absolute; z-index: 50; left: 100%; bottom: 0; width: min(390px, calc(100vw - 110px)); padding-left: 12px; }
+.queue-preview-card { border: 1px solid var(--line); border-radius: 15px; background: #25282c; box-shadow: 0 12px 36px #0008; overflow: hidden; }
+.queue-preview-list { list-style: none; padding: 16px; margin: 0; display: grid; gap: 18px; max-height: min(400px, calc(100vh - 100px)); overflow-y: auto; }
+.queue-preview-item { display: grid; grid-template-columns: 58px minmax(0, 1fr); align-items: center; gap: 12px; }
+.queue-preview-art { position: relative; width: 58px; height: 58px; border-radius: 10px; overflow: hidden; display: grid; place-items: center; background: #363b42; color: var(--muted); }
+.queue-preview-art img { position: absolute; width: 100%; height: 100%; object-fit: cover; }
+.queue-preview-art img:not([hidden]) + svg { display: none; }
+.queue-preview-main { min-width: 0; }
+.queue-preview-main > strong { display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.queue-preview-main > small { display: block; margin-top: 5px; font-size: 12px; color: var(--muted); }
+.queue-preview-progress { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; margin-top: 8px; }
+.queue-preview-progress .progress-track { height: 4px; margin: 0; }
+.queue-preview-progress > span { min-width: 29px; text-align: right; font-size: 11px; color: var(--muted); }
+.queue-preview-item.paused .progress-track i, .queue-preview-item.queued .progress-track i { background: #7c828b; }
+.queue-preview-main .queue-preview-state { margin-top: 3px; font-size: 10px; }
 
 .content-shell { min-width: 0; min-height: 0; display: grid; grid-template-rows: 68px minmax(0,1fr); }
 .topbar { position: relative; display: flex; justify-content: center; align-items: center; padding: 0 24px; background: rgba(24,26,29,.97); border-bottom: 1px solid rgba(255,255,255,.045); z-index: 10; }
@@ -518,10 +543,10 @@ button.primary, button.secondary { border-radius: 5px; min-height: 40px; font-si
 @media (max-width: 1100px) {
   .app-shell { grid-template-columns: 82px minmax(0,1fr); }
   .account-summary { grid-template-columns: 1fr; justify-items: center; }
-  .account-summary > span, .account-summary > svg, .nav-item span, .recents, .queue-summary span { display: none; }
+  .account-summary > span, .account-summary > svg, .nav-item span, .recents, .queue-summary-copy { display: none; }
   .nav-item { grid-template-columns: 1fr; justify-items: center; padding: 0; }
   .nav-item b { position: absolute; margin: -23px 0 0 27px; }
-  .queue-summary { grid-template-columns: 1fr; justify-items: center; }
+  .queue-summary, .queue-summary:has(.queue-preview-art) { grid-template-columns: 1fr; justify-items: center; }
   .page { padding-left: 28px; padding-right: 28px; }
   .library-layout { grid-template-columns: minmax(0,1fr) 340px; }
   .settings-columns { grid-template-columns: 1fr; }
