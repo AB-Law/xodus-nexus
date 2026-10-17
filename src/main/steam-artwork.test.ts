@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { nexusSteamArtwork } from './steam-artwork.js';
+import { gameSteamPortrait, nexusSteamArtwork } from './steam-artwork.js';
 
 const { windows } = vi.hoisted(() => ({ windows: [] as any[] }));
 vi.mock('electron', () => ({ BrowserWindow: class {
@@ -12,6 +12,16 @@ vi.mock('electron', () => ({ BrowserWindow: class {
 } }));
 beforeEach(() => { windows.length = 0; });
 afterEach(() => vi.useRealTimers());
+it('letterboxes a square game cover into only the portrait slot without stretching or changing wide artwork', async () => {
+  await gameSteamPortrait(Buffer.from('square game cover'));
+  const window = windows[0];
+  expect(window.setContentSize.mock.calls).toEqual([[600, 900]]);
+  const html = decodeURIComponent(window.loadURL.mock.calls[0][0]);
+  expect(html).toContain('object-fit:contain');
+  expect(html).toContain('filter:blur(35px)');
+  expect(html).toContain(Buffer.from('square game cover').toString('base64'));
+  expect(window.destroy).toHaveBeenCalledOnce();
+});
 it('renders separate portrait/wide brand layouts in a hidden sandbox, with no remote content', async () => {
   const result = await nexusSteamArtwork(Buffer.from('bundled icon'));
   expect(result.cover).toEqual(Buffer.from('image'));

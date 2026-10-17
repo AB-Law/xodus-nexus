@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Preserve cover proportions in Steam portrait library cards.
 - Add games and Nexus to Steam with library artwork, including while Steam is running.
 - Fix access to the KDE keyring when launching game shortcuts in Steam Game Mode.
 - Fix launcher startup from Steam Game Mode when the Steam overlay is injected.
