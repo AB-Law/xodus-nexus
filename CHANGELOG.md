@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Search all pages of the account library automatically instead of only the games already loaded.
 - Open the selected game from Most recent and library search results.
 - Retry failed Linux Trash moves with the alternative system helper and show useful errors without permanently deleting files.
 - Preview installation progress when hovering over Install Queue and show a desktop notification when a download completes.
