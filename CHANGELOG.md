@@ -4,6 +4,7 @@
 
 - Clear My Library search on restart while remembering Access and Play state filters.
 - Add gamepad navigation for the launcher, including directional focus, dialogs and game options, while preserving mouse and touch controls. Thanks @Techzilla44 for the suggestion.
+- Support gzip response decompression and server certificate-chain queries in the shared runtime's WinHTTP implementation.
 - Prevent doubled keyboard input in Steam Game Mode without changing game input settings. Thanks @Techzilla44 for reporting the issue.
 - Search all pages of the account library automatically instead of only the games already loaded.
 - Open the selected game from Most recent and library search results.

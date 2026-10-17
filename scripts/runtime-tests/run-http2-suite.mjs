@@ -3,6 +3,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import http2 from 'node:http2';
+import { gzipSync, deflateRawSync } from 'node:zlib';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 const [runtimeArg, workArg] = process.argv.slice(2);
@@ -18,6 +19,14 @@ execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days
 execFileSync('openssl', ['x509', '-in', path.join(root, 'server.pem'), '-outform', 'DER', '-out', path.join(root, 'server.der')]);
 await fs.chmod(path.join(root, 'server.key'), 0o600);
 const body = Buffer.from(Array.from({ length: 200000 }, (_, i) => 97 + i % 26));
+const gzip = gzipSync(body), deflate = deflateRawSync(body);
+const noise = Buffer.from(Array.from({ length: body.length }, (_, i) => {
+  let n = i >>> 0;
+  n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+  n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+  return (n ^ (n >>> 16)) & 255;
+}));
+const largeGzip = gzipSync(noise);
 const server = http2.createSecureServer({ key: await fs.readFile(path.join(root, 'server.key')), cert: await fs.readFile(path.join(root, 'server.pem')), allowHTTP1: true });
 const sessions = new Set();
 server.on('session', session => { sessions.add(session); session.on('error', () => {}); session.on('close', () => sessions.delete(session)); });
@@ -31,7 +40,32 @@ server.on('request', (request, response) => {
     const parts = []; let count = 0;
     request.on('data', part => { count += part.length; if (count <= 300000) parts.push(part); else request.destroy(); });
     request.on('end', () => send(201, Buffer.concat(parts)));
-  } else if (request.url === '/body') send(200, body);
+  } else if (request.url.startsWith('/gzip') || request.url === '/deflate') {
+    const encoding = request.url === '/deflate' ? 'deflate' : 'gzip';
+    const bytes = request.url === '/gzip-large' ? largeGzip : request.url === '/gzip-empty' ? gzipSync(Buffer.alloc(0)) :
+      request.url === '/gzip-invalid' ? Buffer.from('invalid compressed response') :
+      request.url === '/gzip-truncated' ? gzip.subarray(0, gzip.length - 8) : encoding === 'deflate' ? deflate : gzip;
+    if (request.url === '/gzip-chunked') {
+      response.writeHead(200, { 'content-encoding': encoding });
+      for (let offset = 0; offset < bytes.length; offset += 7) response.write(bytes.subarray(offset, offset + 7));
+      response.end();
+    } else send(200, bytes, { 'content-encoding': encoding });
+  } else if (request.url === '/chunked') {
+    response.writeHead(200, { 'content-type': 'application/octet-stream' });
+    let offset = 0;
+    const write = () => {
+      if (response.destroyed) return;
+      if (offset < body.length) {
+        response.write(body.subarray(offset, offset + 5000)); offset += 5000;
+        setImmediate(write);
+      } else {
+        if (request.httpVersionMajor === 1) response.addTrailers({ 'x-test-trailer': 'present' });
+        response.end();
+      }
+    };
+    write();
+  } else if (request.url === '/encoding') send(request.headers['accept-encoding'] === 'gzip' ? 200 : 400, body);
+  else if (request.url === '/body') send(200, body);
   else if (request.url === '/head') send(405);
   else if (request.url === '/error') send(503);
   else if (request.url === '/redirect') send(307, Buffer.alloc(0), { location: '/body' });
