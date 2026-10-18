@@ -17,7 +17,7 @@ await fs.chmod(root, 0o700);
 const prefix = path.join(root, 'pfx');
 const files = path.join(runtime, 'files');
 const env = { ...process.env, WINEPREFIX: prefix, WINEARCH: 'win64', WINEDEBUG: '-all,err+all',
-  WINEDLLPATH: path.join(files, 'lib/wine'),
+  WINEDLLPATH: [path.join(files, 'lib/vkd3d'), path.join(files, 'lib/wine')].join(':'),
   LD_LIBRARY_PATH: ['/usr/lib', path.join(files, 'lib/x86_64-linux-gnu'), path.join(files, 'lib/i386-linux-gnu')].join(':'),
   WINEDLLOVERRIDES: 'winemenubuilder.exe=d;mshtml=;mscoree=;xgameruntime=b;winhttp=b;libnghttp2=n' };
 for (const key of Object.keys(env)) if (/^(XODUS_|XUSER_|STEAM_COMPAT_|SteamAppId$|SteamGameId$)/.test(key)) delete env[key];
@@ -49,7 +49,7 @@ try {
     await fs.copyFile(path.join(files, 'lib/wine/x86_64-windows', name), temporary, fs.constants.COPYFILE_EXCL);
     await fs.rename(temporary, dest);
   }
-  for (const name of ['taskqueue-teardown', 'taskqueue-contract', 'async-provider-contract', 'async-completion-lifetime', 'async-schedule', 'gamesave-files', 'winrt-json', 'token-dispatch', 'store-entitlements', 'package-content', 'package-identity', 'package-legacy', 'package-chunks', 'package-monitors', 'system-device-id']) {
+  for (const name of ['taskqueue-teardown', 'taskqueue-contract', 'async-provider-contract', 'async-completion-lifetime', 'async-schedule', 'gamesave-files', 'winrt-json', 'token-dispatch', 'user-privilege', 'store-entitlements', 'package-content', 'package-identity', 'package-legacy', 'package-chunks', 'package-monitors', 'system-device-id']) {
     const result = await run(wine, [path.join(tests, `${name}-probe.exe`)]);
     await fs.writeFile(path.join(root, `${name}.log`), result.output, { mode: 0o600 });
     const summary = result.output.split(/\r?\n/).filter(line => /^(FAIL |CHECKS |QUEUE |ASYNC |CHUNK METADATA CHECKS )/.test(line));

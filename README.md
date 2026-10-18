@@ -105,6 +105,7 @@ but have not been verified and may encounter compatibility issues.
 | Avowed | Yes | Playable. |
 | Mortal Shell: Enhanced Edition | Yes | Playable (user report). |
 | Sea of Thieves | Yes | Playable online. |
+| Tony Hawk's Pro Skater 3 + 4 | Partial | Solo playable. With an unreleased runtime, Private Match loads a map; joining other players and public matchmaking remain unconfirmed. ([#88](https://github.com/domsvoboda/xodus-nexus/issues/88)) |
 | ARC Raiders | No | Launches but cannot connect to online services. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/100)) |
 | Hogwarts Legacy | Yes | Playable. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/110)) |
 | Halo: Campaign Evolved | Yes | Playable; may remain running after quitting. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/97)) |

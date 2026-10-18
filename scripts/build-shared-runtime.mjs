@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { buildCompatibility } from './runtime-compat/build.mjs';
 import { buildPlayFabSessionProbe } from './runtime-tests/build-playfab-session.mjs';
 import { buildStoreProbes } from './runtime-tests/build-store-probes.mjs';
+import { buildUserPrivilegeProbe } from './runtime-tests/build-user-privilege-probe.mjs';
 
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const lockBytes = await fs.readFile(path.join(project, 'scripts/runtime-patches.lock.json'));
@@ -151,6 +152,7 @@ for (const name of ['package-identity', 'package-legacy', 'package-chunks', 'pac
 }
 // windows.web generated these WinRT headers from the pinned IDL sources.
 run('x86_64-w64-mingw32-gcc', ['-D__WINESRC__', '-O2', '-Wall', '-I', path.join(build, 'dlls/xgameruntime'), '-I', path.join(source, 'dlls/xgameruntime'), '-I', path.join(build, 'include'), '-I', path.join(source, 'include'), path.join(project, 'scripts/runtime-tests/token-dispatch-probe.c'), '-o', path.join(tests, 'token-dispatch-probe.exe'), '-lruntimeobject'], work);
+await buildUserPrivilegeProbe({ source, build, tests, project }, run);
 // Compile the exact entitlement helpers with a test-only failing license bridge.
 // Its synthetic signing key never changes production trust or reaches packaging.
 buildStoreProbes({ build, source, tests, project }, run);
