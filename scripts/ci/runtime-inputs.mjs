@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 const promotionOnly = new Set(['scripts/ci/promote-candidate.mjs', 'scripts/ci/runtime-promotion-policy.mjs',
+  'scripts/ci/release-notes-policy.mjs', 'scripts/ci/release-notes-policy.test.mjs',
   'scripts/ci/runtime-promotion-policy.test.mjs', 'scripts/ci/runtime-inputs.mjs',
   'scripts/ci/runtime-needed.mjs', 'scripts/ci/runtime-needed.test.mjs']);
 export function runtimeRecipeMetadataOnly(before, after) {
