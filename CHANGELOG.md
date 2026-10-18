@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.6
+
 - Prevent repeated task-queue closes from releasing pending work or crashing during game shutdown.
 - Support app-state notification registration during game startup.
 - Accept SKU-qualified product IDs when requesting genuine Store license receipts.
