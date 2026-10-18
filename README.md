@@ -105,7 +105,7 @@ but have not been verified and may encounter compatibility issues.
 | Avowed | Yes | Playable. |
 | Mortal Shell: Enhanced Edition | Yes | Playable (user report). |
 | Sea of Thieves | Yes | Playable online. |
-| Tony Hawk's Pro Skater 3 + 4 | Partial | Solo playable. With an unreleased runtime, Private Match loads a map; joining other players and public matchmaking remain unconfirmed. ([#88](https://github.com/domsvoboda/xodus-nexus/issues/88)) |
+| Tony Hawk's Pro Skater 3 + 4 | Partial | Solo playable; Private Match loads a map. Joining other players and public matchmaking remain unconfirmed. ([#88](https://github.com/domsvoboda/xodus-nexus/issues/88)) |
 | ARC Raiders | No | Launches but cannot connect to online services. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/100)) |
 | Hogwarts Legacy | Yes | Playable. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/110)) |
 | Halo: Campaign Evolved | Yes | Playable; may remain running after quitting. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/97)) |
@@ -127,7 +127,7 @@ but have not been verified and may encounter compatibility issues.
 | SIGNALIS | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
 | DREDGE | Yes | Playable. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/106)) |
 | Warhammer 40,000: Space Marine 2 | Yes | Playable; online unverified. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/106)) |
-| Indiana Jones and the Great Circle | Yes | First mission playable with an unreleased runtime fix. The published runtime still has a [startup crash](https://github.com/domsvoboda/xodus-nexus/issues/78). |
+| Indiana Jones and the Great Circle | Yes | First mission playable. ([#78](https://github.com/domsvoboda/xodus-nexus/issues/78)) |
 | Microsoft Jewel | No | Crashes at launch. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
 | Microsoft Bubble | No | Crashes at launch. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
 | AI: THE SOMNIUM FILES - nirvanA Initiative | Yes | Playable; Store ID detection issue reported. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
@@ -136,16 +136,16 @@ but have not been verified and may encounter compatibility issues.
 | The Elder Scrolls II: Daggerfall | No | Crashes at launch. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
 | Wolfenstein: Enemy Territory | Partial | Playable, but cannot join PunkBuster-enabled servers. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
 | Hell Let Loose | No | Crashes at startup. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/105)) |
-| Kingdom Come: Deliverance II | Yes | Playable with an unreleased runtime fix. The published runtime still has a [startup crash](https://github.com/domsvoboda/xodus-nexus/issues/112). |
+| Kingdom Come: Deliverance II | Yes | Playable. ([#112](https://github.com/domsvoboda/xodus-nexus/issues/112)) |
 | PAC-MAN MUSEUM+ | No | Stops after the opening logos. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/61)) |
 | Farming Simulator 25 | No | Startup failure reported; updated runtime retest pending. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/62)) |
-| PowerWash Simulator 2 | Yes | Playable with an unreleased runtime fix. The published runtime still has an [initial loading hang](https://github.com/domsvoboda/xodus-nexus/issues/69). |
+| PowerWash Simulator 2 | Yes | Playable. ([#69](https://github.com/domsvoboda/xodus-nexus/issues/69)) |
 | Young Souls | Unverified | Launches in Steam Deck Desktop Mode; gameplay unverified. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/8#issuecomment-6225913594)) |
 | Remnant II | Unverified | Starts and exits cleanly; gameplay and online were not detailed. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/34#issuecomment-6190973665)) |
 | The Witcher 3 | No | Currently crashes on launch. |
-| LIMBO | Yes | Playable with an unreleased runtime fix. The published runtime still has a shader compilation error at startup. |
-| World War Z | Partial | Connects to online services and starts Quick Match search with an unreleased backend fix; joining a match is unverified. |
-| Balatro | Yes | Playable with an unreleased runtime fix; the published runtime exits before opening the game. |
+| LIMBO | Yes | Playable. |
+| World War Z | Partial | Connects to online services and starts Quick Match search; joining a match is unverified. |
+| Balatro | Yes | Playable. |
 
 [Full compatibility list](https://github.com/domsvoboda/xodus-nexus/wiki/Compatibility)
 
