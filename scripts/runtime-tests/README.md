@@ -75,6 +75,12 @@ Never copy a candidate DLL into an active or production prefix.
   deduplicated languages/tags, feature bindings and readable extracted payload.
   Covers destination paths, missing files, callback stop/reentrancy, malformed
   layouts and registration-only packages in a disposable account-free prefix.
+- `package-monitors-probe.c`: metadata-backed installation snapshots, initial
+  completion-port notification and subsequent availability changes, zero-interval
+  query-only snapshots, selector copies, all queue dispatch modes, cancellation,
+  queued/running unregister, waiting, and close from inside a callback.
+  Byte totals remain zero when unknown. Synthetic missing files must not report
+  completion; the tests do not establish game startup or package ownership.
 - `playfab-session-probe.c`: pinned threading ABI checks, asynchronous test-only
   dialog choices, preserved title callbacks, retained synthetic users, caller
   Manual completion queue, genuine upload failure and acknowledged upload before

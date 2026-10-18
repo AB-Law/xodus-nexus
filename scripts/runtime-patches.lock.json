@@ -132,6 +132,10 @@
     {
       "file": "assets/xgameruntime-package-chunks.patch",
       "sha256": "1bad3c2e91be112f7b703be53561b0ac13d2f46c3979a2868bcadc25f47f281d"
+    },
+    {
+      "file": "assets/xgameruntime-package-monitors.patch",
+      "sha256": "3ef25340642e82ea1abb156a492003a508de92ce5a3738959ec9f8015ffdf6cc"
     }
   ],
   "expectedXgameruntimeSources": {
@@ -147,7 +151,7 @@
     "dlls/xgameruntime/xgamesave.c": "5d78ee9c7b102c24a8e3c08dae66ed88f3de529ede9d182cf2f0635d79ad90d0",
     "dlls/xgameruntime/xgamesave.idl": "544319e88951f65b21c74f785fb9376c10cac8b1d57e98c7aa3079348162ccab",
     "dlls/xgameruntime/xnetworking.c": "cfd8d0110b7ebd622f62317d3134dd866e6538e4a697b06912fa752517fe7caa",
-    "dlls/xgameruntime/xpackage.c": "5497b8d270602239a72ba6ee6556e3c6217379a8d10ea967fb00025bd5d06786",
+    "dlls/xgameruntime/xpackage.c": "5aa7f3a1431963c2d5f2371f1ad85c052fc589bf2bb759154ae62300e91233b7",
     "dlls/xgameruntime/xpackage_content.h": "d3addb58053e44848bfb2be29d3568019196568ad98b605544b3506c03ed1c2f",
     "dlls/xgameruntime/xpackage.idl": "189df1454b50e4cdf874592c6c5309985419c0ec20c5bf3dc69dba4bb62accde",
     "dlls/xgameruntime/xpersistentlocalstorage.c": "48111212dcfe4ef328fa482dc8b426ef853b7c961d575aefeaa3b559788809b2",
@@ -164,7 +168,8 @@
     "dlls/xgameruntime/userprovider.idl": "66fb09670b7dabfc55257475094239018ea9a19ec2be348e56cf2b17ef615d7a",
     "dlls/xgameruntime/xgamesavefiles.h": "5f21c809107e8c67659899a43f98143a4cbba744be5731cc5c68c177fdc7956a",
     "dlls/xgameruntime/xstore_game_license.h": "8bcc2fd256c3e08ba59d9d5211ffb6f70e01a95cef6d0272ddf61bb8d284bffb",
-    "dlls/xgameruntime/xpackage_chunks.h": "50fd27e2bcf43479eb8280e94e7a76b61299ab8590bc3129ce7ac16757698296"
+    "dlls/xgameruntime/xpackage_chunks.h": "50fd27e2bcf43479eb8280e94e7a76b61299ab8590bc3129ce7ac16757698296",
+    "dlls/xgameruntime/xpackage_monitors.h": "4a279231a0a170f06ba956fbe18c3f540cc479139280ea34ba6fe65bd74e3112"
   },
   "runtimeCompatibilitySources": {
     "scripts/runtime-compat/build.mjs": "ac150747020a3a29d1d436c2e2af879e66ea2fe9104d4d330534d6128ba3ea19",

@@ -126,7 +126,7 @@ but have not been verified and may encounter compatibility issues.
 | SIGNALIS | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
 | DREDGE | Yes | Playable. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/106)) |
 | Warhammer 40,000: Space Marine 2 | Yes | Playable; online unverified. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/106)) |
-| Indiana Jones and the Great Circle | No | Crashes after the publisher logo. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/78)) |
+| Indiana Jones and the Great Circle | Yes | First mission playable with an unreleased runtime fix. The published runtime still has a [startup crash](https://github.com/domsvoboda/xodus-nexus/issues/78). |
 | Microsoft Jewel | No | Crashes at launch. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
 | Microsoft Bubble | No | Crashes at launch. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
 | AI: THE SOMNIUM FILES - nirvanA Initiative | Yes | Playable; Store ID detection issue reported. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
