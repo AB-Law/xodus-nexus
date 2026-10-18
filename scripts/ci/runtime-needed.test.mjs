@@ -16,6 +16,7 @@ test('approval-only status does not rebuild binaries; changed recipes still do',
   assert.equal(runtimeInputsChanged(['scripts/runtime-patches.lock.json']), true);
   assert.equal(runtimeInputsChanged(['scripts/runtime-patches.lock.json', 'assets/real.patch'], true), true);
   assert.equal(runtimeInputsChanged(['scripts/ci/promote-candidate.mjs', 'scripts/ci/runtime-needed.mjs']), false);
+  assert.equal(runtimeInputsChanged(['scripts/ci/release-notes-policy.mjs', 'scripts/ci/release-notes-policy.test.mjs']), false);
 });
 test('runtime inputs trigger native CI but documentation/UI-only diffs do not', () => {
   for (const file of ['assets/fix.patch', 'assets/odd\nname.patch', 'scripts/runtime-patches.lock.json', 'scripts/runtime-base.lock.json', 'scripts/runtime-media.lock.json',

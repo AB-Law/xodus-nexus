@@ -6,6 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { verifyManifest } from './artifact-manifest.mjs';
 import { assertRuntimePromotion } from './runtime-promotion-policy.mjs';
+import { releaseNotesRef, assertApprovedReleaseNotes } from './release-notes-policy.mjs';
 const kind = process.env.CANDIDATE_KIND, runId = process.env.CANDIDATE_RUN;
 const repo = process.env.GITHUB_REPOSITORY;
 if (process.env.GITHUB_REF !== 'refs/heads/main' || process.env.APPROVE_RELEASE !== 'true') throw Error('Explicit main-branch release authorization required');
@@ -55,15 +56,15 @@ try {
     if (!/^\d+\.\d+\.\d+$/.test(pkg.version)) throw Error('Not a stable launcher version');
     tag = `v${pkg.version}`;
   }
+  const notesPath = `.github/release-notes/${kind === 'runtime' ? 'runtime-signin-updates.md' : `${kind}-${kind === 'launcher' ? tag.slice(1) : tag.slice('backend-v'.length)}.md`}`;
+  const notes = command('git', ['show', `${releaseNotesRef(kind, run.head_sha, approval)}:${notesPath}`]);
+  assertApprovedReleaseNotes(notes, approval);
   // One new release per tag. Never edit an existing release or replace assets.
   try { command('gh', ['release', 'view', tag, '--repo', repo]); throw Error('Release already exists'); }
   catch (error) { if (!error.status) throw error; }
   command('gh', ['release', 'create', tag, '--repo', repo, '--target', run.head_sha,
     ...manifest.files.map(file => path.join(directory, file.name)), path.join(directory, 'candidate.json'),
     ...(kind === 'launcher' ? [] : ['--latest=false']),
-    '--title', `Xodus Nexus ${kind} ${kind === 'backend' ? tag.slice('backend-v'.length) : tag}`, '--notes',
-    // Runtime notes may be finalized in the metadata-only approval commit.
-    // Artifact identity/recipe checks above still bind to the original run.
-    command('git', ['show', `${kind === 'runtime' ? 'HEAD' : run.head_sha}:.github/release-notes/${kind === 'runtime' ? 'runtime-signin-updates.md' : `${kind}-${kind === 'launcher' ? tag.slice(1) : tag.slice('backend-v'.length)}.md`}`])]);
+    '--title', `Xodus Nexus ${kind} ${kind === 'backend' ? tag.slice('backend-v'.length) : tag}`, '--notes', notes]);
   console.log(`Promoted tested ${kind} candidate ${runId} as ${tag}; no rebuild performed.`);
 } finally { await fs.rm(directory, { recursive: true, force: true }); }

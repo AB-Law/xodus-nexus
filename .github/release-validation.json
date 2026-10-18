@@ -3,6 +3,36 @@
   "approvals": [
     {
       "kind": "launcher",
+      "runId": "39141593873",
+      "commit": "f291f5448e6b4cd031f0ba9d8a8fa4c0a85e8467",
+      "manifestSha256": "1bde81002c2b2057b9c6c9519383a7428b86956ab9036ac75ce0e7ce2b8e2436",
+      "notesSha256": "f4b53a21cbb072b2975948f55ab2da0502fed8ac0ecdead5461b46912a687f38",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit human stable-promotion authorization on 2026-10-18 after all three patchnotes were accepted, including the used Steam Deck or similar handheld request. Main CI 39141593873 succeeded. Exact AppImage and manifest identity, SHA-256 and SHA-512 verified. The unchanged AppImage rendered sample-only UI in a fresh profile and exited normally. A separately authorized isolated Balatro run used this exact launcher, backend 0.2.5 and runtime gf291f544; the human confirmed the game running and normal closure, with backend game process exit 0 and no remaining prefix processes. Six protected original inputs remained unchanged. The initial attempt stopped before the game because the private test-profile socket path was too long; the approved retry used a short profile without changing candidate bytes. No new online-match or cloud-roundtrip claim. Publish the existing candidate, not a rebuild; do not activate production components."
+    },
+    {
+      "kind": "backend",
+      "runId": "39141593839",
+      "commit": "f291f5448e6b4cd031f0ba9d8a8fa4c0a85e8467",
+      "manifestSha256": "acf8015ee1ccd79589632e41fe80b275239a0441417b95202302ef33f894a0c1",
+      "notesSha256": "3e2e1a9b26ff8823eeee575f35c4d9a9cee7b2d7a9ed334f06127d1186e1b9e3",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit human stable-promotion authorization on 2026-10-18 after acceptance of backend 0.2.5 patchnotes. Main CI 39141593839 succeeded, including CLI, Store and package-metadata tests. Exact archive, corresponding vendored source, recipe, ordered 18 patches, metadata and manifest SHA-256/SHA-512 verified. CLI capability checks passed without a native WebKit dependency. The separately authorized isolated final-candidate Balatro retry used the verified CLI/service bytes and matching managed recipe, reached service/bridge readiness and ran the game; human confirmed running and normal closure, game process exit 0, no remaining prefix processes and all six protected original inputs unchanged. No additional claim of World War Z joined matchmaking or cloud roundtrip on these exact CI bytes. Promote unchanged artifacts only, without production activation."
+    },
+    {
+      "kind": "runtime",
+      "runId": "39141593994",
+      "commit": "f291f5448e6b4cd031f0ba9d8a8fa4c0a85e8467",
+      "manifestSha256": "627ba4c8ceed93e914fe986a2d7818fc7c2a608eca11eed30e0efb966e340615",
+      "notesSha256": "bd3ff144d1a9c12b8a943d2619eab91436efb7242138d12ed07889f70f9d4c7a",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit human stable-promotion authorization on 2026-10-18 after acceptance of the runtime patchnotes. Main CI 39141593994 succeeded: clean pinned 36-patch reconstruction, seven components, 26 native suites without failure or timeout, 121 HTTP/TLS checks and bundled H.264/AAC. Exact binary/source archives, manifest SHA-256/SHA-512, 81 source/recipe files, original base loader/server, seven library/default-prefix DLL pairs, compatibility helpers and media hashes verified. A separately authorized isolated Balatro retry used the exact CI runtime with the exact final launcher/backend. Runtime and prefix hashes were checked before and after the run; actual load traces confirm xgameruntime and twinapi.appcore. Human confirmed the game running and normal closure, game process exit 0, no remaining prefix processes and six protected original inputs unchanged. Earlier source-matching gameplay confirmations are separate evidence; no new all-title, public-matchmaking or cloud-roundtrip promise. The release status changes metadata only, not pinned inputs. Promote these existing artifacts without rebuilding or production activation."
+    },
+    {
+      "kind": "launcher",
       "runId": "38952488081",
       "commit": "2c1ed41ee031316fb34eb825a3d440c87bcdc0bd",
       "manifestSha256": "d04393f06682cd993c20567a92fd4472be4ca8a524a073d65e23b591df03aefb",
