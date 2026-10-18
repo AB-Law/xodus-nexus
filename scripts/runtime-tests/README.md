@@ -71,6 +71,10 @@ Never copy a candidate DLL into an active or production prefix.
   package enumeration, Store-ID lookup and output-buffer boundaries. Unsupported
   install notifications and mounting fail explicitly with cleared outputs.
   Uses synthetic metadata only; does not establish a game's startup compatibility.
+- `package-chunks-probe.c`: real package ABI enumeration of numeric chunks,
+  deduplicated languages/tags, feature bindings and readable extracted payload.
+  Covers destination paths, missing files, callback stop/reentrancy, malformed
+  layouts and registration-only packages in a disposable account-free prefix.
 - `playfab-session-probe.c`: pinned threading ABI checks, asynchronous test-only
   dialog choices, preserved title callbacks, retained synthetic users, caller
   Manual completion queue, genuine upload failure and acknowledged upload before

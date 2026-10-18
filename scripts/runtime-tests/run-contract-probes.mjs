@@ -49,10 +49,10 @@ try {
     await fs.copyFile(path.join(files, 'lib/wine/x86_64-windows', name), temporary, fs.constants.COPYFILE_EXCL);
     await fs.rename(temporary, dest);
   }
-  for (const name of ['taskqueue-teardown', 'taskqueue-contract', 'async-provider-contract', 'async-completion-lifetime', 'async-schedule', 'gamesave-files', 'winrt-json', 'token-dispatch', 'store-entitlements', 'package-content', 'package-identity', 'package-legacy']) {
+  for (const name of ['taskqueue-teardown', 'taskqueue-contract', 'async-provider-contract', 'async-completion-lifetime', 'async-schedule', 'gamesave-files', 'winrt-json', 'token-dispatch', 'store-entitlements', 'package-content', 'package-identity', 'package-legacy', 'package-chunks']) {
     const result = await run(wine, [path.join(tests, `${name}-probe.exe`)]);
     await fs.writeFile(path.join(root, `${name}.log`), result.output, { mode: 0o600 });
-    const summary = result.output.split(/\r?\n/).filter(line => /^(FAIL |CHECKS |QUEUE |ASYNC )/.test(line));
+    const summary = result.output.split(/\r?\n/).filter(line => /^(FAIL |CHECKS |QUEUE |ASYNC |CHUNK METADATA CHECKS )/.test(line));
     console.log(`${name}: exit=${result.code} timeout=${result.timedOut}\n${summary.join('\n')}`);
     results.push({ name, code: result.code, timedOut: result.timedOut, summary });
     if (result.code !== 0 || result.timedOut) throw new Error(`Contract probe failed: ${name}; see ${root}`);
