@@ -22,7 +22,7 @@ async function fixture() {
     await fs.writeFile(path.join(components, name), bytes);
     manifest.runtimeCompatibility[name] = createHash('sha256').update(bytes).digest('hex');
   }
-  for (const name of ['xgameruntime.dll', 'winhttp.dll', 'mscoree.dll', 'libnghttp2.dll', 'windows.web.dll', 'libvkd3d-shader-1.dll']) {
+  for (const name of ['xgameruntime.dll', 'winhttp.dll', 'mscoree.dll', 'libnghttp2.dll', 'windows.web.dll', 'libvkd3d-shader-1.dll', 'twinapi.appcore.dll']) {
     const bytes = Buffer.from(`new-${name}`);
     await fs.writeFile(path.join(components, name), bytes);
     manifest.components[name] = createHash('sha256').update(bytes).digest('hex');
@@ -41,6 +41,9 @@ test('assembly replaces symlink entries without altering base/old runtime', asyn
     await fs.symlink(previous, path.join(f.base, 'files/share/default_pfx/drive_c/windows/system32/windows.web.dll'));
     f.run();
     const metadata = JSON.parse(await fs.readFile(path.join(f.output, 'XODUS_NEXUS_PATCH.json'), 'utf8'));
+    assert.ok(metadata.features.includes('appstate-registration-v1'));
+    assert.equal(await fs.readFile(path.join(f.output, 'files/lib/wine/x86_64-windows/twinapi.appcore.dll'), 'utf8'), 'new-twinapi.appcore.dll');
+    assert.equal(await fs.readFile(path.join(f.output, 'files/share/default_pfx/drive_c/windows/system32/twinapi.appcore.dll'), 'utf8'), 'new-twinapi.appcore.dll');
     for (const capability of ['xstore-entitlements-v1', 'xpackage-content-v1', 'xstore-package-license-v1']) assert.ok(metadata.features.includes(capability));
     assert.equal(await fs.readFile(path.join(f.output, 'files/bin/wine.nexus-original'), 'utf8'), '#!/bin/sh\nexit 0\n');
     assert.equal(await fs.readFile(path.join(f.output, 'files/bin/wine'), 'utf8'), 'new-wine-launcher');
@@ -91,6 +94,18 @@ test('unknown component paths are rejected before creating output', async () => 
   const f = await fixture();
   try {
     f.manifest.components['../escape.dll'] = 'a'.repeat(64);
+    await fs.writeFile(path.join(f.components, 'source-manifest.json'), JSON.stringify(f.manifest));
+    assert.throws(f.run, /Command failed/);
+    await assert.rejects(fs.lstat(f.output), { code: 'ENOENT' });
+  } finally { await fs.rm(f.root, { recursive: true, force: true }); }
+});
+test('missing or corrupt app-state component is rejected before assembly', async () => {
+  const f = await fixture();
+  try {
+    await fs.writeFile(path.join(f.components, 'twinapi.appcore.dll'), 'corrupt');
+    assert.throws(f.run, /Command failed/);
+    await assert.rejects(fs.lstat(f.output), { code: 'ENOENT' });
+    delete f.manifest.components['twinapi.appcore.dll'];
     await fs.writeFile(path.join(f.components, 'source-manifest.json'), JSON.stringify(f.manifest));
     assert.throws(f.run, /Command failed/);
     await assert.rejects(fs.lstat(f.output), { code: 'ENOENT' });

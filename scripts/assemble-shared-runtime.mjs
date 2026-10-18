@@ -13,7 +13,7 @@ for (let i = 2; i < process.argv.length; i += 2) {
 if (!options.base || !options.components || !options.output) throw new Error('base, components and output are required');
 const shaFile = async file => createHash('sha256').update(await fs.readFile(file)).digest('hex');
 const manifest = JSON.parse(await fs.readFile(path.join(options.components, 'source-manifest.json'), 'utf8'));
-const componentNames = ['xgameruntime.dll', 'winhttp.dll', 'mscoree.dll', 'libnghttp2.dll', 'windows.web.dll', 'libvkd3d-shader-1.dll'];
+const componentNames = ['xgameruntime.dll', 'winhttp.dll', 'mscoree.dll', 'libnghttp2.dll', 'windows.web.dll', 'libvkd3d-shader-1.dll', 'twinapi.appcore.dll'];
 if (!manifest.components || Object.keys(manifest.components).some(name => !componentNames.includes(name))) throw new Error('Unrecognized runtime component');
 for (const name of componentNames) {
   if (!/^[a-f0-9]{64}$/.test(manifest.components[name] ?? '') || await shaFile(path.join(options.components, name)) !== manifest.components[name]) throw new Error(`Component checksum mismatch: ${name}`);
@@ -120,7 +120,7 @@ const metadata = {
   ...(mediaMetadata ? { media: mediaMetadata } : {}),
 };
 const metadataTemporary = path.join(options.output, `.nexus-metadata-${process.pid}`);
-metadata.features = [...new Set([...metadata.features, 'hlsl-state-keywords-v1'])];
+metadata.features = [...new Set([...metadata.features, 'hlsl-state-keywords-v1', 'appstate-registration-v1'])];
 await fs.writeFile(metadataTemporary, JSON.stringify(metadata, null, 2) + '\n', { flag: 'wx' });
 await fs.rename(metadataTemporary, path.join(options.output, 'XODUS_NEXUS_PATCH.json'));
 console.log(`Assembled isolated runtime: ${options.output}. Active runtime unchanged.`);

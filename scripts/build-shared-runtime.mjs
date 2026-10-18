@@ -135,7 +135,7 @@ run('perl', ['tools/make_specfiles'], source);
 run('autoreconf', ['-fiv'], source);
 await fs.mkdir(build);
 run(path.join(source, 'configure'), provenance.configure, build);
-run('make', [`-j${jobs}`, 'dlls/xgameruntime/x86_64-windows/xgameruntime.dll', 'dlls/winhttp/x86_64-windows/winhttp.dll', 'dlls/mscoree/x86_64-windows/mscoree.dll', 'dlls/windows.web/x86_64-windows/windows.web.dll'], build);
+run('make', [`-j${jobs}`, 'dlls/xgameruntime/x86_64-windows/xgameruntime.dll', 'dlls/winhttp/x86_64-windows/winhttp.dll', 'dlls/mscoree/x86_64-windows/mscoree.dll', 'dlls/windows.web/x86_64-windows/windows.web.dll', 'dlls/twinapi.appcore/x86_64-windows/twinapi.appcore.dll'], build);
 const shaderDll = path.join(shaderBuild, '.libs/libvkd3d-shader-1.dll');
 // Match Proton's builtin-module marker, retaining its unchanged WineD3D and
 // vkd3d core/utils DLLs. Only the separate shader compiler is overlaid.
@@ -150,6 +150,7 @@ const outputs = {
   // XUser parses endpoint/auth replies through Windows.Data.Json. Stock
   // Proton may expose these interfaces but return E_NOTIMPL from Parse.
   'windows.web.dll': path.join(build, 'dlls/windows.web/x86_64-windows/windows.web.dll'),
+  'twinapi.appcore.dll': path.join(build, 'dlls/twinapi.appcore/x86_64-windows/twinapi.appcore.dll'),
   'libnghttp2.dll': path.join(ngBuild, 'lib/libnghttp2.dll'),
 };
 for (const [name, file] of Object.entries(outputs)) {
@@ -160,6 +161,9 @@ for (const [name, file] of Object.entries(outputs)) {
 const tests = path.join(work, 'tests');
 provenance.runtimeCompatibility = await buildCompatibility(components);
 await fs.mkdir(tests);
+for (const fixture of [false, true]) run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-Wextra', '-Werror',
+  ...(fixture ? ['-DAPPSTATE_SOURCE_FIXTURE', '-I', path.join(source, 'dlls/twinapi.appcore')] : []),
+  path.join(project, 'scripts/runtime-tests/appstate-probe.c'), '-o', path.join(tests, fixture ? 'appstate-source-probe.exe' : 'appstate-probe.exe'), '-lruntimeobject'], work);
 run('x86_64-w64-mingw32-gcc', ['-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', path.join(project, 'scripts/runtime-tests/hlsl-state-keywords-probe.c'), '-o', path.join(tests, 'hlsl-state-keywords-probe.exe')], work);
 // Account-free SDK fixture lives only in tests, never in the shipped runtime.
 const pgsTests = path.join(tests, 'playfab-folder');

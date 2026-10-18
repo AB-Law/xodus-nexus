@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Support app-state notification registration during game startup.
 - Accept SKU-qualified product IDs when requesting genuine Store license receipts.
 - Fix LIMBO failing to start with a pixel shader compiler error.
 - Fix Brotato installation failing while reading package metadata. Thanks @Techzilla44 for reporting the issue.

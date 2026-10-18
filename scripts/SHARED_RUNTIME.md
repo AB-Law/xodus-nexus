@@ -80,6 +80,13 @@ waiting, and reentrant unregister/close. This is expiry notification only, not
 Microsoft's full account/network/concurrency revocation service. Offline license
 acquisition, other acquisition variants and content mounting are not implemented.
 
+### App-state subscriptions
+
+App-state notification subscriptions support registration and unregistration,
+including concurrent callers. Desktop processes have no app-container suspension
+event source, so the runtime does not synthesize suspend/resume callbacks.
+App-constrained notifications remain unsupported.
+
 ### Configuration bootstrap
 
 Configuration bootstrap also distinguishes inline XML, explicit files and
@@ -252,13 +259,13 @@ but those results are not automatically evidence for the CI distribution.
 
 Output:
 
-- `components/`: newly built xgameruntime, winhttp, mscoree, libnghttp2, windows.web and libvkd3d-shader-1,
+- `components/`: newly built xgameruntime, winhttp, mscoree, libnghttp2, windows.web, twinapi.appcore and libvkd3d-shader-1,
   licenses and a source/patch/toolchain/component checksum manifest.
 - `media/`: pinned FFmpeg 4.4.8 source archive, LGPL build, six shared
   libraries, configure options and checksums. The archive accompanies the
   distributed runtime source package.
 - `tests/`: native ABI, WinRT JSON and HLSL compiler regression probes.
-- `runtime/`: a **new copy** of the supplied Proton base with the six DLLs
+- `runtime/`: a **new copy** of the supplied Proton base with the seven DLLs
   installed in both runtime and default-prefix locations, plus provenance.
 
 The base Wine/Unix loader and other Proton components are supplied by that
@@ -351,7 +358,7 @@ multiplayer-match stability or universal game compatibility. The installed
 production runtime was not switched as part of verification.
 
 Launcher provisioning installs checksum-verified nghttp2, windows.web,
-libvkd3d-shader-1 DLLs
+twinapi.appcore and libvkd3d-shader-1 DLLs
 into existing prefix system32 locations when their runtime capabilities are
 present, and selects the builtin WinHTTP transport. All component checksums
 are checked before replacing any entries. This is generic provisioning, not

@@ -313,13 +313,15 @@ export async function prepareProtonRunner(
   let http2Runtime = false;
   let jsonRuntime = false;
   let shaderRuntime = false;
+  let appStateRuntime = false;
   try {
     const metadata = JSON.parse(await fs.readFile(path.join(protonRoot, 'XODUS_NEXUS_PATCH.json'), 'utf8')) as { features?: unknown; components?: Record<string, string> };
     hostLibraries = Array.isArray(metadata.features) && metadata.features.includes('wine-host-libraries-v1');
     http2Runtime = Array.isArray(metadata.features) && metadata.features.includes('wine-winhttp-http2-v1');
     jsonRuntime = Array.isArray(metadata.features) && metadata.features.includes('winrt-json-v1');
     shaderRuntime = Array.isArray(metadata.features) && metadata.features.includes('hlsl-state-keywords-v1');
-    const components = [ ...(http2Runtime ? ['libnghttp2.dll'] : []), ...(jsonRuntime ? ['windows.web.dll'] : []), ...(shaderRuntime ? ['libvkd3d-shader-1.dll'] : []) ];
+    appStateRuntime = Array.isArray(metadata.features) && metadata.features.includes('appstate-registration-v1');
+    const components = [ ...(http2Runtime ? ['libnghttp2.dll'] : []), ...(jsonRuntime ? ['windows.web.dll'] : []), ...(shaderRuntime ? ['libvkd3d-shader-1.dll'] : []), ...(appStateRuntime ? ['twinapi.appcore.dll'] : []) ];
     // Validate every component before changing any prefix entry.
     const verified = await Promise.all(components.map(async (name) => {
       // WinHTTP loads nghttp2 with LOAD_LIBRARY_SEARCH_SYSTEM32. WINEDLLPATH
@@ -345,7 +347,7 @@ export async function prepareProtonRunner(
       }
     }
   } catch (error) {
-    if (http2Runtime || jsonRuntime || shaderRuntime) throw error;
+    if (http2Runtime || jsonRuntime || shaderRuntime || appStateRuntime) throw error;
     // Stock Proton keeps its bundled library environment.
   }
   const libraryDirectories = [

@@ -145,6 +145,7 @@ but have not been verified and may encounter compatibility issues.
 | The Witcher 3 | No | Currently crashes on launch. |
 | LIMBO | Yes | Playable with an unreleased runtime fix. The published runtime still has a shader compilation error at startup. |
 | World War Z | Partial | Connects to online services and starts Quick Match search with an unreleased backend fix; joining a match is unverified. |
+| Balatro | Yes | Playable with an unreleased runtime fix, but crashes when quitting. The published runtime exits before opening the game. |
 
 [Full compatibility list](https://github.com/domsvoboda/xodus-nexus/wiki/Compatibility)
 
