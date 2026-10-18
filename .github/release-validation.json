@@ -2,6 +2,16 @@
   "schema": 1,
   "approvals": [
     {
+      "kind": "backend",
+      "runId": "39155504527",
+      "commit": "b608ef710f39c54896676d40ee491a11ecd86c71",
+      "manifestSha256": "3a4330be0fbcdeb310e6dc8ac752202b701101246182d7b5154d0b7b12ea789b",
+      "notesSha256": "1127325b9ae481e6a5cb2b3d56e19d7c78f9362bd08259688eb4d2a2175d530c",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit human authorization on 2026-10-18 to publish the backend hotfix after safety validation. Main CI 39155504527 succeeded at b608ef7 with 31 CLI, 8 credential, 14 Store, 1 resume and 6 package-metadata tests. Exact binary/source archives, candidate SHA-256/SHA-512, 19 locked patches, unchanged Cargo dependencies and recipe tools verified. All 35472 checksum-listed files across 685 vendored packages verified; an isolated empty-Cargo-home, network-disabled build of the corresponding source passed the 8 credential tests and compiled both CLI and service without using registry caches. Exact CI login, streaming and service failure-path checks exited 1 with sanitized credential codes, no panic and no account access. A separately authorized isolated Balatro/cloud test used the exact CI backend with published launcher 0.3.6 and unchanged runtime gf291f544, confirming the preserved linux-run-v18 launch contract. The human confirmed Balatro works. Service readiness, expected runtime DLL loads, game process exit 0, no remaining prefix processes, unchanged component/backend hashes and six protected original inputs were verified. No new cloud-roundtrip, online-match or reporter-specific GNOME login success claim. Promote this unchanged backend candidate only; keep existing launcher/runtime releases and production settings unchanged."
+    },
+    {
       "kind": "launcher",
       "runId": "39141593873",
       "commit": "f291f5448e6b4cd031f0ba9d8a8fa4c0a85e8467",
