@@ -1,0 +1,108 @@
+diff --git a/dlls/twinapi.appcore/main.c b/dlls/twinapi.appcore/main.c
+index d536506..3b52bc5 100644
+--- a/dlls/twinapi.appcore/main.c
++++ b/dlls/twinapi.appcore/main.c
+@@ -33,11 +33,7 @@ ULONG WINAPI RegisterAppConstrainedChangeNotification( PAPPCONSTRAIN_CHANGE_ROUT
+ /***********************************************************************
+  *           RegisterAppStateChangeNotification (twinapi.appcore.@)
+  */
+-ULONG WINAPI RegisterAppStateChangeNotification( PAPPSTATE_CHANGE_ROUTINE routine, void *context, PAPPSTATE_REGISTRATION *reg )
+-{
+-    FIXME( "routine %p, context %p, reg %p - stub.\n", routine, context, reg );
+-    return ERROR_CALL_NOT_IMPLEMENTED;
+-}
++#include "appstate-registration.h"
+ 
+ /***********************************************************************
+  *           UnregisterAppConstrainedChangeNotification (twinapi.appcore.@)
+@@ -50,9 +46,10 @@ void WINAPI UnregisterAppConstrainedChangeNotification( PAPPCONSTRAIN_REGISTRATI
+ /***********************************************************************
+  *           UnregisterAppStateChangeNotification (twinapi.appcore.@)
+  */
+-void WINAPI UnregisterAppStateChangeNotification( PAPPSTATE_REGISTRATION reg )
++BOOL WINAPI DllMain( HINSTANCE instance, DWORD reason, void *reserved )
+ {
+-    FIXME( "reg %p - stub.\n", reg );
++    if (reason == DLL_PROCESS_DETACH && !reserved) appstate_free_registrations();
++    return TRUE;
+ }
+ 
+ HRESULT WINAPI DllGetClassObject( REFCLSID clsid, REFIID riid, void **out )
+diff --git a/dlls/twinapi.appcore/appstate-registration.h b/dlls/twinapi.appcore/appstate-registration.h
+new file mode 100644
+index 0000000..93e79ca
+--- /dev/null
++++ b/dlls/twinapi.appcore/appstate-registration.h
+@@ -0,0 +1,72 @@
++/* App-state subscriptions for Wine desktop processes. No app-container
++ * suspension source exists here, so registration never invents notifications.
++ * This file is part of Wine and is licensed under LGPL-2.1-or-later. */
++
++#include <stdlib.h>
++
++struct appstate_registration
++{
++    struct appstate_registration *next;
++    PAPPSTATE_REGISTRATION handle;
++    PAPPSTATE_CHANGE_ROUTINE routine;
++    void *context;
++};
++
++static SRWLOCK appstate_lock = SRWLOCK_INIT;
++static struct appstate_registration *appstate_registrations;
++static ULONG_PTR appstate_next_id;
++
++ULONG WINAPI RegisterAppStateChangeNotification( PAPPSTATE_CHANGE_ROUTINE routine,
++                                                void *context, PAPPSTATE_REGISTRATION *out )
++{
++    struct appstate_registration *registration;
++
++    if (!out) return ERROR_INVALID_PARAMETER;
++    *out = NULL;
++    if (!routine) return ERROR_INVALID_PARAMETER;
++    if (!(registration = malloc( sizeof(*registration) ))) return ERROR_NOT_ENOUGH_MEMORY;
++    registration->routine = routine;
++    registration->context = context;
++
++    AcquireSRWLockExclusive( &appstate_lock );
++    if (appstate_next_id == ~(ULONG_PTR)0)
++    {
++        ReleaseSRWLockExclusive( &appstate_lock );
++        free( registration );
++        return ERROR_NOT_ENOUGH_MEMORY;
++    }
++    registration->handle = (PAPPSTATE_REGISTRATION)++appstate_next_id;
++    registration->next = appstate_registrations;
++    appstate_registrations = registration;
++    *out = registration->handle;
++    ReleaseSRWLockExclusive( &appstate_lock );
++    return ERROR_SUCCESS;
++}
++
++void WINAPI UnregisterAppStateChangeNotification( PAPPSTATE_REGISTRATION handle )
++{
++    struct appstate_registration **cursor, *registration = NULL;
++
++    AcquireSRWLockExclusive( &appstate_lock );
++    for (cursor = &appstate_registrations; *cursor; cursor = &(*cursor)->next)
++    {
++        if ((*cursor)->handle != handle) continue;
++        registration = *cursor;
++        *cursor = registration->next;
++        break;
++    }
++    ReleaseSRWLockExclusive( &appstate_lock );
++    free( registration );
++}
++
++/* Called only during DLL unload, when callers must no longer use its APIs. */
++static void appstate_free_registrations(void)
++{
++    struct appstate_registration *registration;
++
++    while ((registration = appstate_registrations))
++    {
++        appstate_registrations = registration->next;
++        free( registration );
++    }
++}
