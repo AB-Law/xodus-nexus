@@ -8,6 +8,12 @@ const readline=require('node:readline');
 const out=value=>process.stdout.write('NEXUS_AUTH_V1 '+JSON.stringify(value)+'\n');
 const mode=process.env.FIXTURE_MODE;
 if(mode==='no-handshake'){process.stdout.write('ordinary help\n');process.exit(0);}
+if(mode==='credential-failure'){
+ process.stderr.write('synthetic-secret-must-not-be-logged\nNEXUS_CREDENTIAL_ERROR_V1 keyring-write-verification\n');process.exit(1);
+}
+if(mode==='unknown-credential'){
+ process.stderr.write('NEXUS_CREDENTIAL_ERROR_V1 synthetic-secret-must-not-be-logged\n');process.exit(1);
+}
 out({type:'ready',version:1});
 readline.createInterface({input:process.stdin}).on('line',line=>{
  const event=JSON.parse(line);
@@ -22,7 +28,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
 });
 `;
 describe('private auth transport', () => {
-  it.each(['success', 'invalid', 'no-handshake', 'cancel', 'load-failure'])('handles %s without exposing protocol output', async mode => {
+  it.each(['success', 'invalid', 'no-handshake', 'cancel', 'load-failure', 'credential-failure', 'unknown-credential'])('handles %s without exposing protocol output', async mode => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-auth-fixture-'));
     let disposed = false, opens = 0, closes = 0;
     try {
@@ -32,7 +38,8 @@ describe('private auth transport', () => {
         close() { closes++; }, async context() {}, async dispose() { disposed = true; },
       });
       const tracked = startAuthTransport(binary, factory, { ...process.env, FIXTURE_MODE: mode }, 3000);
-      if (mode === 'invalid' || mode === 'no-handshake' || mode === 'load-failure') await expect(tracked.result).rejects.toThrow(/sign-in/i);
+      if (mode === 'credential-failure') { await expect(tracked.result).rejects.toThrow('keyring did not return the credentials just saved'); expect(opens).toBe(0); }
+      else if (mode === 'invalid' || mode === 'no-handshake' || mode === 'load-failure' || mode === 'unknown-credential') await expect(tracked.result).rejects.toThrow(/sign-in/i);
       else { const result = await tracked.result; expect(result.code).toBe(mode === 'cancel' ? 1 : 0); expect(result.output).toBe(''); }
       expect(disposed).toBe(true);
       if (mode === 'success') { expect(opens).toBe(1); expect(closes).toBe(1); }

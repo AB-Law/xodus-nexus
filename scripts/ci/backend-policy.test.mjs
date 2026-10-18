@@ -34,3 +34,10 @@ test('backend workflow shell parses and resolves the locked toolchain', async ()
     assert.equal(await fs.readFile(env, 'utf8'), `BACKEND_RUST=${lock.rust}\n`);
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
+
+test('backend build runs account-free credential persistence regressions', async () => {
+  const build = await fs.readFile('scripts/build-backend.mjs', 'utf8');
+  assert.match(build, /command\('cargo', \['test', '--locked', \.\.\.offline, \.\.\.features, '-p', 'xodus', 'credential_'\]\)/);
+  const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
+  assert.ok(lock.patches.some(patch => patch.file === 'xodus-keyring-credentials.patch'));
+});
