@@ -12,6 +12,11 @@ not launcher mocks. They do not use a game, Xbox account, network, or saves.
 Run them only in a disposable Wine prefix containing the candidate DLL.
 Never copy a candidate DLL into an active or production prefix.
 
+`system-device-id-probe.c` checks all five supported XSystem interface versions,
+the 45-byte documented unavailable-ID sentinel, optional result length, short
+and invalid buffers, repeated queries and the neighbouring console/sandbox APIs.
+The runtime does not provide a unique platform device identifier.
+
 - `taskqueue-teardown-probe.c`: composite queue termination must drain its
   callbacks, mark pending callbacks canceled, preserve independent parent work,
   and deliver termination through the completion port (20 checks).
@@ -66,6 +71,21 @@ Never copy a candidate DLL into an active or production prefix.
   package. These checks do not establish a title's startup compatibility.
   Uses only synthetic files in a disposable prefix, without accounts or licensing.
   File presence checks are not a full package-integrity or ownership verification.
+- `package-legacy-probe.c`: independent raw x64 COM-slot checks for the legacy
+  package interface, current-interface compatibility and reference counts,
+  package enumeration, Store-ID lookup and output-buffer boundaries. Unsupported
+  install notifications and mounting fail explicitly with cleared outputs.
+  Uses synthetic metadata only; does not establish a game's startup compatibility.
+- `package-chunks-probe.c`: real package ABI enumeration of numeric chunks,
+  deduplicated languages/tags, feature bindings and readable extracted payload.
+  Covers destination paths, missing files, callback stop/reentrancy, malformed
+  layouts and registration-only packages in a disposable account-free prefix.
+- `package-monitors-probe.c`: metadata-backed installation snapshots, initial
+  completion-port notification and subsequent availability changes, zero-interval
+  query-only snapshots, selector copies, all queue dispatch modes, cancellation,
+  queued/running unregister, waiting, and close from inside a callback.
+  Byte totals remain zero when unknown. Synthetic missing files must not report
+  completion; the tests do not establish game startup or package ownership.
 - `playfab-session-probe.c`: pinned threading ABI checks, asynchronous test-only
   dialog choices, preserved title callbacks, retained synthetic users, caller
   Manual completion queue, genuine upload failure and acknowledged upload before

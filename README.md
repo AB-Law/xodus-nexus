@@ -126,7 +126,7 @@ but have not been verified and may encounter compatibility issues.
 | SIGNALIS | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
 | DREDGE | Yes | Playable. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/106)) |
 | Warhammer 40,000: Space Marine 2 | Yes | Playable; online unverified. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/106)) |
-| Indiana Jones and the Great Circle | No | Crashes after the publisher logo. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/78)) |
+| Indiana Jones and the Great Circle | Yes | First mission playable with an unreleased runtime fix. The published runtime still has a [startup crash](https://github.com/domsvoboda/xodus-nexus/issues/78). |
 | Microsoft Jewel | No | Crashes at launch. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
 | Microsoft Bubble | No | Crashes at launch. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
 | AI: THE SOMNIUM FILES - nirvanA Initiative | Yes | Playable; Store ID detection issue reported. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
@@ -138,7 +138,7 @@ but have not been verified and may encounter compatibility issues.
 | Kingdom Come: Deliverance II | No | Crashes at startup. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/112)) |
 | PAC-MAN MUSEUM+ | No | Stops after the opening logos. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/61)) |
 | Farming Simulator 25 | No | Startup failure reported; updated runtime retest pending. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/62)) |
-| PowerWash Simulator 2 | No | Stuck on the initial loading screen. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/69)) |
+| PowerWash Simulator 2 | Yes | Playable with an unreleased runtime fix. The published runtime still has an [initial loading hang](https://github.com/domsvoboda/xodus-nexus/issues/69). |
 | Young Souls | Unverified | Launches in Steam Deck Desktop Mode; gameplay unverified. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/8#issuecomment-6225913594)) |
 | Remnant II | Unverified | Starts and exits cleanly; gameplay and online were not detailed. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/34#issuecomment-6190973665)) |
 | The Witcher 3 | No | Currently crashes on launch. |

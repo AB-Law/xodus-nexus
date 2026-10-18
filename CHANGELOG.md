@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fix PowerWash Simulator 2 getting stuck on the initial loading screen.
+- Deliver installation-progress notifications, fixing Indiana Jones and the Great Circle crashing after the opening logos.
+- Enumerate installed package chunks, languages, tags and features from layout metadata.
+- Support a legacy XPackage interface and its installed-package metadata queries.
 - Clear My Library search on restart while remembering Access and Play state filters.
 - Add gamepad navigation for the launcher, including directional focus, dialogs and game options, while preserving mouse and touch controls. Thanks @Techzilla44 for the suggestion.
 - Support gzip response decompression and server certificate-chain queries in the shared runtime's WinHTTP implementation.
