@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "version": "0.2.5",
+  "version": "0.2.6",
   "repository": "https://github.com/xodus-gaming/xodus.git",
   "commit": "53ea781dcd073e31d7ea68e894134e9c959bff04",
   "rust": "1.99.0",
   "cargoLockSha256": "2259b343e00dadc263018beb7664b12e9d58a0b73bff502ad566f5f8619ce28a",
-  "patchId": "linux-run-v18",
+  "patchId": "linux-run-v19",
   "compatibility": "linux-run-v18",
   "patches": [
     { "file": "xodus-linux-run.patch", "sha256": "68f260ec2c6e9264c47ed1a650868511f5412a756725d4000a865804f4712e8b" },
@@ -25,6 +25,7 @@
     { "file": "xodus-keyring-activation.patch", "sha256": "8c71928e0b365f4770532ef968322450f1ebab3a1199e7a10d894119c48c925e" },
     { "file": "xodus-package-selection.patch", "sha256": "7507cb0535cd914d3607e7940d5e17b949d106d0b89c139b84372a1ee1732c54" },
     { "file": "xodus-package-metadata.patch", "sha256": "43fccfbb2ea2a9809e7f0b3d9e2f506213e6245d3bbd4c1c631149a67bb2d661" },
-    { "file": "xodus-license-sku.patch", "sha256": "b7c93b6ead7120c5b2af3616e80c0dadf56326a8bc81a2526a5e1f2700f58e20" }
+    { "file": "xodus-license-sku.patch", "sha256": "b7c93b6ead7120c5b2af3616e80c0dadf56326a8bc81a2526a5e1f2700f58e20" },
+    { "file": "xodus-keyring-credentials.patch", "sha256": "8b354f95b864ffd7eadb02f0d54eb1361bb92fde14ff8696fabfea5c43d03811" }
   ]
 }

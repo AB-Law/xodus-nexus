@@ -3,7 +3,7 @@ name: Nexus backend build
 on:
   push:
     branches: [main]
-    paths: [assets/backend-source.lock.json, 'assets/xodus-*.patch', scripts/build-backend.mjs, 'scripts/ci/**', .github/workflows/backend.yml]
+    paths: [assets/backend-source.lock.json, 'assets/xodus-*.patch', scripts/build-backend.mjs, scripts/backend-source-archive.mjs, 'scripts/ci/**', .github/workflows/backend.yml]
   workflow_dispatch:
 
 permissions:

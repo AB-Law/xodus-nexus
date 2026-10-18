@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## Backend 0.2.6
+
+- Prevent sign-in and installation panics when stored credentials are invalid, verify keyring writes and show actionable sign-in errors. Thanks @jordanfaz for reporting the issue.
+- Include nested dependency source directories in the corresponding-source archive for offline builds.
+
 ## 0.3.6
 
 - Prevent repeated task-queue closes from releasing pending work or crashing during game shutdown.

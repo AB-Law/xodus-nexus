@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { AUTH_FRAME_LIMIT, authFrame, type AuthFrame } from './auth-protocol.js';
 import { externalLauncherEnvironment } from './launcher-environment.js';
+import { CredentialErrorReader } from './credential-errors.js';
 export interface AuthView {
   open(frame: Extract<AuthFrame, { type: 'open' }>): Promise<void>;
   close(session: number): void;
@@ -22,6 +23,7 @@ export function startAuthTransport(binary: string, createView: AuthViewFactory, 
   let failure: Error | undefined, line = '', total = 0, queue = Promise.resolve();
   let abortTimer: ReturnType<typeof setTimeout> | undefined;
   const decoder = new StringDecoder('utf8');
+  const credentialError = new CredentialErrorReader();
   const terminate = () => { if (!stopped) { child.kill('SIGTERM'); abortTimer ??= setTimeout(() => { if (!stopped) child.kill('SIGKILL'); }, 1500); } };
   const fail = (message: string) => { if (!failure) { failure = Error(message); terminate(); } };
   const write = (event: object) => { if (!stopped && !child.stdin.destroyed && child.stdin.writable) child.stdin.write(JSON.stringify(event) + '\n'); };
@@ -34,7 +36,7 @@ export function startAuthTransport(binary: string, createView: AuthViewFactory, 
   const timer = setTimeout(() => fail('Sign-in timed out.'), timeoutMs);
   const force = setTimeout(() => { if (!stopped) child.kill('SIGKILL'); }, timeoutMs + 3000);
   child.stdin.on('error', () => { if (!stopped && !cancelled) fail('The sign-in backend disconnected.'); });
-  child.stderr.on('data', () => {}); // Tokens and backend diagnostics must not enter public/UI logs.
+  child.stderr.on('data', (bytes: Buffer) => credentialError.push(bytes));
   child.stdout.on('data', bytes => {
     total += bytes.length; line += decoder.write(bytes);
     if (total > 2 * 1024 * 1024) { fail('Sign-in backend exceeded the output limit.'); return; }
@@ -66,6 +68,7 @@ export function startAuthTransport(binary: string, createView: AuthViewFactory, 
       stopped = true; clearTimeout(timer); clearTimeout(force); clearTimeout(abortTimer);
       await view.dispose().catch(() => {}); await queue;
       if (failure) reject(failure);
+      else if (code !== 0 && credentialError.message) reject(Error(credentialError.message));
       else if (!ready || line.length || (code === 0 && (active !== undefined || latest === 0))) reject(Error('The sign-in backend did not complete its protocol.'));
       else resolve({ code: cancelled ? 1 : (code ?? 1), output: '' });
     });
