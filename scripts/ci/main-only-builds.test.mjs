@@ -28,3 +28,12 @@ test('the published backend uses the dedicated UI without WebKit build prerequis
   const native=(await read('backend')).jobs.build.steps.find(step=>step.name==='Install native build libraries').run;
   assert.doesNotMatch(native,/webkit|libgtk|libsoup/i);
 });
+test('runtime CI exposes the installed Ubuntu Wine tools before compilation',async()=>{
+  const steps=(await read('runtime')).jobs.build.steps;
+  const install=steps.findIndex(step=>step.name==='Install build and test prerequisites');
+  const build=steps.findIndex(step=>step.name==='Build all shared components from pinned clean checkouts');
+  assert.ok(install>=0&&build>install);
+  assert.match(steps[install].run,/wine64-tools/);
+  assert.match(steps[install].run,/test -x \/usr\/lib\/wine\/widl/);
+  assert.match(steps[install].run,/echo \/usr\/lib\/wine >> "\$GITHUB_PATH"/);
+});
