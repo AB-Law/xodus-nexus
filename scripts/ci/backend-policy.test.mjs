@@ -47,7 +47,8 @@ test('corresponding-source archive preserves nested target source directories', 
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'backend-source-archive-'));
   try {
     const entries = ['source/.git/config', 'source/target/debug/binary', 'source/vendor/cc/src/target/apple.rs',
-      'source/vendor/dependency/.git/reference', 'source/crates/xodus/src/lib.rs', 'recipe/scripts/build-backend.mjs'];
+      'source/vendor/dependency/.git/reference', 'source/vendor/other/source/target/parser.rs',
+      'source/vendor/other/source/.git/reference', 'source/crates/xodus/src/lib.rs', 'recipe/scripts/build-backend.mjs'];
     for (const name of entries) {
       await fs.mkdir(path.dirname(path.join(root, name)), { recursive: true });
       await fs.writeFile(path.join(root, name), 'synthetic source');
