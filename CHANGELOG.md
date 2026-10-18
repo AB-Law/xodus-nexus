@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Accept SKU-qualified product IDs when requesting genuine Store license receipts.
 - Fix Brotato installation failing while reading package metadata. Thanks @Techzilla44 for reporting the issue.
 - Fix PowerWash Simulator 2 getting stuck on the initial loading screen.
 - Deliver installation-progress notifications, fixing Indiana Jones and the Great Circle crashing after the opening logos.
