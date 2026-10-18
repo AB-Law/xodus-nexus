@@ -124,6 +124,10 @@
     {
       "file": "assets/wine-winhttp-response-options.patch",
       "sha256": "d4cb1475159e36e27d324ab61a7f2a9e7b695f193e037583587b4524b9eccb98"
+    },
+    {
+      "file": "assets/xgameruntime-package-legacy.patch",
+      "sha256": "6414ee338c717b855beb700824b96bc4f583c05a9d19f713378022998fead946"
     }
   ],
   "expectedXgameruntimeSources": {
@@ -139,9 +143,9 @@
     "dlls/xgameruntime/xgamesave.c": "5d78ee9c7b102c24a8e3c08dae66ed88f3de529ede9d182cf2f0635d79ad90d0",
     "dlls/xgameruntime/xgamesave.idl": "544319e88951f65b21c74f785fb9376c10cac8b1d57e98c7aa3079348162ccab",
     "dlls/xgameruntime/xnetworking.c": "cfd8d0110b7ebd622f62317d3134dd866e6538e4a697b06912fa752517fe7caa",
-    "dlls/xgameruntime/xpackage.c": "4aa6252d00a06023d2dbf62c5b6c82c0b1e563c5839fe78b961c0a487cc36a03",
+    "dlls/xgameruntime/xpackage.c": "996ee1abca88ea9b469c2cbd76dde8fe69c31c79dd90f857bb6dd699a82dbdd4",
     "dlls/xgameruntime/xpackage_content.h": "d3addb58053e44848bfb2be29d3568019196568ad98b605544b3506c03ed1c2f",
-    "dlls/xgameruntime/xpackage.idl": "afb602c0f76a97f6358950baf48e7a49df61e150134989b676879e7001a60108",
+    "dlls/xgameruntime/xpackage.idl": "189df1454b50e4cdf874592c6c5309985419c0ec20c5bf3dc69dba4bb62accde",
     "dlls/xgameruntime/xpersistentlocalstorage.c": "48111212dcfe4ef328fa482dc8b426ef853b7c961d575aefeaa3b559788809b2",
     "dlls/xgameruntime/xstore.c": "323183e6c7b6f627888dcd6c7d9be90bc1bf43cb8677b3be4fb06a1539947a5b",
     "dlls/xgameruntime/xstore_entitled.h": "cae87da7943d625664c94b7179b47f1eedf2cd3dfd3192f99bd1a252b273e289",

@@ -66,6 +66,11 @@ Never copy a candidate DLL into an active or production prefix.
   package. These checks do not establish a title's startup compatibility.
   Uses only synthetic files in a disposable prefix, without accounts or licensing.
   File presence checks are not a full package-integrity or ownership verification.
+- `package-legacy-probe.c`: independent raw x64 COM-slot checks for the legacy
+  package interface, current-interface compatibility and reference counts,
+  package enumeration, Store-ID lookup and output-buffer boundaries. Unsupported
+  install notifications and mounting fail explicitly with cleared outputs.
+  Uses synthetic metadata only; does not establish a game's startup compatibility.
 - `playfab-session-probe.c`: pinned threading ABI checks, asynchronous test-only
   dialog choices, preserved title callbacks, retained synthetic users, caller
   Manual completion queue, genuine upload failure and acknowledged upload before
