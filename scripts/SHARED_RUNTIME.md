@@ -80,6 +80,15 @@ waiting, and reentrant unregister/close. This is expiry notification only, not
 Microsoft's full account/network/concurrency revocation service. Offline license
 acquisition, other acquisition variants and content mounting are not implemented.
 
+### Task-queue ownership
+
+Public queue handles and references held by pending callbacks and dispatchers
+are counted separately. Closing all public references leaves pending work alive;
+repeated closes cannot consume its internal references. Duplicating a closed or
+unknown handle fails. Duplicates retain the existing shared-handle semantics,
+so callers must still balance each successful duplicate with one close and
+must not reuse stale handles after their storage can have been recycled.
+
 ### App-state subscriptions
 
 App-state notification subscriptions support registration and unregistration,

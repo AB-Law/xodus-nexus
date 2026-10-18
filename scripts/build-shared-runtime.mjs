@@ -185,7 +185,7 @@ await buildPlayFabSessionProbe(path.join(tests,'playfab-session'),[
 await fs.mkdir(initTests);
 run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-Wextra', '-Werror', path.join(project, 'scripts/runtime-tests/runtime-init-probe.c'), '-o', path.join(initTests, 'runtime-init-probe.exe')], work);
 await fs.writeFile(path.join(initTests, 'MicrosoftGame.config'), '<Game><!-- <Identity Name="Wrong.Example" Publisher="CN=Wrong"/><TitleId>0000</TitleId> --><Identity Name="Nexus.Init.Inline" Publisher="CN=NexusProbe"/><TitleId>1234</TitleId></Game>');
-for (const test of ['taskqueue-teardown', 'taskqueue-contract', 'async-provider-contract', 'async-completion-lifetime', 'async-schedule', 'gamesave-files']) {
+for (const test of ['taskqueue-teardown', 'taskqueue-contract', 'taskqueue-close', 'async-provider-contract', 'async-completion-lifetime', 'async-schedule', 'gamesave-files']) {
   run('x86_64-w64-mingw32-gcc', ['-D__WINESRC__', '-O2', '-Wall', '-I', path.join(build, 'dlls/xgameruntime'), '-I', path.join(source, 'dlls/xgameruntime'), '-I', path.join(build, 'include'), '-I', path.join(source, 'include'), path.join(project, `scripts/runtime-tests/${test}-probe.c`), '-o', path.join(tests, `${test}-probe.exe`)], work);
 }
 for (const name of ['package-identity', 'package-legacy', 'package-chunks', 'package-monitors', 'system-device-id', 'user-device-association']) {
