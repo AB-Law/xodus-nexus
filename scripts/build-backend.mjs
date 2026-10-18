@@ -44,6 +44,7 @@ if (!rustc.startsWith(`rustc ${lock.rust} `)) throw Error(`Use the locked Rust t
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus-cli']);
 command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-service', 'store_']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'msixvc', 'streaming_']);
+command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'msixvc', 'package_metadata']);
 command('cargo', ['build', '--release', '--locked', ...offline, ...features, '-p', 'xodus-cli', '-p', 'xodus-service']);
 const cli = path.join(target, 'release/xodus-cli');
 const help = command(cli, ['--help'], true);

@@ -24,11 +24,13 @@ describe('prepareProtonRunner', () => {
     await mkdir(path.dirname(wine),{recursive:true}); await mkdir(path.join(runtime,'files/share/default_pfx'),{recursive:true});
     const system32=path.join(compat,'pfx/drive_c/windows/system32'); await mkdir(system32,{recursive:true});
     for(const name of ['libvkd3d-utils-1.dll','dxgi.dll','d3d12.dll']) await writeFile(path.join(system32,name),'ready');
+    await writeFile(path.join(system32,'wined3d.dll'),'unmanaged shader module');
     await writeFile(path.join(runtime,'proton'),'#!/bin/sh\nexit 0\n'); await chmod(path.join(runtime,'proton'),0o700);
     await writeFile(wine,'#!/bin/sh\nprintf "%s\\n" "$WINEDLLOVERRIDES" "$DXVK_HUD" "$WINEPREFIX" "$ESPEAK_DATA_PATH"; printf "<%s>\\n" "$@"; printf "<controller:%s:%s>\\n" "$PROTON_DISABLE_HIDRAW" "$SteamGameId"\n'); await chmod(wine,0o700);
     await writeFile(path.join(runtime,'files/bin/wineserver'),'#!/bin/sh\nexit 0\n'); await chmod(path.join(runtime,'files/bin/wineserver'),0o700);
     const wrapper=await prepareGameWrapper(wine,withTools ? {...defaultLaunchTools,launchOptions:'WINEDLLOVERRIDES="dxgi=n,b;winhttp=b" DXVK_HUD=fps %command% --launcher-skip'} : undefined,path.join(root,'wrappers'));
     const runner=(await prepareProtonRunner(wine,compat,path.join(root,'steam'),wrapper.command))!;
+    expect(await readFile(path.join(system32,'wined3d.dll'),'utf8')).toBe('unmanaged shader module');
     const setup=await execFile(runner.command,['setup']);
     expect(setup.stdout).not.toContain('fps'); expect(setup.stdout).not.toContain('--launcher-skip');
     expect(setup.stdout.split('\n')).toContain(path.join(runtime,'files/share'));
@@ -57,10 +59,13 @@ describe('prepareProtonRunner', () => {
     const system32 = path.join(compat, 'pfx/drive_c/windows/system32');
     const dll = Buffer.from('new shared nghttp2 fixture');
     const jsonDll = Buffer.from('new shared WinRT JSON fixture');
+    const shaderDll = Buffer.from('new shared shader parser fixture');
+    const appStateDll = Buffer.from('new shared app-state registration fixture');
     const original = path.join(root, 'previous-nghttp2.dll');
     await mkdir(path.dirname(wine), { recursive: true });
     await mkdir(path.join(runtime, 'files/share/default_pfx'), { recursive: true });
     await mkdir(path.join(runtime, 'files/lib/wine/x86_64-windows'), { recursive: true });
+    await mkdir(path.join(runtime, 'files/lib/vkd3d/x86_64-windows'), { recursive: true });
     await mkdir(system32, { recursive: true });
     await writeFile(wine, '#!/bin/sh\nprintf \'%s\\n\' "$WINEDLLOVERRIDES"\n');
     await chmod(wine, 0o700);
@@ -69,15 +74,21 @@ describe('prepareProtonRunner', () => {
     for (const name of ['libvkd3d-utils-1.dll', 'dxgi.dll', 'd3d12.dll']) await writeFile(path.join(system32, name), 'ready');
     await writeFile(path.join(runtime, 'files/lib/wine/x86_64-windows/libnghttp2.dll'), dll);
     await writeFile(path.join(runtime, 'files/lib/wine/x86_64-windows/windows.web.dll'), jsonDll);
-    await writeFile(path.join(runtime, 'XODUS_NEXUS_PATCH.json'), JSON.stringify({ features: ['wine-winhttp-http2-v1', 'winrt-json-v1'], components: { 'libnghttp2.dll': createHash('sha256').update(dll).digest('hex'), 'windows.web.dll': createHash('sha256').update(jsonDll).digest('hex') } }));
+    await writeFile(path.join(runtime, 'files/lib/vkd3d/x86_64-windows/libvkd3d-shader-1.dll'), shaderDll);
+    await writeFile(path.join(runtime, 'files/lib/wine/x86_64-windows/twinapi.appcore.dll'), appStateDll);
+    await writeFile(path.join(runtime, 'XODUS_NEXUS_PATCH.json'), JSON.stringify({ features: ['wine-winhttp-http2-v1', 'winrt-json-v1', 'hlsl-state-keywords-v1', 'appstate-registration-v1'], components: { 'libnghttp2.dll': createHash('sha256').update(dll).digest('hex'), 'windows.web.dll': createHash('sha256').update(jsonDll).digest('hex'), 'libvkd3d-shader-1.dll': createHash('sha256').update(shaderDll).digest('hex'), 'twinapi.appcore.dll': createHash('sha256').update(appStateDll).digest('hex') } }));
     if (oldSymlink) {
       await writeFile(original, 'old runtime');
       await symlink(original, path.join(system32, 'libnghttp2.dll'));
       await symlink(original, path.join(system32, 'windows.web.dll'));
-    }
+      await symlink(original, path.join(system32, 'libvkd3d-shader-1.dll'));
+      await symlink(original, path.join(system32, 'twinapi.appcore.dll'));
+    } else await writeFile(path.join(system32, 'libvkd3d-shader-1.dll'), 'previous copied shader module');
     const runner = await prepareProtonRunner(wine, compat, path.join(root, 'steam'));
     expect(await readFile(path.join(system32, 'libnghttp2.dll'))).toEqual(dll);
     expect(await readFile(path.join(system32, 'windows.web.dll'))).toEqual(jsonDll);
+    expect(await readFile(path.join(system32, 'libvkd3d-shader-1.dll'))).toEqual(shaderDll);
+    expect(await readFile(path.join(system32, 'twinapi.appcore.dll'))).toEqual(appStateDll);
     if (oldSymlink) expect(await readFile(original, 'utf8')).toBe('old runtime');
     const { stdout } = await execFile(runner!.command);
     expect(stdout).toContain('winhttp=b;libnghttp2=n');
@@ -90,6 +101,18 @@ describe('prepareProtonRunner', () => {
     await writeFile(path.join(runtime, 'files/lib/wine/x86_64-windows/libnghttp2.dll'), 'corrupt');
     await expect(prepareProtonRunner(wine, compat, path.join(root, 'steam'))).rejects.toThrow('checksum');
     expect(await readFile(path.join(system32, 'libnghttp2.dll'))).toEqual(dll);
+    await writeFile(path.join(runtime, 'files/lib/wine/x86_64-windows/libnghttp2.dll'), dll);
+    await writeFile(path.join(runtime, 'files/lib/vkd3d/x86_64-windows/libvkd3d-shader-1.dll'), 'corrupt');
+    await expect(prepareProtonRunner(wine, compat, path.join(root, 'steam'))).rejects.toThrow('libvkd3d-shader-1.dll checksum');
+    expect(await readFile(path.join(system32, 'libvkd3d-shader-1.dll'))).toEqual(shaderDll);
+    await writeFile(path.join(runtime, 'files/lib/vkd3d/x86_64-windows/libvkd3d-shader-1.dll'), shaderDll);
+    await writeFile(path.join(runtime, 'files/lib/wine/x86_64-windows/twinapi.appcore.dll'), 'corrupt');
+    await expect(prepareProtonRunner(wine, compat, path.join(root, 'steam'))).rejects.toThrow('twinapi.appcore.dll checksum');
+    expect(await readFile(path.join(system32, 'twinapi.appcore.dll'))).toEqual(appStateDll);
+    // This capability must fail closed even without the older capabilities.
+    await writeFile(path.join(runtime, 'XODUS_NEXUS_PATCH.json'), JSON.stringify({ features: ['appstate-registration-v1'], components: { 'twinapi.appcore.dll': createHash('sha256').update(appStateDll).digest('hex') } }));
+    await expect(prepareProtonRunner(wine, compat, path.join(root, 'steam'))).rejects.toThrow('twinapi.appcore.dll checksum');
+    expect(await readFile(path.join(system32, 'twinapi.appcore.dll'))).toEqual(appStateDll);
   });
   it('initializes Proton, then executes Wine directly with the Proton environment', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'xodus-nexus-proton-'));
