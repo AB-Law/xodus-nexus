@@ -73,6 +73,9 @@ jobs:
             pkg-config python3 perl rsync file gh curl tar xz-utils openssl xvfb xauth ripgrep \
             libfreetype-dev libgnutls28-dev libvulkan1 libx11-6 \
             libgstreamer1.0-dev libgstreamer-plugins-base1.0-0
+          # Ubuntu installs the unversioned Wine tools outside the default PATH.
+          test -x /usr/lib/wine/widl
+          echo /usr/lib/wine >> "$GITHUB_PATH"
 
       - name: Build all shared components from pinned clean checkouts
         run: node scripts/build-shared-runtime.mjs --work "$PWD/shared-build" --jobs 4
