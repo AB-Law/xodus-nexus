@@ -136,6 +136,10 @@
     {
       "file": "assets/xgameruntime-package-monitors.patch",
       "sha256": "3ef25340642e82ea1abb156a492003a508de92ce5a3738959ec9f8015ffdf6cc"
+    },
+    {
+      "file": "assets/xgameruntime-device-id.patch",
+      "sha256": "10ae43af64d816f1b7a72b577560508e2a2c04dff2b2e7b405bd7400f971462a"
     }
   ],
   "expectedXgameruntimeSources": {
@@ -159,7 +163,7 @@
     "dlls/xgameruntime/xstore_entitled.h": "cae87da7943d625664c94b7179b47f1eedf2cd3dfd3192f99bd1a252b273e289",
     "dlls/xgameruntime/xstore_receipts.h": "637cc315d72bb1ad20ce5529dfb6be4ef01ae8fd08a321aa5e852c1557c1d280",
     "dlls/xgameruntime/xstore_package_license.h": "678f109e0a0af3f5e87951666f7c891af3999658f8698eb8855387ea355e2a31",
-    "dlls/xgameruntime/xsystem.c": "974c83fe2e1b97e6b2c86e95a558b31d2effe6b9d2b3166c2c4d1882a4341058",
+    "dlls/xgameruntime/xsystem.c": "a3c151c5d05875b68f49c534aae9d40e3f15ec800af0f85e159ede7c95401880",
     "dlls/xgameruntime/xsystemanalytics.c": "189e99c83273b429325ecefa2b9246c45863c22f0c4006a791ec57b8f7b9d384",
     "dlls/xgameruntime/xthreading.c": "9bcc7c380bc57723221335c48a27f065b5a88072d1036cc07235705973f42827",
     "dlls/xgameruntime/xuser.c": "e6826a27ca1068f8ac55e43e047a0e6cb6393713c7acd4563fe7d08d53865cb6",
@@ -182,6 +186,7 @@
   },
   "requiresBackendVersion": "0.2.1",
   "limitations": [
+    "Application-specific device-ID queries return the documented unavailable-ID sentinel, not a unique platform identifier or hardware-attestation token.",
     "PlayFab in-process fallback supports the verified x64 40-export SDK ABI; missing device/conflict/failure UI and final upload before normal SDK cleanup are provided. Forced process termination is not a successful cloud sync. Default-on Gaming Services version metadata is not a Microsoft service implementation.",
     "Store update queries support the verified current-game no-update case; DLC, mandatory updates and downloads remain unsupported",
     "Entitled-product queries verify fresh signed Store receipts for the current game and config-declared related products, with public catalog metadata. Online access is required; other Store queries, purchase/download APIs and consumable quantities are not supplied by this increment.",

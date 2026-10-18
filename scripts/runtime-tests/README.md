@@ -12,6 +12,11 @@ not launcher mocks. They do not use a game, Xbox account, network, or saves.
 Run them only in a disposable Wine prefix containing the candidate DLL.
 Never copy a candidate DLL into an active or production prefix.
 
+`system-device-id-probe.c` checks all five supported XSystem interface versions,
+the 45-byte documented unavailable-ID sentinel, optional result length, short
+and invalid buffers, repeated queries and the neighbouring console/sandbox APIs.
+The runtime does not provide a unique platform device identifier.
+
 - `taskqueue-teardown-probe.c`: composite queue termination must drain its
   callbacks, mark pending callbacks canceled, preserve independent parent work,
   and deliver termination through the completion port (20 checks).
