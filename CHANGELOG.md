@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Accept SKU-qualified product IDs when requesting genuine Store license receipts.
+- Fix LIMBO failing to start with a pixel shader compiler error.
 - Fix Brotato installation failing while reading package metadata. Thanks @Techzilla44 for reporting the issue.
 - Fix Kingdom Come: Deliverance II crashing during startup. Thanks @TinyRoar-Basti for reporting the issue.
 - Support asynchronous multiplayer privilege resolution using authenticated Xbox account permissions. Account restrictions still require resolution through Xbox settings.

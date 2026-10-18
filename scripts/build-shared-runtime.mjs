@@ -18,7 +18,7 @@ const options = {};
 for (let i = 2; i < process.argv.length; i++) {
   const key = process.argv[i];
   if (key === '--prepare-only') options.prepareOnly = true;
-  else if (['--work', '--jobs', '--wine-mirror', '--xgameruntime-mirror', '--nghttp2-mirror', '--base-runtime', '--media-archive'].includes(key)) {
+  else if (['--work', '--jobs', '--wine-mirror', '--xgameruntime-mirror', '--nghttp2-mirror', '--vkd3d-mirror', '--vulkan-headers-mirror', '--spirv-headers-mirror', '--base-runtime', '--media-archive'].includes(key)) {
     if (!process.argv[i + 1] || process.argv[i + 1].startsWith('--')) throw new Error(`Missing value for ${key}`);
     options[key.slice(2)] = process.argv[++i];
   } else throw new Error(`Unknown argument ${key}`);
@@ -48,6 +48,7 @@ async function checkout(name, target) {
       run('git', ['-C', target, 'status', '--porcelain'], work, true).trim()) throw new Error(`Not a clean pinned ${name} checkout`);
 }
 if (await exists(work)) throw new Error(`Refusing to overwrite an existing work directory: ${work}`);
+run('perl', ['-MJSON', '-e', '1'], project);
 // Verify exports before doing any clone/build. A mismatch is never forced.
 for (const patch of lock.patches) {
   if (await shaFile(path.join(project, patch.file)) !== patch.sha256) throw new Error(`Patch checksum mismatch: ${patch.file}`);
@@ -65,31 +66,64 @@ await fs.mkdir(work, { recursive: true });
 const source = path.join(work, 'wine-src');
 const ngSource = path.join(work, 'nghttp2-src');
 const ngBuild = path.join(work, 'nghttp2-build');
+const shaderSource = path.join(work, 'vkd3d-src');
+const shaderBuild = path.join(work, 'vkd3d-build');
+const shaderStage = path.join(work, 'vkd3d-stage');
+const vulkanHeaders = path.join(work, 'vulkan-headers');
+const spirvHeaders = path.join(work, 'spirv-headers');
 const build = path.join(work, 'wine-build');
 await checkout('wine', source);
 await checkout('xgameruntime', path.join(source, 'dlls/xgameruntime'));
 await checkout('nghttp2', ngSource);
+await checkout('vkd3d', shaderSource);
+await checkout('vulkan-headers', vulkanHeaders);
+await checkout('spirv-headers', spirvHeaders);
 for (const patch of lock.patches) {
   console.log(`Applying ${patch.file}`);
-  run('git', ['apply', '--check', path.join(project, patch.file)], source);
-  run('git', ['apply', path.join(project, patch.file)], source);
+  if (patch.repository && patch.repository !== 'vkd3d') throw new Error(`Unknown patch repository: ${patch.repository}`);
+  const target = patch.repository === 'vkd3d' ? shaderSource : source;
+  run('git', ['apply', '--check', path.join(project, patch.file)], target);
+  run('git', ['apply', path.join(project, patch.file)], target);
 }
 for (const [relative, expected] of Object.entries(lock.expectedXgameruntimeSources)) {
   if (await shaFile(path.join(source, relative)) !== expected) throw new Error(`Source reproduction mismatch: ${relative}`);
 }
+for (const [relative, expected] of Object.entries(lock.expectedWineSources ?? {})) {
+  if (await shaFile(path.join(source, relative)) !== expected) throw new Error(`Source reproduction mismatch: ${relative}`);
+}
+for (const [relative, expected] of Object.entries(lock.expectedVkd3dSources ?? {})) {
+  if (await shaFile(path.join(shaderSource, relative)) !== expected) throw new Error(`Source reproduction mismatch: ${relative}`);
+}
 const provenance = {
   schema: 1, status: lock.status, sourceLockSha256: sha(lockBytes), sources: lock.sources,
   patches: lock.patches, verifiedXgameruntimeSources: lock.expectedXgameruntimeSources,
+  verifiedWineSources: lock.expectedWineSources ?? {},
+  verifiedVkd3dSources: lock.expectedVkd3dSources ?? {},
   requiresBackendVersion: lock.requiresBackendVersion,
   limitations: lock.limitations, components: {},
   runtimeCompatibilitySources: lock.runtimeCompatibilitySources,
   configure: ['--enable-win64', '--without-x', '--without-wayland', '--disable-tests'],
-  toolchain: Object.fromEntries(['gcc', 'x86_64-w64-mingw32-gcc', 'cmake', 'make', 'autoconf', 'bison', 'flex'].map(tool => [tool, run(tool, ['--version'], work, true).split('\n')[0]])),
+  toolchain: Object.fromEntries(['gcc', 'x86_64-w64-mingw32-gcc', 'cmake', 'make', 'autoconf', 'automake', 'libtoolize', 'widl', 'bison', 'flex'].map(tool => [tool, run(tool, [tool === 'widl' ? '-V' : '--version'], work, true).trim().split('\n')[0]])),
 };
 await fs.writeFile(path.join(work, 'source-manifest.json'), JSON.stringify(provenance, null, 2) + '\n', { flag: 'wx' });
 console.log(`All ${Object.keys(lock.expectedXgameruntimeSources).length} modified/added xgameruntime source files match their source locks.`);
 if (options.prepareOnly) process.exit(0);
 
+// Use the exact external shader compiler and headers pinned by the base
+// Proton, never Wine's older bundled fallback or a system/latest library.
+// Proton builds a release-style source snapshot without .git. Preserve the
+// checkout metadata separately so its diagnostic suffix does not change CTAB
+// creator strings or otherwise-identical shader bytecode.
+await fs.rename(path.join(shaderSource, '.git'), path.join(work, 'vkd3d-git-metadata'));
+run('autoreconf', ['-fiv'], shaderSource);
+await fs.mkdir(shaderBuild);
+const shaderConfigure = ['--host=x86_64-w64-mingw32', '--enable-shared', '--disable-static',
+  '--disable-tests', '--disable-demos', '--without-opengl', '--without-xcb',
+  '--without-ncurses', '--without-spirv-tools', `--prefix=${shaderStage}`];
+run('env', ['SONAME_LIBVULKAN=vulkan-1', `CPPFLAGS=-I${path.join(vulkanHeaders, 'include')} -I${path.join(spirvHeaders, 'include')}`,
+  'CFLAGS=-O2 -fno-lto', 'LDFLAGS=-static-libgcc', path.join(shaderSource, 'configure'), ...shaderConfigure], shaderBuild);
+run('make', [`-j${jobs}`], shaderBuild);
+run('make', ['install'], shaderBuild);
 run('cmake', ['-S', ngSource, '-B', ngBuild, '-DCMAKE_SYSTEM_NAME=Windows', '-DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc', '-DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres', '-DENABLE_LIB_ONLY=ON', '-DBUILD_SHARED_LIBS=ON', '-DBUILD_STATIC_LIBS=OFF', '-DENABLE_DOC=OFF', '-DENABLE_APP=OFF', '-DENABLE_EXAMPLES=OFF', '-DENABLE_FAILMALLOC=OFF', '-DBUILD_TESTING=OFF'], work);
 run('cmake', ['--build', ngBuild, '--parallel', jobs], work);
 // Wine makedep resolves includes under Wine/include. No private sibling paths.
@@ -102,9 +136,14 @@ run('autoreconf', ['-fiv'], source);
 await fs.mkdir(build);
 run(path.join(source, 'configure'), provenance.configure, build);
 run('make', [`-j${jobs}`, 'dlls/xgameruntime/x86_64-windows/xgameruntime.dll', 'dlls/winhttp/x86_64-windows/winhttp.dll', 'dlls/mscoree/x86_64-windows/mscoree.dll', 'dlls/windows.web/x86_64-windows/windows.web.dll'], build);
+const shaderDll = path.join(shaderBuild, '.libs/libvkd3d-shader-1.dll');
+// Match Proton's builtin-module marker, retaining its unchanged WineD3D and
+// vkd3d core/utils DLLs. Only the separate shader compiler is overlaid.
+run(path.join(build, 'tools/winebuild/winebuild'), ['--builtin', shaderDll], work);
 const components = path.join(work, 'components');
 await fs.mkdir(components);
 const outputs = {
+  'libvkd3d-shader-1.dll': shaderDll,
   'xgameruntime.dll': path.join(build, 'dlls/xgameruntime/x86_64-windows/xgameruntime.dll'),
   'winhttp.dll': path.join(build, 'dlls/winhttp/x86_64-windows/winhttp.dll'),
   'mscoree.dll': path.join(build, 'dlls/mscoree/x86_64-windows/mscoree.dll'),
@@ -121,6 +160,7 @@ for (const [name, file] of Object.entries(outputs)) {
 const tests = path.join(work, 'tests');
 provenance.runtimeCompatibility = await buildCompatibility(components);
 await fs.mkdir(tests);
+run('x86_64-w64-mingw32-gcc', ['-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', path.join(project, 'scripts/runtime-tests/hlsl-state-keywords-probe.c'), '-o', path.join(tests, 'hlsl-state-keywords-probe.exe')], work);
 // Account-free SDK fixture lives only in tests, never in the shipped runtime.
 const pgsTests = path.join(tests, 'playfab-folder');
 await fs.mkdir(pgsTests);
@@ -159,6 +199,11 @@ buildStoreProbes({ build, source, tests, project }, run);
 // Ubuntu's older MinGW SDK need not contain windows.data.json.h at all.
 run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-I', path.join(build, 'include'), '-I', path.join(source, 'include'), path.join(project, 'scripts/runtime-tests/winrt-json-probe.c'), '-o', path.join(tests, 'winrt-json-probe.exe'), '-lruntimeobject'], work);
 await fs.copyFile(path.join(ngSource, 'COPYING'), path.join(components, 'nghttp2-LICENSE'));
+await fs.copyFile(path.join(shaderSource, 'COPYING'), path.join(components, 'vkd3d-LICENSE'));
+await fs.copyFile(path.join(vulkanHeaders, 'LICENSE.md'), path.join(components, 'Vulkan-Headers-LICENSE'));
+await fs.copyFile(path.join(vulkanHeaders, 'LICENSES/Apache-2.0.txt'), path.join(components, 'Vulkan-Headers-Apache-2.0'));
+await fs.copyFile(path.join(vulkanHeaders, 'LICENSES/MIT.txt'), path.join(components, 'Vulkan-Headers-MIT'));
+await fs.copyFile(path.join(spirvHeaders, 'LICENSE'), path.join(components, 'SPIRV-Headers-LICENSE'));
 await fs.copyFile(path.join(source, 'COPYING.LIB'), path.join(components, 'Wine-LICENSE'));
 await fs.copyFile(path.join(source, 'dlls/xgameruntime/COPYING.LIB'), path.join(components, 'xgameruntime-LICENSE')).catch(async e => {
   if (e.code !== 'ENOENT') throw e;

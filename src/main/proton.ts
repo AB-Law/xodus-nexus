@@ -312,18 +312,21 @@ export async function prepareProtonRunner(
   let hostLibraries = false;
   let http2Runtime = false;
   let jsonRuntime = false;
+  let shaderRuntime = false;
   try {
     const metadata = JSON.parse(await fs.readFile(path.join(protonRoot, 'XODUS_NEXUS_PATCH.json'), 'utf8')) as { features?: unknown; components?: Record<string, string> };
     hostLibraries = Array.isArray(metadata.features) && metadata.features.includes('wine-host-libraries-v1');
     http2Runtime = Array.isArray(metadata.features) && metadata.features.includes('wine-winhttp-http2-v1');
     jsonRuntime = Array.isArray(metadata.features) && metadata.features.includes('winrt-json-v1');
-    const components = [ ...(http2Runtime ? ['libnghttp2.dll'] : []), ...(jsonRuntime ? ['windows.web.dll'] : []) ];
+    shaderRuntime = Array.isArray(metadata.features) && metadata.features.includes('hlsl-state-keywords-v1');
+    const components = [ ...(http2Runtime ? ['libnghttp2.dll'] : []), ...(jsonRuntime ? ['windows.web.dll'] : []), ...(shaderRuntime ? ['libvkd3d-shader-1.dll'] : []) ];
     // Validate every component before changing any prefix entry.
     const verified = await Promise.all(components.map(async (name) => {
       // WinHTTP loads nghttp2 with LOAD_LIBRARY_SEARCH_SYSTEM32. WINEDLLPATH
       // alone is insufficient in existing prefixes. Validate before replacing
       // a directory entry so symlinks cannot overwrite another runtime.
-      const source = path.join(files, 'lib/wine/x86_64-windows', name);
+      const library = name === 'libvkd3d-shader-1.dll' ? 'vkd3d' : 'wine';
+      const source = path.join(files, 'lib', library, 'x86_64-windows', name);
       const expected = metadata.components?.[name];
       const bytes = await fs.readFile(source);
       if (!expected || createHash('sha256').update(bytes).digest('hex') !== expected) throw new Error(`The shared runtime has an invalid ${name} checksum.`);
@@ -342,7 +345,7 @@ export async function prepareProtonRunner(
       }
     }
   } catch (error) {
-    if (http2Runtime || jsonRuntime) throw error;
+    if (http2Runtime || jsonRuntime || shaderRuntime) throw error;
     // Stock Proton keeps its bundled library environment.
   }
   const libraryDirectories = [

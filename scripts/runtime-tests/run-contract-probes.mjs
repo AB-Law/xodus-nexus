@@ -43,13 +43,14 @@ try {
   await fs.writeFile(path.join(root, 'wineboot.log'), boot.output, { mode: 0o600 });
   if (boot.code || boot.timedOut) throw new Error(`Disposable wineboot failed; see ${root}`);
   // Replace the copied directory entry, never follow a default-prefix link.
-  for (const name of ['xgameruntime.dll', 'winhttp.dll', 'mscoree.dll', 'libnghttp2.dll', 'windows.web.dll']) {
+  for (const name of ['xgameruntime.dll', 'winhttp.dll', 'mscoree.dll', 'libnghttp2.dll', 'windows.web.dll', 'libvkd3d-shader-1.dll']) {
     const dest = path.join(prefix, 'drive_c/windows/system32', name);
     const temporary = `${dest}.contract-${process.pid}`;
-    await fs.copyFile(path.join(files, 'lib/wine/x86_64-windows', name), temporary, fs.constants.COPYFILE_EXCL);
+    const library = name === 'libvkd3d-shader-1.dll' ? 'vkd3d' : 'wine';
+    await fs.copyFile(path.join(files, 'lib', library, 'x86_64-windows', name), temporary, fs.constants.COPYFILE_EXCL);
     await fs.rename(temporary, dest);
   }
-  for (const name of ['taskqueue-teardown', 'taskqueue-contract', 'async-provider-contract', 'async-completion-lifetime', 'async-schedule', 'gamesave-files', 'winrt-json', 'token-dispatch', 'user-privilege', 'store-entitlements', 'package-content', 'package-identity', 'package-legacy', 'package-chunks', 'package-monitors', 'system-device-id', 'user-device-association']) {
+  for (const name of ['hlsl-state-keywords', 'taskqueue-teardown', 'taskqueue-contract', 'async-provider-contract', 'async-completion-lifetime', 'async-schedule', 'gamesave-files', 'winrt-json', 'token-dispatch', 'user-privilege', 'store-entitlements', 'package-content', 'package-identity', 'package-legacy', 'package-chunks', 'package-monitors', 'system-device-id', 'user-device-association']) {
     const result = await run(wine, [path.join(tests, `${name}-probe.exe`)]);
     await fs.writeFile(path.join(root, `${name}.log`), result.output, { mode: 0o600 });
     const summary = result.output.split(/\r?\n/).filter(line => /^(FAIL |CHECKS |QUEUE |ASYNC |CHUNK METADATA CHECKS )/.test(line));

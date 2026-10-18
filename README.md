@@ -143,6 +143,7 @@ but have not been verified and may encounter compatibility issues.
 | Young Souls | Unverified | Launches in Steam Deck Desktop Mode; gameplay unverified. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/8#issuecomment-6225913594)) |
 | Remnant II | Unverified | Starts and exits cleanly; gameplay and online were not detailed. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/34#issuecomment-6190973665)) |
 | The Witcher 3 | No | Currently crashes on launch. |
+| LIMBO | Yes | Playable with an unreleased runtime fix. The published runtime still has a shader compilation error at startup. |
 | World War Z | Partial | Connects to online services and starts Quick Match search with an unreleased backend fix; joining a match is unverified. |
 
 [Full compatibility list](https://github.com/domsvoboda/xodus-nexus/wiki/Compatibility)

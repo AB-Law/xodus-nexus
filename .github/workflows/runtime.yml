@@ -69,7 +69,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential gcc-mingw-w64-x86-64 flex bison autoconf cmake \
+            build-essential gcc-mingw-w64-x86-64 flex bison autoconf automake libtool libjson-perl wine64-tools cmake \
             pkg-config python3 perl rsync file gh curl tar xz-utils openssl xvfb xauth ripgrep \
             libfreetype-dev libgnutls28-dev libvulkan1 libx11-6 \
             libgstreamer1.0-dev libgstreamer-plugins-base1.0-0
@@ -171,7 +171,8 @@ jobs:
           (cd shared-build && tar -cJf "$nexus_name-x86_64.tar.xz" "$nexus_name")
           (cd shared-build && sha512sum "$nexus_name-x86_64.tar.xz" > "$nexus_name-x86_64.sha512sum")
           tar --exclude=.git -cJf "shared-build/$nexus_name-source.tar.xz" \
-            shared-build/wine-src shared-build/nghttp2-src \
+            shared-build/wine-src shared-build/nghttp2-src shared-build/vkd3d-src \
+            shared-build/vulkan-headers shared-build/spirv-headers \
             shared-build/media/ffmpeg-4.4.8.tar.xz shared-build/media/media-manifest.json \
             LICENSE assets scripts/runtime-patches.lock.json scripts/runtime-media.lock.json \
             scripts/runtime-base.lock.json scripts/verify-runtime-base.mjs scripts/runtime-tests scripts/runtime-compat \
