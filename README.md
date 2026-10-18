@@ -136,7 +136,7 @@ but have not been verified and may encounter compatibility issues.
 | The Elder Scrolls II: Daggerfall | No | Crashes at launch. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
 | Wolfenstein: Enemy Territory | Partial | Playable, but cannot join PunkBuster-enabled servers. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
 | Hell Let Loose | No | Crashes at startup. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/105)) |
-| Kingdom Come: Deliverance II | No | Crashes at startup. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/112)) |
+| Kingdom Come: Deliverance II | Yes | Playable with an unreleased runtime fix. The published runtime still has a [startup crash](https://github.com/domsvoboda/xodus-nexus/issues/112). |
 | PAC-MAN MUSEUM+ | No | Stops after the opening logos. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/61)) |
 | Farming Simulator 25 | No | Startup failure reported; updated runtime retest pending. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/62)) |
 | PowerWash Simulator 2 | Yes | Playable with an unreleased runtime fix. The published runtime still has an [initial loading hang](https://github.com/domsvoboda/xodus-nexus/issues/69). |

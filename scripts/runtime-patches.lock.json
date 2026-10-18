@@ -144,6 +144,10 @@
     {
       "file": "assets/xgameruntime-user-privilege.patch",
       "sha256": "10bd2caf5a6788038bacc84978abfcb78c0dc9f6317b27ee2a048ded549d2fac"
+    },
+    {
+      "file": "assets/xgameruntime-device-association.patch",
+      "sha256": "1b8081b1e86ed6006a4ac28f55497c93f6d3bb8702e3a9ca7b7c9e0a5ac189d6"
     }
   ],
   "expectedXgameruntimeSources": {
@@ -170,7 +174,8 @@
     "dlls/xgameruntime/xsystem.c": "a3c151c5d05875b68f49c534aae9d40e3f15ec800af0f85e159ede7c95401880",
     "dlls/xgameruntime/xsystemanalytics.c": "189e99c83273b429325ecefa2b9246c45863c22f0c4006a791ec57b8f7b9d384",
     "dlls/xgameruntime/xthreading.c": "9bcc7c380bc57723221335c48a27f065b5a88072d1036cc07235705973f42827",
-    "dlls/xgameruntime/xuser.c": "209e2b4e4098b70861e28691a1049241cad5289dc83779b6e3a6e0f91c496f5f",
+    "dlls/xgameruntime/xuser.c": "74667ccfbde1cf063b477f53b335b4b9d07057998187a49384e7e39ba51d3ed1",
+    "dlls/xgameruntime/xuser_device_events.h": "ed3b6ac25510b7bff288e36859781811e7de3985d418159ce25a2b00bc6d35cb",
     "dlls/xgameruntime/xuser_privilege.h": "4aa9a2736b59feb4d86cb86d95d99119ab1ccb6ab07b6b9a53c7da61acd0a77b",
     "dlls/xgameruntime/util.c": "aebf1a7ebef0dff89d3a1683bc40e16c821eaeb5cc1160ce474b905d14d7cb5c",
     "dlls/xgameruntime/util.h": "b739dba8a69a36103e72afc8dcaeaf324470d9ed47a5a7dd81b18e4e511ae69a",
@@ -191,6 +196,7 @@
   },
   "requiresBackendVersion": "0.2.1",
   "limitations": [
+    "Device-association subscriptions retain registration state and task queues. Device-to-Xbox-user association discovery and event delivery are unavailable; no controller association changes are synthesized.",
     "Privilege resolution refreshes authenticated XSTS claims for the requested user. Missing or denied privileges fail; account restriction and subscription remediation UI is not implemented.",
     "Application-specific device-ID queries return the documented unavailable-ID sentinel, not a unique platform identifier or hardware-attestation token.",
     "PlayFab in-process fallback supports the verified x64 40-export SDK ABI; missing device/conflict/failure UI and final upload before normal SDK cleanup are provided. Forced process termination is not a successful cloud sync. Default-on Gaming Services version metadata is not a Microsoft service implementation.",
