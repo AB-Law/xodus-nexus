@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { backendSourceArchiveArgs } from './backend-source-archive.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const args = process.argv.slice(2);
@@ -42,6 +43,7 @@ const offline = args.includes('--offline') ? ['--offline'] : [];
 const rustc = command('rustc', ['--version'], true).trim();
 if (!rustc.startsWith(`rustc ${lock.rust} `)) throw Error(`Use the locked Rust toolchain ${lock.rust}`);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus-cli']);
+command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'credential_']);
 command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-service', 'store_']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'msixvc', 'streaming_']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'msixvc', 'package_metadata']);
@@ -81,9 +83,10 @@ await fs.copyFile(path.join(root, 'assets/backend-source.lock.json'), path.join(
 for (const patch of lock.patches) await fs.copyFile(path.join(root, 'assets', patch.file), path.join(recipe, 'assets', patch.file));
 await fs.mkdir(path.join(recipe, 'scripts'));
 await fs.copyFile(fileURLToPath(import.meta.url), path.join(recipe, 'scripts/build-backend.mjs'));
+await fs.copyFile(path.join(root, 'scripts/backend-source-archive.mjs'), path.join(recipe, 'scripts/backend-source-archive.mjs'));
 await fs.copyFile(path.join(root, 'scripts/BACKEND.md'), path.join(recipe, 'scripts/BACKEND.md'));
 await fs.writeFile(path.join(recipe, 'BUILD.txt'), `Patched upstream source + vendored dependencies.\nRust ${lock.rust}; cargo build --locked --offline --release ${features.join(' ')} -p xodus-cli -p xodus-service from source/.\nAuthentication UI: ${authUi}.\nNative build dependencies and release policy: scripts/BACKEND.md in the Nexus repository.\nBackend is GPL-3.0; dependency licenses are retained in vendor/.\n`);
-command('tar', ['--exclude=.git', '--exclude=target', '-cJf', path.join(output, `${name}-source.tar.xz`), '-C', work, 'source', 'recipe']);
+command('tar', backendSourceArchiveArgs(path.join(output, `${name}-source.tar.xz`), work));
 for (const archive of [`${name}.tar.xz`, `${name}-source.tar.xz`]) {
   await fs.writeFile(path.join(output, archive.replace('.tar.xz', '.sha512sum')), `${sha(await fs.readFile(path.join(output, archive)), 'sha512')}  ${archive}\n`);
 }

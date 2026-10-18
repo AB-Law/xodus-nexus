@@ -1,5 +1,23 @@
 # Shared Nexus backend
 
+`patchId` identifies the exact source recipe. `compatibility` identifies the
+game-launch contract accepted by existing launchers. A credential-only hotfix
+keeps that contract when its launch arguments and behavior remain unchanged.
+
+## Credential errors
+
+Persistent credential writes require an exact read-back before success. Missing
+or malformed device-token caches can be regenerated through genuine device
+authentication while preserving the device identity and stored account. Invalid
+device identities and unavailable keyrings fail without automatic deletion or
+replacement provisioning.
+
+Credential failures exit nonzero and emit `NEXUS_CREDENTIAL_ERROR_V1 CODE` on
+stderr. Codes are `keyring-unavailable`, `keyring-invalid-data`,
+`keyring-write-verification`, `keyring-missing-data`, `device-authentication` and
+`credential-io`. The launcher maps only these fixed codes to sign-in messages;
+arbitrary stderr and stored credential values are not exposed in the UI.
+
 ## Package selection
 
 `resolve-package PRODUCT --json --market US` reads public Store metadata without
