@@ -94,7 +94,22 @@ export function TopStatus({ data, go }: { data: AppSnapshot; go: (page: Page) =>
 }
 
 export function DiagnosticDialog({ log, close }: { log: DiagnosticLog; close: () => void }) {
-  return <div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}><section className="game-dialog diagnostic-dialog" role="dialog" aria-modal="true" aria-label="Diagnostic log"><h2>{log.name}</h2><p>Private diagnostic log — review before sharing.{log.truncated ? ' Showing the most recent 512 KiB.' : ''}</p><pre>{log.content || 'The log is empty.'}</pre><div className="dialog-actions"><button className="secondary" data-gamepad-cancel onClick={close}>Close</button></div></section></div>;
+  const [copyStatus, setCopyStatus] = useState('Copy log');
+  return <div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}><section className="game-dialog diagnostic-dialog" role="dialog" aria-modal="true" aria-label="Diagnostic log"><h2>{log.name}</h2><p>Private diagnostic log, review before sharing.{log.truncated ? ' Showing the most recent 512 KiB.' : ''}</p><pre>{log.content || 'The log is empty.'}</pre><div className="dialog-actions"><button className="secondary" onClick={async () => { try { await navigator.clipboard.writeText(log.content); setCopyStatus('Copied'); } catch { setCopyStatus('Copy failed, select the text instead'); } }}>{copyStatus}</button><button className="secondary" data-gamepad-cancel onClick={close}>Close</button></div></section></div>;
+}
+
+export function BackendLogButton({ toast }: { toast: (value: Toast) => void }) {
+  const [log, setLog] = useState<DiagnosticLog>();
+  const [loading, setLoading] = useState(false);
+  return <>
+    <button className="secondary" disabled={loading} onClick={async () => {
+      setLoading(true);
+      try { setLog(await window.launcher.readBackendDiagnosticLog()); }
+      catch { toast({ kind: 'error', message: 'Backend diagnostics could not be opened safely.' }); }
+      finally { setLoading(false); }
+    }}>{loading ? <LoaderCircle className="spin" /> : <Terminal />}Open backend diagnostic log</button>
+    {log ? <DiagnosticDialog log={log} close={() => setLog(undefined)} /> : null}
+  </>;
 }
 
 export function Cover({ game, className = '', variant = 'cover' }: { game: Game; className?: string; variant?: 'cover' | 'hero' }) {
@@ -390,7 +405,7 @@ export function AccountGames({ data, toast, selectedId, select, menu, filters, o
     </div>
     <div className="account-games-results">
     {!available ? <p>{data.auth.stored !== true ? 'Sign in to load your account games. Installed games remain available.' : !data.backend.capabilities.library ? 'Update the Xodus backend to load account licenses.' : 'Wait for sign-in to finish.'}</p> : null}
-      {error ? <div className="alert amber"><CircleAlert /><span>{error}</span></div> : null}
+      {error ? <div className="alert amber"><CircleAlert /><span>{error}</span><BackendLogButton toast={toast} /></div> : null}
       <div className="catalog-grid" data-gamepad-grid>{rows.map(row => {
         if (row.game) {
           const game = row.game;
@@ -761,6 +776,7 @@ export function SettingsPage({ data, toast }: { data: AppSnapshot; toast: (value
       <div className="settings-heading"><div className="settings-icon"><Terminal /></div><div><h2>Xodus backend</h2><p>{data.backend.version ? `Nexus backend ${data.backend.version}` : data.backend.available ? `Backend CLI ${data.backend.capabilities.version ?? 'unknown version'}` : 'Install the prebuilt Nexus backend'}</p></div><span className={`status-label ${data.backend.available ? 'ready' : 'off'}`}><StatusDot tone={data.backend.available ? 'green' : 'red'} />{data.backend.available ? 'VALIDATED' : 'OFFLINE'}</span></div>
       {data.backend.blockReason ? <div className="alert amber"><CircleAlert /><span>{data.backend.blockReason}</span></div> : null}
       {data.backend.phase ? <p className="runtime-phase">{data.backend.phase}</p> : null}
+      <div className="backend-diagnostic-action"><BackendLogButton toast={toast} /><p className="fine-print">Local operation results and safe error codes. No passwords, tokens or account contents are recorded.</p></div>
       <div className="button-row end"><button className="secondary" disabled={Boolean(busy) || data.backend.checking || data.backend.updating} onClick={() => invoke('backend-check', () => window.launcher.checkBackendUpdate())}>{busy === 'backend-check' || data.backend.checking ? <LoaderCircle className="spin" /> : <RefreshCw />}Check for updates</button>{data.backend.releaseAvailable && data.backend.updateAvailable ? <button className="primary" disabled={Boolean(busy) || data.backend.updating || data.backend.checking} onClick={() => invoke('backend-update', () => window.launcher.updateBackend(), 'The Nexus backend was verified, installed and activated.')}>{busy === 'backend-update' || data.backend.updating ? <LoaderCircle className="spin" /> : <ArrowDownToLine />}{data.backend.available ? 'Update backend' : 'Install backend'}</button> : null}</div>
     </section>
 

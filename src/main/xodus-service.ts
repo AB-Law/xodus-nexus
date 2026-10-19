@@ -4,6 +4,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { constants, promises as fs } from 'node:fs';
 import { createConnection, createServer, type Server, type Socket } from 'node:net';
 import path from 'node:path';
+import { backendDiagnostic, observeBackendChild } from './backend-diagnostics.js';
 
 export interface XodusServiceSession {
   socketPath: string;
@@ -129,6 +130,7 @@ export async function startXodusService(
     env: { ...externalLauncherEnvironment(), XDG_RUNTIME_DIR: runtimeDir, XODUS_LOG: 'error' },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
+  observeBackendChild(child, 'service');
   let stopped = false;
   let bridge: XodusBridge | undefined;
   let exitCode: number | null = null;
@@ -164,12 +166,14 @@ export async function startXodusService(
       if (spawnError) throw new Error(`Could not start xodus-service: ${spawnError.message}`);
       if (await socketReady(socketPath)) {
         bridge = await startXodusBridge(socketPath);
+        backendDiagnostic({ operation: 'service', event: 'validation', stage: 'ready' });
         onStatus('Xodus account service and private loopback bridge are ready.');
         return { socketPath, bridgePort: bridge.port, bridgeKey: bridge.key, stop };
       }
       if (exitCode !== null) throw new Error(`xodus-service exited with code ${exitCode}. Check the stored Xodus account and network connection.`);
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
+    backendDiagnostic({ operation: 'service', event: 'validation', stage: 'timeout' });
     throw new Error('xodus-service did not become ready within 90 seconds. Check the stored Xodus account and network connection.');
   } catch (error) {
     await stop();

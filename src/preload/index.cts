@@ -24,6 +24,7 @@ const api: LauncherApi = {
   rollbackLauncherUpdate: () => ipcRenderer.invoke('rollback-launcher-update'),
   checkGameUpdates: (id?: string) => ipcRenderer.invoke('check-game-updates', id),
   readDiagnosticLog: (id: string) => ipcRenderer.invoke('read-diagnostic-log', id),
+  readBackendDiagnosticLog: () => ipcRenderer.invoke('read-backend-diagnostic-log'),
   login: () => ipcRenderer.invoke('login'),
   logout: () => ipcRenderer.invoke('logout'),
   searchCatalog: (query: string, cursor?: string) => ipcRenderer.invoke('catalog-search', query, cursor),

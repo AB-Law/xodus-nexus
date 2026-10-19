@@ -28,6 +28,7 @@ import { prepareGameWrapper, type GameWrapper } from './game-wrapper.js';
 import { normalizeLaunchTools } from '../shared/launch-tools.js';
 import { LauncherUpdater } from './launcher-update.js';
 import { readDiagnosticTail } from './diagnostic-log.js';
+import { BackendDiagnostics, setBackendDiagnostics } from './backend-diagnostics.js';
 import { queryGameUpdate } from './game-updates.js';
 import { DownloadProgress, PROGRESS_PREFIX } from './download-progress.js';
 import { InstallQueue, assertActivityCompatible, assertInstallDestination, canonicalInstallPath, installPathsOverlap } from './install-queue.js';
@@ -64,6 +65,7 @@ const downloadNotifications = new DownloadCompletionNotifications({
 let mainWindow: BrowserWindow | null = null;
 let store: StateStore;
 let backend: BackendManager;
+let backendDiagnostics: BackendDiagnostics;
 let runtime: RuntimeManager;
 const operations = new Map<string, ChildProcessWithoutNullStreams>();
 const gameProcesses = new Map<string, GameProcess>();
@@ -969,6 +971,7 @@ function registerDemoIpc(catalogMarket: () => string): void {
   ipcMain.handle('rollback-launcher-update', () => {});
   ipcMain.handle('check-game-updates', () => {});
   ipcMain.handle('read-diagnostic-log', () => ({ name: 'demo.log', content: 'Demo diagnostic log. No account data.', truncated: false }));
+  ipcMain.handle('read-backend-diagnostic-log', () => ({ name: 'backend.log', content: 'Sample backend diagnostics. No account data.', truncated: false }));
   ipcMain.handle('login', () => {});
   ipcMain.handle('logout', () => {});
   ipcMain.handle('catalog-search', (_event, query: string, cursor?: string) => catalog.search(query, catalogMarket(), cursor));
@@ -1071,6 +1074,7 @@ function registerIpc(): void {
     accountLibrary.select(authState.username, backend.current.capabilities.library ? backend.current.binaryPath : undefined, currentMarket());
     return accountLibrary.get(kind, cursor, refresh);
   });
+  ipcMain.handle('read-backend-diagnostic-log', () => backendDiagnostics.read());
   ipcMain.handle('catalog-featured', () => catalog.featured(catalogMarket()));
   ipcMain.handle('start-install', (_event, request: InstallRequest) => startInstall(request));
   ipcMain.handle('install-plan', async (_event, raw: string) => {
@@ -1450,6 +1454,12 @@ async function createWindow(): Promise<void> {
 app.whenReady().then(async () => {
   if (!primaryInstance) return;
   if (startupError) { dialog.showErrorBox('Invalid Nexus shortcut', startupError.message); app.quit(); return; }
+  if (!demoMode) {
+    backendDiagnostics = new BackendDiagnostics(app.getPath('userData'), () => ({
+      launcher: app.getVersion(), backend: backend?.current.version, source: backend?.current.source,
+    }));
+    setBackendDiagnostics(backendDiagnostics);
+  }
   if (!demoMode && await prepareGameModeKeyring() === 'unavailable') {
     console.warn('Game Mode keyring display preparation unavailable; using normal account checks.');
   }
@@ -1556,7 +1566,7 @@ app.on('before-quit', (event) => {
   installQueue.stop();
   accountLibrary.reset();
   accountProfile?.cancel();
-  if (shutdownStarted || (!authJob && !preparingInstall && installQueue.size === 0 && operations.size === 0 && serviceSessions.size === 0 && !checkingGameUpdates && !launcherUpdater?.state.updating)) return;
+  if (shutdownStarted || (!backendDiagnostics?.pendingWrites && !authJob && !preparingInstall && installQueue.size === 0 && operations.size === 0 && serviceSessions.size === 0 && !checkingGameUpdates && !launcherUpdater?.state.updating)) return;
   event.preventDefault();
   shutdownStarted = true;
   void (async () => {
@@ -1585,5 +1595,8 @@ app.on('before-quit', (event) => {
     ]);
     await Promise.all([...gameProcesses.values()].map((process) => process.forceStop().catch((error) => console.error('Could not force-stop game on exit:', error))));
     await Promise.all([...serviceSessions.values()].map((session) => session.stop().catch((error) => console.error('Account service cleanup failed on exit:', error))));
-  })().catch((error) => console.error('Launcher shutdown cleanup failed:', error)).finally(() => app.quit());
+  })().catch((error) => console.error('Launcher shutdown cleanup failed:', error)).finally(async () => {
+    await backendDiagnostics?.flush();
+    app.quit();
+  });
 });
