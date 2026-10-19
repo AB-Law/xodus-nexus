@@ -136,6 +136,7 @@ export interface DownloadTask {
   status: 'queued' | 'running' | 'paused' | 'complete' | 'failed' | 'cancelled';
   canPause?: boolean;
   controlPending?: boolean;
+  cancelling?: boolean;
   progress: number | null;
   downloadedBytes?: number;
   totalBytes?: number;
@@ -148,6 +149,8 @@ export interface DownloadTask {
   exitCode?: number;
   error?: string;
 }
+
+export interface DownloadCancelOptions { deleteFilesAllowed: boolean; reason?: string }
 
 export interface GameOperation {
   id: string;
@@ -360,7 +363,8 @@ export interface LauncherApi {
   getGameContent(id: string): Promise<GameContentPlan>;
   installGameContent(id: string, productId: string): Promise<string>;
   updateInstalledGame(id: string): Promise<string>;
-  cancelDownload(id: string): Promise<void>;
+  getDownloadCancelOptions(id: string): Promise<DownloadCancelOptions>;
+  cancelDownload(id: string, mode?: 'keep' | 'delete-files'): Promise<void>;
   pauseDownload(id: string): Promise<void>;
   resumeDownload(id: string): Promise<void>;
   removeDownload(id: string): Promise<void>;

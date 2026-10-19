@@ -31,6 +31,7 @@ import { readDiagnosticTail } from './diagnostic-log.js';
 import { BackendDiagnostics, setBackendDiagnostics } from './backend-diagnostics.js';
 import { queryGameUpdate } from './game-updates.js';
 import { DownloadProgress, PROGRESS_PREFIX } from './download-progress.js';
+import { DownloadCleanup } from './download-cleanup.js';
 import { InstallQueue, assertActivityCompatible, assertInstallDestination, canonicalInstallPath, installPathsOverlap } from './install-queue.js';
 import { GameDisplayBlocker } from './game-display.js';
 import { GameShortcuts, shortcutArguments, shortcutInstanceData, shortcutInstanceRequest, type ShortcutDestination } from './game-shortcuts.js';
@@ -72,6 +73,8 @@ let runtime: RuntimeManager;
 const operations = new Map<string, ChildProcessWithoutNullStreams>();
 const gameProcesses = new Map<string, GameProcess>();
 const cancelledDownloads = new Set<string>();
+const downloadCancellations = new Map<string, Promise<void>>();
+let downloadCleanup: DownloadCleanup;
 const downloadControls = new Map<string, (paused: boolean) => Promise<void>>();
 const installQueue = new InstallQueue(() => finishShortcutSession());
 const gameDisplay = new GameDisplayBlocker(powerSaveBlocker);
@@ -152,7 +155,7 @@ async function shortcutError(error: unknown): Promise<void> {
 }
 function finishShortcutSession(): void {
   // Account service and game-process cleanup must finish before normal quit.
-  if (shortcutOnly && !shortcutLaunch.preparing && !preparingLaunch && !finalizingGame && installQueue.size === 0 && operations.size === 0 && serviceSessions.size === 0) app.quit();
+  if (shortcutOnly && !shortcutLaunch.preparing && !preparingLaunch && !finalizingGame && downloadCancellations.size === 0 && installQueue.size === 0 && operations.size === 0 && serviceSessions.size === 0) app.quit();
 }
 function receiveLaunchRequest(id?: string): void {
   if (!launchReady) { pendingRequests.push(id); return; }
@@ -167,7 +170,8 @@ function snapshot(): AppSnapshot {
     backend: backend.current,
     runtime: runtime.current,
     games: structuredClone(store.games),
-    downloads: structuredClone(store.downloads),
+    downloads: structuredClone(store.downloads.map(task => downloadCancellations.has(task.id)
+      ? { ...task, cancelling: true, canPause: false, phase: 'Cancelling download and checking files…' } : task)),
     settings: structuredClone(store.settings),
     auth: structuredClone({ ...authState, gamertag: accountProfile?.value?.gamertag, avatarDataUrl: accountProfile?.value?.avatarDataUrl, subscription: accountProfile?.value?.subscription }),
     launcherUpdate: structuredClone(launcherUpdater.state),
@@ -239,6 +243,7 @@ function requireBackend(command: keyof typeof backend.current.capabilities): str
 function ensureIdle(mode?: 'install' | 'launch' | 'remove'): void {
   if (authState.running) throw Error('A sign-in operation is already in progress.');
   if (shutdownStarted) throw Error('The launcher is closing.');
+  if (downloadCancellations.size) throw Error('A download is being cancelled. Wait for its cleanup to finish.');
   if (preparingInstall || preparingContent) throw new Error('An installation is being prepared.');
   if (preparingLaunch) throw new Error('A game launch is already being prepared.');
   if (finalizingGame) throw new Error('The previous game is still finishing cleanup.');
@@ -458,7 +463,7 @@ async function prepareInstall(request: InstallRequest, updateGame?: Game, conten
       if (playing && (playing.id === content?.game.id || installPathsOverlap(destination, await canonicalInstallPath(playing.path)))) throw Error('Close this game before changing its installed files.');
     }
     if (shutdownStarted || isCancelled()) return;
-    await fs.mkdir(destination, { recursive: true });
+    await downloadCleanup.prepare(task);
     if (shutdownStarted || isCancelled()) return;
     await store.updateDownload(id, { status: 'running', phase: updateGame ? 'Checking installed files with Xodus…' : 'Starting Xodus streaming…' });
     if (shutdownStarted || isCancelled()) return;
@@ -544,6 +549,7 @@ async function runDownload(task: DownloadTask, binary: string, market: string, u
     task.exitCode = result.code;
     task.finishedAt = new Date().toISOString();
     task.status = cancelled || result.code === 130 ? 'cancelled' : result.code === 0 && (!structured || progressTracker.terminal === 'complete') ? 'complete' : 'failed';
+    if (task.status === 'cancelled') task.error = undefined;
     if (shutdownStarted && controllable && !cancelled && task.status !== 'complete') task.status = 'paused';
     task.progress = task.status === 'complete' ? 100 : task.progress;
     task.phase = task.status === 'complete' ? updateGame ? 'Update complete' : 'Installation complete' : task.status === 'cancelled' ? 'Cancelled by user' : structured && result.code === 0 ? 'The backend did not confirm a completed installation.' : `Xodus exited with code ${result.code}`;
@@ -567,6 +573,7 @@ async function runDownload(task: DownloadTask, binary: string, market: string, u
         else await store.upsertGame(inspected);
       } catch { /* Some packages do not expose metadata yet. */ }
     }
+    if (task.status === 'complete') await downloadCleanup.complete(task);
     operations.delete(id);
     emitSnapshot();
     downloadNotifications.complete(task);
@@ -585,7 +592,66 @@ async function runDownload(task: DownloadTask, binary: string, market: string, u
   finishShortcutSession();
 }
 
+function downloadCleanupProtection(task: DownloadTask) {
+  return {
+    locked: [...store.games.map(game => game.path),
+      ...store.downloads.filter(other => other.id !== task.id && ['queued', 'running', 'paused', 'complete'].includes(other.status)).map(other => other.destination),
+      ...['/boot', '/dev', '/etc', '/proc', '/run', '/sys', '/usr', '/var', app.getPath('userData'), store.settings.runtimeRoot, store.settings.externalXodusRoot].filter(Boolean)],
+    roots: ['/', '/tmp', os.homedir(), store.settings.installRoot].filter(Boolean),
+  };
+}
+
+function cancellableDownload(id: string): DownloadTask {
+  if (typeof id !== 'string') throw Error('Invalid download ID.');
+  const task = store.downloads.find(entry => entry.id === id);
+  if (!task || !['queued', 'running', 'paused'].includes(task.status)) throw Error('The download is no longer running.');
+  return task;
+}
+
+function cancelDownload(id: string, mode: 'keep' | 'delete-files' = 'keep'): Promise<void> {
+  if (mode !== 'keep' && mode !== 'delete-files') return Promise.reject(Error('Invalid cancellation option.'));
+  if (downloadCancellations.has(id)) return Promise.reject(Error('This download is already being cancelled.'));
+  if (shutdownStarted || preparingInstall || preparingContent || gameRemovalInProgress) return Promise.reject(Error('Wait for the current operation to finish.'));
+  const task = cancellableDownload(id), release = installQueue.hold();
+  const job = Promise.resolve().then(async () => {
+    let stopped = false;
+    try {
+      if (mode === 'delete-files') {
+        const { locked, roots } = downloadCleanupProtection(task), options = await downloadCleanup.options(task, locked, roots);
+        if (!options.deleteFilesAllowed) throw Error(options.reason);
+      }
+      cancellableDownload(id); // Completion may have happened while checking the filesystem.
+      const child = operations.get(id);
+      if (child) {
+        cancelledDownloads.add(id);
+        if (!child.kill('SIGINT')) { cancelledDownloads.delete(id); throw Error('The download could not be stopped. Files were not deleted.'); }
+        stopped = true;
+      } else {
+        installQueue.cancel(id); stopped = true;
+        await store.updateDownload(id, { status: 'cancelled', canPause: false, finishedAt: new Date().toISOString() });
+      }
+      // Includes process exit, metadata persistence and the queue's finally block.
+      await installQueue.settled(id);
+      if (operations.has(id) || installQueue.has(id)) throw Error('The download is still stopping. Files were not deleted.');
+      if (task.status !== 'cancelled') throw Error('The installation state changed. Files were not deleted.');
+      if (mode === 'delete-files') {
+        if (await backend.externalDownloadRunning()) throw Error('Another Xodus download is running. Files were not deleted.');
+        const { locked, roots } = downloadCleanupProtection(task);
+        await downloadCleanup.remove(task, locked, roots);
+      }
+      await store.updateDownload(id, { error: undefined, phase: mode === 'delete-files'
+        ? 'Cancelled; downloaded files were deleted.' : 'Cancelled; downloaded files and checkpoints were kept.' });
+    } catch (error) {
+      if (stopped) await store.updateDownload(id, { error: error instanceof Error ? error.message : 'Cancellation cleanup failed.' });
+      throw error;
+    } finally { downloadCancellations.delete(id); release(); emitSnapshot(); }
+  });
+  downloadCancellations.set(id, job); emitSnapshot();
+  return job;
+}
+
 async function importGame(input?: string): Promise<Game | null> {
+  if (downloadCancellations.size) throw Error('A download is being cancelled. Wait for its cleanup to finish.');
   let directory = input;
   if (!directory) {
     const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openDirectory'], defaultPath: store.settings.installRoot });
@@ -597,6 +663,7 @@ async function importGame(input?: string): Promise<Game | null> {
     const artwork = (await catalog.artwork([game.storeId], currentMarket())).get(game.storeId.toUpperCase());
     if (artwork) Object.assign(game, artwork);
   }
+  if (downloadCancellations.size) throw Error('A download is being cancelled. Wait for its cleanup to finish.');
   await store.upsertGame(game);
   emitSnapshot();
   return game;
@@ -993,6 +1060,7 @@ function registerDemoIpc(catalogMarket: () => string): void {
   ipcMain.handle('install-game-content', () => { throw Error('Content installation is unavailable in demo mode.'); });
   ipcMain.handle('update-installed-game', (_event, id: string) => id);
   ipcMain.handle('cancel-download', () => {});
+  ipcMain.handle('download-cancel-options', () => ({ deleteFilesAllowed: false, reason: 'File deletion is unavailable in demo mode.' }));
   ipcMain.handle('remove-download', () => {});
   ipcMain.handle('clear-finished-downloads', () => {});
   ipcMain.handle('import-game', () => null);
@@ -1109,24 +1177,19 @@ function registerIpc(): void {
     if (!game.storeId || game.installState !== 'ready') throw new Error('This game has no verified Store ID or complete installation to update.');
     return startInstall({ productId: game.storeId, title: game.title, destination: game.path }, game);
   });
-  ipcMain.handle('cancel-download', async (_event, id: string) => {
-    const child = operations.get(id);
-    if (!child) {
-      const task = store.downloads.find(entry => entry.id === id);
-      if (!task || task.status !== 'paused' && task.status !== 'queued' && !(task.status === 'running' && installQueue.has(id))) throw new Error('The download is no longer running.');
-      installQueue.cancel(id);
-      await store.updateDownload(id, { status: 'cancelled', canPause: false, finishedAt: new Date().toISOString(), phase: 'Cancelled; downloaded files and checkpoints were kept.' });
-      emitSnapshot(); return;
-    }
-    cancelledDownloads.add(id);
-    child.kill('SIGINT');
+  ipcMain.handle('download-cancel-options', async (_event, id: string) => {
+    const task = cancellableDownload(id), { locked, roots } = downloadCleanupProtection(task);
+    return downloadCleanup.options(task, locked, roots);
   });
+  ipcMain.handle('cancel-download', async (_event, id: string, mode?: 'keep' | 'delete-files') => cancelDownload(id, mode));
   ipcMain.handle('pause-download', (_event, id: string) => {
+    if (downloadCancellations.has(id)) throw Error('This download is being cancelled.');
     const control = downloadControls.get(id);
     if (!control) throw new Error('Pause requires a backend with download controls. Update the Nexus backend in Settings.');
     return control(true);
   });
   ipcMain.handle('resume-download', (_event, id: string) => {
+    if (downloadCancellations.has(id)) throw Error('This download is being cancelled.');
     const control = downloadControls.get(id);
     if (!control) {
       if (!backend.current.capabilities.streamingControls) throw new Error('Update the Nexus backend in Settings before resuming a saved download.');
@@ -1150,8 +1213,8 @@ function registerIpc(): void {
     }
     return control(false);
   });
-  ipcMain.handle('remove-download', async (_event, id: string) => { await store.removeDownload(id); emitSnapshot(); });
-  ipcMain.handle('clear-finished-downloads', async () => { await store.clearFinishedDownloads(); emitSnapshot(); });
+  ipcMain.handle('remove-download', async (_event, id: string) => { if (downloadCancellations.size) throw Error('Wait for cancellation cleanup.'); await store.removeDownload(id); emitSnapshot(); });
+  ipcMain.handle('clear-finished-downloads', async () => { if (downloadCancellations.size) throw Error('Wait for cancellation cleanup.'); await store.clearFinishedDownloads(); emitSnapshot(); });
   ipcMain.handle('import-game', (_event, input?: string) => importGame(input));
   ipcMain.handle('game-locales', async (_event, id: string) => {
     const game = store.games.find((entry) => entry.id === id);
@@ -1521,6 +1584,7 @@ app.whenReady().then(async () => {
   shortcutOnly = Boolean(startupRequest.gameId) && !demoMode;
   store = new StateStore(app.getPath('userData'));
   await store.load();
+  downloadCleanup = new DownloadCleanup(app.getPath('userData'));
   accountProfile = new AccountProfile(app.getPath('userData'), scheduleSnapshot, dataUrl => {
     try {
       const picture = nativeImage.createFromDataURL(dataUrl);
@@ -1573,8 +1637,8 @@ app.whenReady().then(async () => {
       });
     } catch { /* Keep an unavailable imported entry visible. */ }
   }
-  runtime = new RuntimeManager(store.settings.runtimeRoot, emitLog, () => operations.size > 0 || installQueue.size > 0 || preparingInstall || backend?.current.updating === true);
-  backend = new BackendManager(app.getPath('userData'), store.settings.externalXodusRoot, emitLog, () => operations.size > 0 || installQueue.size > 0 || preparingInstall || runtime?.current.updating === true);
+  runtime = new RuntimeManager(store.settings.runtimeRoot, emitLog, () => downloadCancellations.size > 0 || operations.size > 0 || installQueue.size > 0 || preparingInstall || backend?.current.updating === true);
+  backend = new BackendManager(app.getPath('userData'), store.settings.externalXodusRoot, emitLog, () => downloadCancellations.size > 0 || operations.size > 0 || installQueue.size > 0 || preparingInstall || runtime?.current.updating === true);
   await backend.refresh();
   await runtime.refresh();
   void backend.checkUpdate().then(async () => {
@@ -1621,7 +1685,7 @@ app.on('before-quit', (event) => {
   installQueue.stop();
   accountLibrary.reset();
   accountProfile?.cancel();
-  if (shutdownStarted || (!backendDiagnostics?.pendingWrites && !authJob && !preparingInstall && installQueue.size === 0 && operations.size === 0 && serviceSessions.size === 0 && !checkingGameUpdates && !launcherUpdater?.state.updating)) return;
+  if (shutdownStarted || (!backendDiagnostics?.pendingWrites && !authJob && !preparingInstall && downloadCancellations.size === 0 && installQueue.size === 0 && operations.size === 0 && serviceSessions.size === 0 && !checkingGameUpdates && !launcherUpdater?.state.updating)) return;
   event.preventDefault();
   shutdownStarted = true;
   void (async () => {
@@ -1641,6 +1705,7 @@ app.on('before-quit', (event) => {
     }
     await store.save();
     for (const [id, child] of operations) if (!gameProcesses.has(id)) child.kill('SIGINT');
+    await Promise.allSettled([...downloadCancellations.values()]);
     await authJob?.catch(() => {});
     const runningGames = [...gameProcesses.values()];
     await Promise.all(runningGames.map((process) => process.stop().catch((error) => console.error('Could not stop game on exit:', error))));

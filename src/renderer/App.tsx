@@ -18,6 +18,8 @@ import { GamepadNavigation } from './GamepadNavigation';
 import { ConfirmationProvider, useConfirmation } from './Confirmation';
 import { GameRemovalContents } from './GameRemovalContents';
 import { GameDetails } from './GameDetails';
+import { DownloadCancelDialog } from './DownloadCancelDialog';
+import type { DownloadCancelOptions } from '../shared/types';
 export type { LibraryFilters } from './library-preferences';
 
 const emptySnapshot: AppSnapshot = {
@@ -717,9 +719,23 @@ export function DownloadsPage({ data, toast }: { data: AppSnapshot; toast: (valu
   const startPackageInstall = usePackageInstall();
   const [expanded, setExpanded] = useState<string>();
   const [retrying, setRetrying] = useState<string>();
-  async function cancel(id: string) {
-    try { await window.launcher.cancelDownload(id); }
-    catch (error) { toast({ kind: 'error', message: errorMessage(error) }); }
+  const [cancelId, setCancelId] = useState<string>(), [cancelOptions, setCancelOptions] = useState<DownloadCancelOptions>();
+  const [checkingCancel, setCheckingCancel] = useState(false), [cancelling, setCancelling] = useState(false), [cancelError, setCancelError] = useState<string>();
+  const cancelTask = data.downloads.find(task => task.id === cancelId);
+  useEffect(() => {
+    if (!cancelId) return;
+    let current = true; setCancelOptions(undefined); setCheckingCancel(true); setCancelError(undefined);
+    void window.launcher.getDownloadCancelOptions(cancelId).then(options => { if (current) setCancelOptions(options); })
+      .catch(() => { if (current) setCancelOptions({ deleteFilesAllowed: false, reason: 'File ownership could not be verified. You can still cancel and keep the files.' }); })
+      .finally(() => { if (current) setCheckingCancel(false); });
+    return () => { current = false; };
+  }, [cancelId]);
+  async function cancel(mode: 'keep' | 'delete-files') {
+    if (!cancelId || cancelling) return;
+    setCancelling(true); setCancelError(undefined);
+    try { await window.launcher.cancelDownload(cancelId, mode); setCancelId(undefined); toast({ kind: 'success', message: mode === 'delete-files' ? 'Download cancelled. Downloaded files were deleted.' : 'Download cancelled. Files were kept.' }); }
+    catch (error) { setCancelError(errorMessage(error)); }
+    finally { setCancelling(false); }
   }
   async function pauseOrResume(task: AppSnapshot['downloads'][number]) {
     try {
@@ -757,16 +773,17 @@ export function DownloadsPage({ data, toast }: { data: AppSnapshot; toast: (valu
     ...data.downloads.filter(task => !['running', 'paused', 'queued'].includes(task.status)),
   ];
   return <main className="page downloads-page">
-    <header className="page-header"><div><h1>Install Queue</h1></div>{finishedCount ? <button className="secondary" onClick={clearFinished}><Trash2 />Clear finished</button> : null}</header>
+    <header className="page-header"><div><h1>Install Queue</h1></div>{finishedCount ? <button className="secondary" disabled={data.downloads.some(task => task.cancelling)} onClick={clearFinished}><Trash2 />Clear finished</button> : null}</header>
     {data.downloadProgressSupported === false ? <div className="alert amber"><CircleAlert /><span>Update the Nexus backend in Settings for numeric download progress and Pause/Resume. Downloads still work with an older backend.</span></div> : null}
     {data.downloads.length === 0 ? <div className="empty-state"><div><Download /></div><h2>Nothing in the queue</h2><p>Installations started from Store will appear here.</p></div> : <div className="download-list">{ordered.map((task) => {
       const running = task.status === 'running'; const paused = task.status === 'paused'; const queued = task.status === 'queued'; const active = running || paused || queued; const failed = task.status === 'failed';
       return <article className={`download-item ${task.status}`} key={task.id}>
         <div className="download-status">{task.coverUrl ? <img className="download-cover" src={task.coverUrl} alt={`${task.title} artwork`} /> : running ? <LoaderCircle className="spin" /> : queued ? <Clock3 /> : paused ? <Pause /> : failed ? <CircleAlert /> : task.status === 'complete' ? <PackageCheck /> : <X />}{task.coverUrl && (running || failed) ? <span className={`download-badge ${failed ? 'failed' : ''}`}>{running ? <LoaderCircle className="spin" /> : <CircleAlert />}</span> : null}</div>
         <div className="download-main"><div className="download-heading"><div><h3>{task.kind === 'update' ? `Update · ${task.title}` : task.title}</h3><span>{task.productId} · {task.destination}</span></div><strong>{task.progress === null ? (running ? 'Active' : task.status) : `${Math.round(task.progress)}%`}</strong></div><div className={`progress-track ${task.progress === null && running ? 'indeterminate' : ''}`}><i style={task.progress !== null ? { width: `${task.progress}%` } : undefined} /></div><p className={failed ? 'error-text' : ''}>{task.error ?? task.phase}{task.totalBytes ? ` · ${size(task.downloadedBytes ?? 0)} / ${size(task.totalBytes)}` : ''}{task.transferRate ? ` · ${task.transferRate}` : ''}{running && estimateTimeRemaining(task.transferRate, task.downloadedBytes, task.totalBytes) ? ` · ${estimateTimeRemaining(task.transferRate, task.downloadedBytes, task.totalBytes)}` : ''}</p>{expanded === task.id ? <pre className="task-log">{task.log.length ? task.log.join('\n') : 'Xodus has not emitted text output yet.'}</pre> : null}</div>
-        <div className="download-actions">{active ? <>{!queued ? <button disabled={!task.canPause || task.controlPending} onClick={() => pauseOrResume(task)} title={paused ? 'Resume download' : task.canPause ? 'Pause download' : 'Pause is available while downloading game files'}>{task.controlPending ? <LoaderCircle className="spin" /> : paused ? <Play /> : <Pause />}</button> : null}<button onClick={() => cancel(task.id)} title="Cancel download"><X /></button></> : null}{failed || task.status === 'cancelled' ? <button disabled={Boolean(retrying) || (task.kind === 'update' || task.kind === 'content') && data.downloads.some((entry) => ['running', 'paused', 'queued'].includes(entry.status))} onClick={() => retry(task)} title="Retry installation"><RefreshCw className={retrying === task.id ? 'spin' : ''} /></button> : null}<button onClick={() => setExpanded(expanded === task.id ? undefined : task.id)} title="Show log"><Terminal /></button><button onClick={() => window.launcher.openPath(task.destination)} title="Open folder"><FolderOpen /></button>{!active ? <button onClick={() => remove(task.id)} title="Remove from queue"><Trash2 /></button> : null}</div>
+        <div className="download-actions">{active ? <>{!queued ? <button disabled={task.cancelling || !task.canPause || task.controlPending} onClick={() => pauseOrResume(task)} title={paused ? 'Resume download' : task.canPause ? 'Pause download' : 'Pause is available while downloading game files'}>{task.controlPending ? <LoaderCircle className="spin" /> : paused ? <Play /> : <Pause />}</button> : null}<button disabled={task.cancelling} onClick={() => setCancelId(task.id)} title="Cancel download">{task.cancelling ? <LoaderCircle className="spin" /> : <X />}</button></> : null}{failed || task.status === 'cancelled' ? <button disabled={task.cancelling || Boolean(retrying) || (task.kind === 'update' || task.kind === 'content') && data.downloads.some((entry) => ['running', 'paused', 'queued'].includes(entry.status))} onClick={() => retry(task)} title="Retry installation"><RefreshCw className={retrying === task.id ? 'spin' : ''} /></button> : null}<button onClick={() => setExpanded(expanded === task.id ? undefined : task.id)} title="Show log"><Terminal /></button><button onClick={() => window.launcher.openPath(task.destination)} title="Open folder"><FolderOpen /></button>{!active ? <button disabled={task.cancelling} onClick={() => remove(task.id)} title="Remove from queue"><Trash2 /></button> : null}</div>
       </article>;
     })}</div>}
+    {cancelTask ? <DownloadCancelDialog task={cancelTask} options={cancelOptions} loading={checkingCancel} busy={cancelling || Boolean(cancelTask.cancelling)} error={cancelError} close={() => setCancelId(undefined)} choose={mode => { void cancel(mode); }} /> : null}
   </main>;
 }
 

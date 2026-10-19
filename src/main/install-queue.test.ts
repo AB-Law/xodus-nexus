@@ -10,6 +10,22 @@ const directories: string[] = [];
 afterEach(async () => { for (const directory of directories.splice(0)) await fs.rm(directory, { recursive: true, force: true }); });
 
 describe('FIFO installations', () => {
+  it('holds the next job until cancellation cleanup releases its hold, after full settlement', async () => {
+    const queue = new InstallQueue(), process = deferred(), cleanup = deferred(), next = vi.fn(), failed = vi.fn();
+    queue.enqueue({ id: 'active', run: async () => { await process.promise; await cleanup.promise; }, failed });
+    queue.enqueue({ id: 'next', run: next, failed });
+    const release = queue.hold(), settled = vi.fn(); void queue.settled('active').then(settled);
+    process.resolve(); await Promise.resolve(); expect(settled).not.toHaveBeenCalled();
+    cleanup.resolve(); await vi.waitFor(() => expect(settled).toHaveBeenCalled()); expect(next).not.toHaveBeenCalled();
+    release(); release(); await vi.waitFor(() => expect(next).toHaveBeenCalledOnce());
+  });
+  it('settles queued cancellation without starting it and times out without releasing an active job', async () => {
+    const queue = new InstallQueue(), process = deferred(), never = vi.fn(), failed = vi.fn();
+    queue.enqueue({ id: 'active', run: () => process.promise, failed }); queue.enqueue({ id: 'queued', run: never, failed });
+    const queued = queue.settled('queued'); queue.cancel('queued'); await queued; expect(never).not.toHaveBeenCalled();
+    await expect(queue.settled('active', 5)).rejects.toThrow('Files were not deleted'); expect(queue.has('active')).toBe(true);
+    process.resolve(); await queue.settled('active');
+  });
   it('accepts more jobs during a download, starts one process, and waits for cleanup', async () => {
     const queue = new InstallQueue(), first = deferred(), cleanup = deferred(), calls: string[] = [];
     const failed = vi.fn();

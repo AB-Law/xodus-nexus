@@ -19,6 +19,7 @@ const h = vi.hoisted(() => ({
   liveImport: vi.fn(), offlineImport: vi.fn(), showMessage: vi.fn(),
   trash: vi.fn(), deleteFiles: vi.fn(), removeShortcut: vi.fn(async () => {}), signals: [] as string[],
   notifications: [] as { title: string; body: string }[],
+  holdCancellation: false,
   posters: vi.fn(async (ids: string[]) => new Map(ids.map(id => [id, `https://store-images.s-microsoft.com/${id}`]))),
 }));
 vi.mock('electron', () => ({
@@ -64,7 +65,7 @@ vi.mock('./process.js', () => ({
     const progress = (paused = false, phase = 'downloading') => options.onLine('NEXUS_PROGRESS ' + JSON.stringify({ schema: 1, event: 'progress', sequence: sequence++, phase,
       completedBytes: phase === 'complete' ? 100 : 20, totalBytes: 100, bytesPerSecond: 10, paused, canPause: phase === 'downloading' }));
     h.downloads.push({ args, progress, finish: code => resolve({ code, output: '' }) });
-    return { child: { stdin: { on() {}, write: (line: string) => progress(JSON.parse(line).command === 'pause') }, kill: (signal: string) => { h.signals.push(signal); resolve({ code: 130, output: '' }); } }, result };
+    return { child: { stdin: { on() {}, write: (line: string) => progress(JSON.parse(line).command === 'pause') }, kill: (signal: string) => { h.signals.push(signal); if (!h.holdCancellation) resolve({ code: 130, output: '' }); return true; } }, result };
   },
 }));
 vi.mock('./game-process.js', () => ({ spawnGameProcess: async () => {
@@ -189,6 +190,46 @@ it('removes only unrelated games while downloading, without interrupting the que
   await vi.waitFor(() => expect(snapshot().downloads.find((task: any) => task.id === active).status).toBe('failed'));
   h.downloads.splice(0);
   expect(h.notifications).toEqual([]);
+});
+
+it('offers cleanup only for a new folder and waits for process exit before deleting it', async () => {
+  const id = await install('X'); await vi.waitFor(() => expect(h.downloads).toHaveLength(1));
+  const task = snapshot().downloads.find((task: any) => task.id === id), partial = path.join(task.destination, 'part.bin');
+  await fs.writeFile(partial, 'disposable'); expect(await ipc('download-cancel-options', id)).toEqual({ deleteFilesAllowed: true });
+  h.holdCancellation = true; const count = h.signals.length, pending = ipc('cancel-download', id, 'delete-files');
+  try {
+    await vi.waitFor(() => expect(h.signals.length).toBe(count + 1));
+    expect(snapshot().downloads.find((task: any) => task.id === id).cancelling).toBe(true);
+    expect(await fs.readFile(partial, 'utf8')).toBe('disposable');
+    await expect(install('Y')).rejects.toThrow('being cancelled');
+    await expect(ipc('import-game', task.destination)).rejects.toThrow('being cancelled');
+    await expect(ipc('remove-download', id)).rejects.toThrow('cancellation cleanup');
+    await expect(ipc('cancel-download', id, 'keep')).rejects.toThrow('already being cancelled');
+    h.downloads[0].progress(); expect(await fs.readFile(partial, 'utf8')).toBe('disposable');
+  } finally { h.holdCancellation = false; h.downloads[0].finish(130); }
+  await pending;
+  await expect(fs.access(task.destination)).rejects.toThrow();
+  expect(snapshot().downloads.find((task: any) => task.id === id)).toMatchObject({ status: 'cancelled', phase: 'Cancelled; downloaded files were deleted.' });
+  h.downloads.splice(0);
+});
+
+it('keeps new partials by default and refuses deletion of an existing folder or an update', async () => {
+  const id = await install('U'); await vi.waitFor(() => expect(h.downloads).toHaveLength(1));
+  const directory = snapshot().downloads.find((task: any) => task.id === id).destination;
+  await fs.writeFile(path.join(directory, 'keep'), 'partial'); await ipc('cancel-download', id);
+  expect(await fs.readFile(path.join(directory, 'keep'), 'utf8')).toBe('partial'); h.downloads.splice(0);
+  const existing = path.join(h.root, 'pre-existing-folder'); await fs.mkdir(existing); await fs.writeFile(path.join(existing, 'original'), 'existing files');
+  const next = await install('V', existing); await vi.waitFor(() => expect(h.downloads).toHaveLength(1));
+  expect((await ipc('download-cancel-options', next)).deleteFilesAllowed).toBe(false);
+  const signals = h.signals.length; await expect(ipc('cancel-download', next, 'delete-files')).rejects.toThrow('Existing or untracked');
+  expect(h.signals.length).toBe(signals); expect(await fs.readFile(path.join(existing, 'original'), 'utf8')).toBe('existing files');
+  await ipc('cancel-download', next, 'keep'); h.downloads.splice(0);
+  const update = await ipc('update-installed-game', 'sample'); await vi.waitFor(() => expect(h.downloads).toHaveLength(1));
+  expect((await ipc('download-cancel-options', update)).deleteFilesAllowed).toBe(false);
+  await expect(ipc('cancel-download', update, 'delete-files')).rejects.toThrow('Updates and DLC');
+  expect(await fs.readFile(path.join(h.root, 'installed-game/Game.exe'), 'utf8')).toBe('MZ fixture');
+  await ipc('cancel-download', update, 'keep'); h.downloads.splice(0);
+  await expect(ipc('cancel-download', update, 'invalid')).rejects.toThrow('Invalid cancellation');
 });
 
 it('runs real queue IPC, pause/cancel/failure/restart and simultaneous play/download safely', async () => {
