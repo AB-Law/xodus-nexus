@@ -901,9 +901,16 @@ export function FirstRunWizard({ data, toast }: { data: AppSnapshot; toast: (val
   return <div className="wizard-overlay">
     <div className="wizard" role="dialog" aria-modal="true" aria-label="Set up Xodus Nexus">
       <div><span className="overline">WELCOME</span><h1>Set up Xodus Nexus</h1></div>
+      <section className="wizard-disclaimer" role="note" aria-labelledby="wizard-disclaimer-title">
+        <CircleAlert aria-hidden="true" />
+        <div><h2 id="wizard-disclaimer-title">Independent, unofficial project</h2>
+          <p>Xodus Nexus is built on Xodus, but it is <strong>not an official Xodus project</strong> and is not developed or maintained by the upstream Xodus developers.</p>
+          <p>Please report Nexus issues only in the <a href="https://github.com/domsvoboda/xodus-nexus/issues" target="_blank" rel="noopener noreferrer">Nexus repository</a>, not upstream. A problem in Nexus may not exist in upstream Xodus.</p>
+        </div>
+      </section>
       <p>Choose where games install. Everything else can be changed later in Settings.</p>
       <label className="wizard-field">Games folder
-        <div className="input-action"><input value={installRoot} onChange={(event) => setInstallRoot(event.target.value)} /><button onClick={() => void browse()} title="Browse"><FolderOpen /></button></div>
+        <div className="input-action"><input data-gamepad-initial value={installRoot} onChange={(event) => setInstallRoot(event.target.value)} /><button onClick={() => void browse()} title="Browse"><FolderOpen /></button></div>
         <small>New games download and extract into this folder.</small>
       </label>
       <div className="wizard-account">

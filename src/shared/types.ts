@@ -5,6 +5,7 @@ export interface BackendCapabilities {
   account: boolean;
   profile?: boolean;
   gameActivity?: boolean;
+  achievements?: boolean;
   library?: boolean;
   login: boolean;
   externalAuth?: boolean;
@@ -291,6 +292,25 @@ export interface GameActivity {
   partial?: boolean;
 }
 
+export interface GameAchievement {
+  id: string;
+  name: string;
+  description: string;
+  state: 'unlocked' | 'in-progress' | 'locked';
+  secret: boolean;
+  revoked: boolean;
+  gamerscore?: number;
+  iconUrl?: string;
+  unlockedAt?: string;
+  progress?: number;
+}
+
+export interface GameAchievements {
+  status: 'available' | 'unavailable' | 'unsupported' | 'signed-out' | 'error';
+  items?: GameAchievement[];
+  partial?: boolean;
+}
+
 export interface CatalogSearchResult {
   query: string;
   market: string;
@@ -352,6 +372,7 @@ export interface LauncherApi {
   getGameLaunchOptions(id: string): Promise<GameLaunchOptions>;
   getGameDetails(id: string): Promise<GameStoreDetails | undefined>;
   getGameActivity(id: string, refresh?: boolean): Promise<GameActivity>;
+  getGameAchievements(id: string, refresh?: boolean): Promise<GameAchievements>;
   launchGame(id: string): Promise<void>;
   createGameShortcut(id: string, destination: 'desktop' | 'applications'): Promise<string>;
   addToSteam(id?: string): Promise<string>;

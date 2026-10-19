@@ -47,6 +47,7 @@ const api: LauncherApi = {
   getGameLaunchOptions: (id: string) => ipcRenderer.invoke('game-launch-options', id),
   getGameDetails: (id: string) => ipcRenderer.invoke('game-details', id),
   getGameActivity: (id: string, refresh?: boolean) => ipcRenderer.invoke('game-activity', id, refresh),
+  getGameAchievements: (id: string, refresh?: boolean) => ipcRenderer.invoke('game-achievements', id, refresh),
   launchGame: (id: string) => ipcRenderer.invoke('launch-game', id),
   createGameShortcut: (id, destination) => ipcRenderer.invoke('create-game-shortcut', id, destination),
   addToSteam: id => ipcRenderer.invoke('add-to-steam', id),

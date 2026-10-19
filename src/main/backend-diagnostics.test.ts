@@ -111,3 +111,16 @@ it('observes actual tracked CLI calls without capturing license JSON or paths', 
     expect(content).not.toMatch(/example.test|synthetic-token|--json|nexus-log-cli/);
   } finally { setBackendDiagnostics(undefined); await fs.rm(root, { recursive: true, force: true }); }
 });
+
+it('records achievement command metadata without its title ID, account or response', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-log-achievements-'));
+  try {
+    const log = new BackendDiagnostics(root); setBackendDiagnostics(log);
+    const binary = path.join(root, 'xodus-cli');
+    await fs.writeFile(binary, '#!/usr/bin/env node\nprocess.stdout.write(JSON.stringify({account:"sample@example.test",items:[{name:"PRIVATE ACHIEVEMENT"}]}));\n', { mode: 0o755 });
+    expect((await spawnTracked(binary, ['achievements', '12345678', '--json']).result).code).toBe(0);
+    const content = (await log.read()).content;
+    expect(content).toContain('"operation":"achievements"'); expect(content).toContain('"code":0');
+    expect(content).not.toMatch(/12345678|PRIVATE|example.test|--json|nexus-log-achievements/);
+  } finally { setBackendDiagnostics(undefined); await fs.rm(root, { recursive: true, force: true }); }
+});

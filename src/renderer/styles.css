@@ -434,6 +434,13 @@ button.primary svg, button.secondary svg { width: 17px; height: 17px; }
 .wizard { width: min(540px, 92vw); padding: 30px 32px; background: #1c1f23; border: 1px solid var(--line); border-radius: 7px; display: grid; gap: 16px; }
 .wizard h1 { margin: 6px 0 0; font-size: 27px; letter-spacing: -.03em; }
 .wizard > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.wizard-disclaimer { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; padding: 14px; border: 1px solid rgba(227,189,105,.35); border-radius: 5px; background: rgba(227,189,105,.07); }
+.wizard-disclaimer > svg { width: 18px; height: 18px; color: #e3bd69; margin-top: 1px; }
+.wizard-disclaimer h2 { margin: 0 0 7px; font-size: 13px; line-height: 1.4; color: #e3bd69; }
+.wizard-disclaimer p { margin: 0; font-size: 12px; line-height: 1.5; color: #d0d2d5; overflow-wrap: anywhere; }
+.wizard-disclaimer p + p { margin-top: 8px; }
+.wizard-disclaimer a { color: #e3bd69; text-decoration: underline; text-underline-offset: 2px; }
+.wizard-disclaimer a:focus-visible { outline: 1px solid currentColor; outline-offset: 3px; }
 .wizard-field { display: grid; gap: 6px; font-size: 10px; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
 .wizard-field small { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--faint); }
 .wizard-account { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 15px; background: var(--surface); border: 1px solid var(--line); border-radius: 5px; }
