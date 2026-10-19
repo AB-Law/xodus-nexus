@@ -38,6 +38,7 @@ import { ShortcutLaunch } from './shortcut-launch.js';
 import { loadShortcutIcon } from './shortcut-icon.js';
 import { AccountProfile } from './account-profile.js';
 import { AccountLibrary } from './account-library.js';
+import { GameActivities, installedTitleId } from './game-activity.js';
 import { GameContent, type ContentPackage } from './game-content.js';
 import { startAuthTransport } from './auth-transport.js';
 import { authViewFactory } from './auth-window.js';
@@ -85,6 +86,7 @@ let authState: AppSnapshot['auth'] = {
 };
 let authJob: Promise<void> | undefined;
 const catalog = new CatalogService();
+const gameActivities = new GameActivities();
 const accountLibrary = new AccountLibrary((ids, market) => catalog.licensedProducts(ids, market));
 const demoMode = process.env.XODUS_DEMO === '1';
 const demoArtwork = new Map<string, DemoArtwork>();
@@ -293,6 +295,8 @@ async function refreshAccount(emit = true): Promise<AuthStatus> {
   }
   accountLibrary.select(authState.stored === true ? authState.username : undefined,
     status.capabilities.library ? status.binaryPath : undefined, currentMarket());
+  gameActivities.select(authState.stored === true ? authState.username : undefined,
+    status.capabilities.gameActivity ? status.binaryPath : undefined);
   await accountProfile?.select(authState.stored === true ? authState.username : undefined,
     status.capabilities.profile ? status.binaryPath : undefined, emit);
   if (emit) emitSnapshot();
@@ -304,6 +308,7 @@ async function runAuth(command: 'login' | 'logout'): Promise<void> {
   const binary = requireBackend(command);
   const id = `auth-${randomUUID()}`;
   accountLibrary.reset();
+  gameActivities.select();
   authState = { ...authState, running: true, lastResult: undefined };
   emitSnapshot();
   try {
@@ -993,6 +998,11 @@ function registerDemoIpc(catalogMarket: () => string): void {
   });
   ipcMain.handle('remove-game', () => {});
   ipcMain.handle('game-launch-options', () => demoLaunchOptions);
+  ipcMain.handle('game-details', async (_event, id: string) => {
+    const game = demoGames.find(game => game.id === id);
+    return game?.storeId ? catalog.gameDetails(game.storeId, catalogMarket()) : undefined;
+  });
+  ipcMain.handle('game-activity', () => ({ status: 'unavailable' }));
   ipcMain.handle('launch-game', () => {});
   ipcMain.handle('create-game-shortcut', () => { throw new Error('Shortcuts are unavailable in demo mode.'); });
   ipcMain.handle('add-to-steam', () => { throw new Error('Steam integration is unavailable in demo mode.'); });
@@ -1179,6 +1189,30 @@ function registerIpc(): void {
     }
   });
   ipcMain.handle('game-launch-options', (_event, id: string) => gameLaunchOptions(id));
+  ipcMain.handle('game-details', async (_event, id: string) => {
+    const game = store.games.find(game => game.id === id);
+    if (!game) throw Error('Game not found.');
+    if (!game.storeId || !/^[A-Z0-9]{12}$/.test(game.storeId)) return undefined;
+    const market = currentMarket();
+    const details = await catalog.gameDetails(game.storeId, market);
+    if (market !== currentMarket()) throw Error('Store market changed. Try again.');
+    return details;
+  });
+  ipcMain.handle('game-activity', async (_event, id: string, refresh = false) => {
+    if (typeof id !== 'string' || typeof refresh !== 'boolean') throw Error('Invalid activity request.');
+    const game = store.games.find(game => game.id === id);
+    if (!game) throw Error('Game not found.');
+    if (authState.running || authState.stored !== true || !authState.username) return { status: 'signed-out' };
+    if (!backend.current.capabilities.gameActivity || !backend.current.binaryPath) return { status: 'unsupported' };
+    const account = authState.username, binary = backend.current.binaryPath;
+    gameActivities.select(account, binary);
+    const title = await installedTitleId(game.path).catch(() => undefined);
+    if (!title) return { status: 'unavailable' };
+    if (authState.running || authState.stored !== true || account !== authState.username || binary !== backend.current.binaryPath) return { status: 'error' };
+    const activity = await gameActivities.get(title, refresh);
+    if (authState.running || authState.stored !== true || account !== authState.username || binary !== backend.current.binaryPath) return { status: 'error' };
+    return activity;
+  });
   ipcMain.handle('launch-game', (_event, id: string) => launchGame(id));
   ipcMain.handle('add-to-steam', async (_event, id?: string) => {
     if (process.platform !== 'linux') throw Error('Steam integration is currently supported on Linux only.');
@@ -1359,8 +1393,8 @@ async function createWindow(): Promise<void> {
     height: bounds.height,
     x: bounds.x,
     y: bounds.y,
-    minWidth: 1050,
-    minHeight: 680,
+    minWidth: 800,
+    minHeight: 600,
     backgroundColor: '#080a0c',
     title: 'Xodus Nexus',
     icon: fileURLToPath(new URL('../../assets/icon.png', import.meta.url)),

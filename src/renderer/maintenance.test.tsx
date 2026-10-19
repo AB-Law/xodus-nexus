@@ -18,7 +18,7 @@ it('offers verified in-app install with independent backend version labels', () 
 });
 it('shows game update badges and a separate version-check action', () => {
   const data = demoSnapshot(); data.gameUpdates = { [data.games[0].id]: { checking: false, available: true, latestVersion: '1.10.0.0' } };
-  const html = renderToStaticMarkup(<LibraryPage data={data} toast={() => {}} />);
+  const html = renderToStaticMarkup(<LibraryPage data={data} selection={{ id: data.games[0].id }} toast={() => {}} />);
   expect(html).toContain('Update available'); expect(html).toContain('Update game'); expect(html).toContain('Check game updates');
 });
 it('renders diagnostic logs as escaped text rather than executable HTML', () => {

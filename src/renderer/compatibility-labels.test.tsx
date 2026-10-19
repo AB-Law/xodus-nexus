@@ -10,7 +10,7 @@ describe('EAC presentation', () => {
     Object.assign(data.games[0], { launchSupport: 'offline-only-eac',
       launchBlockReason: 'Easy Anti-Cheat detected. Only offline play is supported.' });
     const home = renderToStaticMarkup(<HomePage data={data} go={() => {}} action={() => {}} />);
-    const library = renderToStaticMarkup(<LibraryPage data={data} toast={() => {}} />);
+    const library = renderToStaticMarkup(<LibraryPage data={data} selection={{ id: data.games[0].id }} toast={() => {}} />);
     for (const html of [home, library]) {
       expect(html).toContain('Gears of War: E-Day');
       expect(html).toContain('Ready');
@@ -23,7 +23,7 @@ describe('EAC presentation', () => {
     const data = demoSnapshot();
     data.games[0].installState = 'incomplete';
     data.games[0].installMessage = 'The download was not completed.';
-    const html = renderToStaticMarkup(<LibraryPage data={data} toast={() => {}} />);
+    const html = renderToStaticMarkup(<LibraryPage data={data} selection={{ id: data.games[0].id }} toast={() => {}} />);
     expect(html).toContain('Incomplete');
     expect(html).toContain('The download was not completed.');
   });
