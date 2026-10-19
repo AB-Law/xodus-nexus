@@ -39,6 +39,7 @@ import { loadShortcutIcon } from './shortcut-icon.js';
 import { AccountProfile } from './account-profile.js';
 import { AccountLibrary } from './account-library.js';
 import { GameActivities, installedTitleId } from './game-activity.js';
+import { GameAchievementsReader } from './game-achievements.js';
 import { GameContent, type ContentPackage } from './game-content.js';
 import { startAuthTransport } from './auth-transport.js';
 import { authViewFactory } from './auth-window.js';
@@ -87,6 +88,7 @@ let authState: AppSnapshot['auth'] = {
 let authJob: Promise<void> | undefined;
 const catalog = new CatalogService();
 const gameActivities = new GameActivities();
+const gameAchievements = new GameAchievementsReader();
 const accountLibrary = new AccountLibrary((ids, market) => catalog.licensedProducts(ids, market));
 const demoMode = process.env.XODUS_DEMO === '1';
 const demoArtwork = new Map<string, DemoArtwork>();
@@ -297,6 +299,8 @@ async function refreshAccount(emit = true): Promise<AuthStatus> {
     status.capabilities.library ? status.binaryPath : undefined, currentMarket());
   gameActivities.select(authState.stored === true ? authState.username : undefined,
     status.capabilities.gameActivity ? status.binaryPath : undefined);
+  gameAchievements.select(authState.stored === true ? authState.username : undefined,
+    status.capabilities.achievements ? status.binaryPath : undefined);
   await accountProfile?.select(authState.stored === true ? authState.username : undefined,
     status.capabilities.profile ? status.binaryPath : undefined, emit);
   if (emit) emitSnapshot();
@@ -309,6 +313,7 @@ async function runAuth(command: 'login' | 'logout'): Promise<void> {
   const id = `auth-${randomUUID()}`;
   accountLibrary.reset();
   gameActivities.select();
+  gameAchievements.select();
   authState = { ...authState, running: true, lastResult: undefined };
   emitSnapshot();
   try {
@@ -1003,6 +1008,7 @@ function registerDemoIpc(catalogMarket: () => string): void {
     return game?.storeId ? catalog.gameDetails(game.storeId, catalogMarket()) : undefined;
   });
   ipcMain.handle('game-activity', () => ({ status: 'unavailable' }));
+  ipcMain.handle('game-achievements', () => ({ status: 'unavailable' }));
   ipcMain.handle('launch-game', () => {});
   ipcMain.handle('create-game-shortcut', () => { throw new Error('Shortcuts are unavailable in demo mode.'); });
   ipcMain.handle('add-to-steam', () => { throw new Error('Steam integration is unavailable in demo mode.'); });
@@ -1212,6 +1218,21 @@ function registerIpc(): void {
     const activity = await gameActivities.get(title, refresh);
     if (authState.running || authState.stored !== true || account !== authState.username || binary !== backend.current.binaryPath) return { status: 'error' };
     return activity;
+  });
+  ipcMain.handle('game-achievements', async (_event, id: string, refresh = false) => {
+    if (typeof id !== 'string' || typeof refresh !== 'boolean') throw Error('Invalid achievements request.');
+    const game = store.games.find(game => game.id === id);
+    if (!game) throw Error('Game not found.');
+    if (authState.running || authState.stored !== true || !authState.username) return { status: 'signed-out' };
+    if (!backend.current.capabilities.achievements || !backend.current.binaryPath) return { status: 'unsupported' };
+    const account = authState.username, binary = backend.current.binaryPath;
+    gameAchievements.select(account, binary);
+    const title = await installedTitleId(game.path).catch(() => undefined);
+    if (!title) return { status: 'unavailable' };
+    if (authState.running || authState.stored !== true || account !== authState.username || binary !== backend.current.binaryPath) return { status: 'error' };
+    const value = await gameAchievements.get(title, refresh);
+    if (authState.running || authState.stored !== true || account !== authState.username || binary !== backend.current.binaryPath) return { status: 'error' };
+    return value;
   });
   ipcMain.handle('launch-game', (_event, id: string) => launchGame(id));
   ipcMain.handle('add-to-steam', async (_event, id?: string) => {

@@ -4,7 +4,7 @@ import type { ChildProcess } from 'node:child_process';
 import type { DiagnosticLog } from '../shared/types.js';
 import { readDiagnosticTail } from './diagnostic-log.js';
 
-const operations = new Set(['account', 'profile', 'library', 'login', 'logout', 'streaming', 'download', 'license', 'run', 'resolve-package', 'service', 'probe']);
+const operations = new Set(['account', 'profile', 'achievements', 'library', 'login', 'logout', 'streaming', 'download', 'license', 'run', 'resolve-package', 'service', 'probe']);
 const credentialStages = new Set(['keyring-unavailable', 'keyring-invalid-data', 'keyring-missing-data', 'keyring-write-verification', 'credential-io', 'device-authentication']);
 const stages = new Set([
   'keyring-unavailable', 'keyring-invalid-data', 'keyring-missing-data', 'keyring-write-verification', 'credential-io', 'device-authentication',
