@@ -11,6 +11,13 @@ Your Microsoft Store PC games, on Linux.
 
 </div>
 
+> [!CAUTION]
+> **Xodus Nexus is an independent, unofficial project built on Xodus. It is not an official project or release from the upstream Xodus developers.**
+>
+> Please report all issues encountered with **Xodus Nexus** only in the [Xodus Nexus repository](https://github.com/domsvoboda/xodus-nexus/issues), not in the upstream Xodus issue tracker or support channels.
+>
+> Nexus includes its own changes, so a problem in Nexus does not necessarily indicate a problem in upstream Xodus.
+
 An Xbox-inspired launcher built on [Xodus](https://github.com/xodus-gaming/xodus),
 using our patched Nexus backend and Nexus runtime.
 Browse the Store, install games you own or can access through a subscription,
