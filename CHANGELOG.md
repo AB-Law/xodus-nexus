@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## Backend 0.2.7
+
+- Keep independently verified account-library records available when other license records are invalid or conflicting.
+- Add safe library error codes and HTTP status diagnostics without recording account or credential contents.
+
+## 0.3.7
+
+- Keep independently verified library games available when individual license records are invalid, with a warning when results are incomplete.
+- Add a local backend diagnostic log with safe error codes, an in-app viewer and a Copy log button.
+- Improve spacing around action buttons in Advanced / Diagnostics.
+
 ## Backend 0.2.6
 
 - Prevent sign-in and installation panics when stored credentials are invalid, verify keyring writes and show actionable sign-in errors. Thanks @jordanfaz for reporting the issue.
