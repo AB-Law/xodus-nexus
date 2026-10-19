@@ -4,6 +4,7 @@ export interface BackendCapabilities {
   commands: string[];
   account: boolean;
   profile?: boolean;
+  gameActivity?: boolean;
   library?: boolean;
   login: boolean;
   externalAuth?: boolean;
@@ -271,6 +272,25 @@ export interface CatalogProduct {
   supportNote: string;
 }
 
+/** Public catalog data only, never an ownership/installation decision. */
+export interface GameStoreDetails {
+  productId: string;
+  title: string;
+  description: string;
+  publisher?: string;
+  heroUrl?: string;
+  categories: string[];
+  screenshots: string[];
+  releaseDate?: string;
+}
+
+export interface GameActivity {
+  status: 'available' | 'unavailable' | 'unsupported' | 'signed-out' | 'error';
+  minutesPlayed?: number;
+  lastPlayed?: string;
+  partial?: boolean;
+}
+
 export interface CatalogSearchResult {
   query: string;
   market: string;
@@ -330,6 +350,8 @@ export interface LauncherApi {
   getGameLocales(id: string): Promise<string[]>;
   removeGame(id: string, mode: 'library' | 'delete-files'): Promise<void>;
   getGameLaunchOptions(id: string): Promise<GameLaunchOptions>;
+  getGameDetails(id: string): Promise<GameStoreDetails | undefined>;
+  getGameActivity(id: string, refresh?: boolean): Promise<GameActivity>;
   launchGame(id: string): Promise<void>;
   createGameShortcut(id: string, destination: 'desktop' | 'applications'): Promise<string>;
   addToSteam(id?: string): Promise<string>;
