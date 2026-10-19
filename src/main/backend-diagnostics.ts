@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { ChildProcess } from 'node:child_process';
 import type { DiagnosticLog } from '../shared/types.js';
 import { readDiagnosticTail } from './diagnostic-log.js';
-import { sessionStages } from './session-errors.js';
+import { sessionStages, ticketFailureDiagnostic } from './session-errors.js';
 import { contentLicenseDiagnostic, contentLicenseStages } from '../shared/content-license.js';
 import { transferDiagnostic, transferStages } from '../shared/transfer-failure.js';
 
@@ -23,7 +23,7 @@ const stages = new Set([
 ]);
 type Event = 'start' | 'exit' | 'spawn-error' | 'diagnostic' | 'validation';
 type Context = { launcher?: string; backend?: string; source?: string };
-type RecordData = { operation: string; event: Event; stage?: string; status?: number; skipped?: number; code?: number; signal?: string; elapsedMs?: number };
+type RecordData = { operation: string; event: Event; stage?: string; status?: number; skipped?: number; code?: number; serviceCode?: string; signal?: string; elapsedMs?: number };
 const version = (value?: string) => value && /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(value) ? value : 'unknown';
 
 /** Allowlisted metadata only. Never persists child output, argv, auth frames or identifiers. */
@@ -77,6 +77,8 @@ export class BackendDiagnostics {
     if (Number.isInteger(data.status) && data.status! >= 100 && data.status! <= 599) entry.status = data.status;
     if (Number.isInteger(data.skipped) && data.skipped! >= 0 && data.skipped! <= 200_000) entry.skipped = data.skipped;
     if (Number.isInteger(data.code) && data.code! >= -1 && data.code! <= 255) entry.code = data.code;
+    if (data.serviceCode && /^[A-F0-9]{8}$/.test(data.serviceCode) && ['library', 'profile'].includes(data.operation)
+      && ['ticket-refused', 'ticket-interaction-required'].includes(data.stage ?? '')) entry.serviceCode = data.serviceCode;
     if (data.signal && ['SIGINT', 'SIGTERM', 'SIGKILL', 'SIGSEGV', 'SIGABRT', 'SIGPIPE'].includes(data.signal)) entry.signal = data.signal;
     if (Number.isFinite(data.elapsedMs)) entry.elapsedMs = Math.max(0, Math.min(86_400_000, Math.round(data.elapsedMs!)));
     this.pending++;
@@ -115,14 +117,16 @@ export class BackendDiagnosticReader {
     }
   }
   private consume(line: string): void {
-    let stage: string | undefined, status: number | undefined, skipped: number | undefined;
+    let stage: string | undefined, status: number | undefined, skipped: number | undefined, serviceCode: string | undefined;
     const credential = /^NEXUS_CREDENTIAL_ERROR_V1 ([a-z-]+)$/.exec(line);
     const session = /^NEXUS_SESSION_DIAGNOSTIC_V1 ([a-z-]+)$/.exec(line);
     const content = contentLicenseDiagnostic(line);
     const transfer = transferDiagnostic(line);
+    const ticket = ticketFailureDiagnostic(line);
     const numeric = /^NEXUS_LIBRARY_DIAGNOSTIC_V1 ([a-z-]+) (\d{1,3}) (\d{1,6})$/.exec(line);
     const legacy = /^Account library unavailable \(([a-z-]+)\); credentials and installed games are unchanged\.$/.exec(line);
     if (credential && credentialStages.has(credential[1])) stage = credential[1];
+    else if (ticket && ['library', 'profile'].includes(this.operation)) { stage = ticket.stage; serviceCode = ticket.serviceCode; }
     else if (transfer && ['streaming', 'download'].includes(this.operation)) { stage = transfer.stage; status = transfer.status; }
     else if (content && ['streaming', 'download', 'license', 'run'].includes(this.operation)) { stage = content.stage; status = content.status; }
     else if (session && ['library', 'profile'].includes(this.operation) && sessionStages.has(session[1])) stage = session[1];
@@ -138,7 +142,7 @@ export class BackendDiagnosticReader {
     else if (/^[^\r\n]{1,200}: error while loading shared libraries: /.test(line)) stage = 'loader-library';
     if (!stage || !stages.has(stage)) return;
     this.emitted++;
-    this.emit({ operation: this.operation, event: 'diagnostic', stage, status, skipped });
+    this.emit({ operation: this.operation, event: 'diagnostic', stage, status, skipped, serviceCode });
   }
 }
 

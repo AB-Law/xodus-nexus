@@ -45,6 +45,7 @@ if (!rustc.startsWith(`rustc ${lock.rust} `)) throw Error(`Use the locked Rust t
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus-cli']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'credential_']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'content_license_']);
+command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'ticket_diagnostic_']);
 command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-service', 'store_']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'msixvc', 'streaming_']);
 // The aggregate HTTP probe mutates the process-wide limiter, so run it alone.

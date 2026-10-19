@@ -8,6 +8,19 @@ import path from 'node:path';
 import os from 'node:os';
 import { backendSourceArchiveArgs } from '../backend-source-archive.mjs';
 
+test('ticket diagnostics preserve requests, signature verification and non-retryable refusals', async () => {
+  const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
+  assert.ok(lock.patches.some(p => p.file === 'xodus-ticket-diagnostics.patch'));
+  const patch = await fs.readFile('assets/xodus-ticket-diagnostics.patch', 'utf8');
+  for (const text of ['NEXUS_TICKET_DIAGNOSTIC_V1', 'ticket-response-signature', 'ticket-response-parse', 'ticket-interaction-required',
+    'ticket_diagnostic_classifies_without_disclosing_error_payloads', 'ticket_fault_classification_and_provider_codes_are_strictly_bounded',
+    'matches!(self, Self::Timeout | Self::Connect | Self::Network)']) assert.ok(patch.includes(text), text);
+  assert.doesNotMatch(patch, /diff --git a\/.*(?:tokens\/|login\.rs|rst\/|streaming\.rs|package_plan\.rs)/);
+  assert.doesNotMatch(patch, /^[+-].*(?:verify_and_decrypt_envelope|scope_policy|hosting_app|\.send\(\)|\.save_|\.remove_)/m);
+  const build = await fs.readFile('scripts/build-backend.mjs', 'utf8');
+  assert.ok(build.includes("'-p', 'xodus', 'ticket_diagnostic_'"));
+});
+
 test('bandwidth limit is pinned, aggregate, live controllable and does not change authentication', async () => {
   const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
   assert.ok(lock.patches.some(p => p.file === 'xodus-download-bandwidth.patch'));

@@ -6,6 +6,25 @@ import { spawn } from 'node:child_process';
 import { BackendDiagnostics, BackendDiagnosticReader, observeBackendChild, setBackendDiagnostics } from './backend-diagnostics.js';
 import { spawnTracked } from './process.js';
 
+it('accepts only a bounded ticket error code for profile/library and never stores fault text or URLs', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-ticket-diagnostic-'));
+  try {
+    const log = new BackendDiagnostics(root);
+    for (const operation of ['library', 'profile', 'login', 'run', 'streaming']) {
+      const reader = new BackendDiagnosticReader(operation, event => log.record(event));
+      const frame = 'NEXUS_TICKET_DIAGNOSTIC_V1 ticket-refused 800488AB';
+      for (const raw of [frame, frame + ' private-secret', frame.replace('800488AB', 'https://private.test/?token=secret'),
+        frame.replace('800488AB', '800488ABC'), frame.replace('800488AB', '800488AZ')]) reader.push(Buffer.from(raw + '\n'));
+    }
+    log.record({ operation: 'library', event: 'diagnostic', stage: 'ticket-refused', serviceCode: 'private-secret' });
+    const { content } = await log.read();
+    const records = content.trim().split('\n').map(line => JSON.parse(line));
+    expect(records.filter(row => row.serviceCode)).toHaveLength(2);
+    expect(records.filter(row => row.serviceCode).map(row => row.operation)).toEqual(['library', 'profile']);
+    expect(content).not.toMatch(/private-secret|private.test|token=secret/);
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
+
 it('records exact transfer causes only for download operations and never signed URLs', () => {
   for (const operation of ['streaming','download']) {
     const events: unknown[] = [];

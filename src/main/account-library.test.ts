@@ -18,7 +18,7 @@ it('maps real failed child processes to safe session guidance and recovers on a 
   const fixture = async (stdout: string, stderr: string, code: number) => fs.writeFile(binary,
     `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(stdout)});process.stderr.write(${JSON.stringify(stderr)});process.exit(${code});\n`, { mode: 0o700 });
   try {
-    for (const [stage, message] of [['session-user-expired', 'Sign in again'], ['ticket-timeout', 'timed out'], ['session-device-refresh-failed', 'could not be renewed']]) {
+    for (const [stage, message] of [['session-user-expired', 'Sign in again'], ['ticket-timeout', 'timed out'], ['session-device-refresh-failed', 'could not be renewed'], ['ticket-response-parse', 'unreadable response'], ['ticket-interaction-required', 'interactive sign-in']]) {
       await fixture('', `private@example.test raw-secret\nNEXUS_SESSION_DIAGNOSTIC_V1 ${stage}\n`, 1);
       const failure = await library.get('all').catch(error => error as Error);
       expect(failure).toBeInstanceOf(Error);
@@ -26,6 +26,8 @@ it('maps real failed child processes to safe session guidance and recovers on a 
       expect((failure as Error).message).not.toMatch(/example\.test|raw-secret/);
     }
     expect(catalog).not.toHaveBeenCalled();
+    await fixture('', 'private-secret\nNEXUS_TICKET_DIAGNOSTIC_V1 ticket-refused 800488AB\n', 1);
+    await expect(library.get('all')).rejects.toThrow('Microsoft refused the stored sign-in (code 0x800488AB)');
     await fixture('NEXUS_SESSION_DIAGNOSTIC_V1 session-user-expired\n', 'untrusted error\n', 1);
     await expect(library.get('all')).rejects.toThrow('licenses could not be loaded');
     await fixture('', 'NEXUS_SESSION_DIAGNOSTIC_V1 ticket-timeout\nNEXUS_SESSION_DIAGNOSTIC_V1 ticket-response-received\nentitlement failure private-secret\n', 1);
