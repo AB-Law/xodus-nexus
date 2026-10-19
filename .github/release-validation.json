@@ -2,6 +2,26 @@
   "schema": 1,
   "approvals": [
     {
+      "kind": "launcher",
+      "runId": "39211145433",
+      "commit": "8e51133d251ee1778faca1cc3f1f387a922d1fbd",
+      "manifestSha256": "6857eedef6c5d207f291861c5be9c4d59b0cdec76d9c1f112eeca9426b827630",
+      "notesSha256": "c621ead98f2cb6351f29543be5a886226d3d4a27cc2c823d149fc4498ec60a12",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit human acceptance of launcher 0.3.7 and backend 0.2.7 notes and stable-promotion request on 2026-10-19. Main CI 39211145433 passed 605 source tests, 30 runtime-tool checks and 29 CI-tool checks. Exact AppImage and candidate identity passed SHA-256/SHA-512 verification; 123 packaged output, recipe and patch files match the tested source. The unchanged CI AppImage passed an isolated demo startup and exited normally with the Electron sandbox enabled. A separately authorized isolated Balatro run used this exact launcher, exact backend 0.2.7 CI candidate and unchanged released runtime gf291f544, with authorized Xbox cloud synchronization. The human confirmed gameplay and normal quit. Service readiness, expected runtime DLL loads, game and launcher exit 0, no remaining prefix processes, unchanged candidate/component hashes and six protected original inputs were verified. The backend diagnostic log recorded the expected component versions and successful process result. No new cloud-roundtrip, online-match or reporter-specific library recovery claim. Promote these original candidate bytes without rebuilding or activating production components."
+    },
+    {
+      "kind": "backend",
+      "runId": "39211145359",
+      "commit": "8e51133d251ee1778faca1cc3f1f387a922d1fbd",
+      "manifestSha256": "5fa077f4a9f47f443a8642a7826b936269dc207632ca446cb0e9a670b5d92025",
+      "notesSha256": "52c096e7d3186bb4200d67b348900c9ed7c513dc54a99cbefee08c44f6cbf263",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit human approval of backend 0.2.7 notes and stable promotion on 2026-10-19. Main CI 39211145359 passed 38 CLI, 8 credential, 14 Store, 1 resume and 6 package-metadata tests. Exact binary and corresponding-source archives passed candidate identity and SHA-256/SHA-512 verification. All 20 locked patches and recipe tools match main; packaged crates and Cargo inputs match the locally tested locked tree, and all 35472 checksum-listed files across 685 vendored dependencies were verified. CLI capabilities, preserved linux-run-v18 contract and headless dependencies passed account-free checks. A separately authorized isolated Balatro/cloud run used these exact CI backend binaries with the exact launcher 0.3.7 candidate and unchanged released runtime gf291f544. The human confirmed gameplay and normal quit; service readiness, correct backend selection, game and launcher exit 0, no remaining prefix processes, unchanged binary/runtime hashes and six protected originals were verified. The original issue138 cause and affected users' recovery remain unconfirmed. No new cloud-roundtrip or multiplayer-match claim. Publish this exact candidate without rebuilding or changing production settings."
+    },
+    {
       "kind": "backend",
       "runId": "39155504527",
       "commit": "b608ef710f39c54896676d40ee491a11ecd86c71",
