@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { spawnTracked } from './process.js';
+import { backendDiagnostic } from './backend-diagnostics.js';
 import type { AccountLibraryPage, CatalogProduct } from '../shared/types.js';
 
 interface Entitlement {
@@ -13,23 +14,39 @@ const id = (value: unknown): value is string => typeof value === 'string' && /^[
 const plans = new Set(['CFQ7TTC0KGQ8', 'CFQ7TTC0KHS0', 'CFQ7TTC0P85B', 'CFQ7TTC0K5DJ', 'CFQ7TTC0K6L8', 'CFQ7TTC10QFD']);
 const TTL = 5 * 60_000;
 
-export function parseEntitlements(output: string, account: string, market: string, now = Date.now()): { checkedAt: string; entries: Map<string, Entitlement> } {
+export function parseEntitlements(output: string, account: string, market: string, now = Date.now()): { checkedAt: string; entries: Map<string, Entitlement>; skipped: number } {
   if (output.length > 8_000_000) throw Error('Account library response is too large.');
   const line = output.split('\n').reverse().find(line => line.trimStart().startsWith('{'));
   const result = JSON.parse(line ?? '');
-  if (result.schema !== 1 || result.account !== account || result.market !== market
+  if (!result || result.schema !== 1 || result.account !== account || result.market !== market
     || typeof result.checkedAt !== 'string' || !Array.isArray(result.entitlements) || result.entitlements.length > 10_000) throw Error('Invalid account library response.');
   const age = now - Date.parse(result.checkedAt);
   if (!Number.isFinite(age) || age < -60_000 || age >= TTL) throw Error('Stale account library response.');
   const entries = new Map<string, Entitlement>();
+  const seen = new Set<string>(), blocked = new Set<string>();
+  if (result.skippedEntitlements !== undefined && (!Number.isInteger(result.skippedEntitlements) || result.skippedEntitlements < 0 || result.skippedEntitlements > 200_000)) throw Error('Invalid skipped entitlement count.');
   for (const row of result.entitlements) {
-    if (!row || !id(row.productId) || entries.has(row.productId) || typeof row.status !== 'string'
+    if (!row || !id(row.productId)) continue;
+    const duplicate = seen.has(row.productId); seen.add(row.productId);
+    if (duplicate || typeof row.status !== 'string' || row.status.length >= 40
       || typeof row.isTrial !== 'boolean' || typeof row.special !== 'boolean' || typeof row.sharingSource !== 'string'
-      || typeof row.endDate !== 'string' || !Number.isFinite(Date.parse(row.endDate))
-      || (row.satisfiedByProductId != null && !id(row.satisfiedByProductId))) throw Error('Invalid account entitlement.');
+      || row.sharingSource.length >= 40 || typeof row.endDate !== 'string' || row.endDate.length >= 50 || !Number.isFinite(Date.parse(row.endDate))
+      || (row.satisfiedByProductId != null && !id(row.satisfiedByProductId))) { blocked.add(row.productId); entries.delete(row.productId); continue; }
     entries.set(row.productId, row);
   }
-  return { checkedAt: result.checkedAt, entries };
+  // Quarantine descendants as well, including known subscription IDs. An invalid
+  // parent must never turn its child's bundle/subscription reference into access.
+  const children = new Map<string, string[]>();
+  for (const [product, row] of entries) if (row.satisfiedByProductId) {
+    const list = children.get(row.satisfiedByProductId) ?? []; list.push(product); children.set(row.satisfiedByProductId, list);
+  }
+  const queue = [...blocked];
+  for (let i = 0; i < queue.length; i++) for (const child of children.get(queue[i]) ?? []) {
+    if (!blocked.has(child)) { blocked.add(child); queue.push(child); entries.delete(child); }
+  }
+  const skipped = Math.min(200_000, (result.skippedEntitlements ?? 0) + result.entitlements.length - entries.size);
+  if (skipped) backendDiagnostic({ operation: 'library', event: 'validation', stage: 'partial', skipped });
+  return { checkedAt: result.checkedAt, entries, skipped };
 }
 
 /** Parent chains must themselves be licensed; unknown/trial/shared access is not ownership. */
@@ -63,7 +80,7 @@ export class AccountLibrary {
   private identity?: { account: string; binary: string; market: string };
   private generation = 0;
   private controller?: AbortController;
-  private cached?: { checkedAt: string; entries: Map<string, Entitlement>; until: number; key: string };
+  private cached?: { checkedAt: string; entries: Map<string, Entitlement>; skipped: number; until: number; key: string };
   private job?: Promise<void>;
   private pages = new Map<string, AccountLibraryPage>();
   constructor(private catalog: Catalog, private reader: Reader = read) {}
@@ -87,7 +104,13 @@ export class AccountLibrary {
       if (!this.job) {
         const controller = new AbortController(); this.controller = controller;
         this.job = (async () => {
-          const data = parseEntitlements(await this.reader(identity.binary, identity.market, controller.signal), identity.account, identity.market);
+          const output = await this.reader(identity.binary, identity.market, controller.signal);
+          let data: ReturnType<typeof parseEntitlements>;
+          try { data = parseEntitlements(output, identity.account, identity.market); }
+          catch (error) {
+            backendDiagnostic({ operation: 'library', event: 'validation', stage: 'invalid-response' });
+            throw error;
+          }
           current();
           this.cached = { ...data, until: Date.parse(data.checkedAt) + TTL, key: randomUUID() };
           this.pages.clear();
@@ -142,7 +165,7 @@ export class AccountLibrary {
     current();
     if (this.cached !== cached) throw Error('Library results changed. Refresh this page.');
     const allowed = new Set(ids.slice(offset, offset + 60));
-    const page: AccountLibraryPage = { kind, checkedAt: cached.checkedAt, accessByProductId,
+    const page: AccountLibraryPage = { kind, checkedAt: cached.checkedAt, accessByProductId, skippedEntitlements: cached.skipped,
       products: products.filter(product => allowed.has(product.productId) && accessByProductId[product.productId])
         .map(product => ({ ...product, access: accessByProductId[product.productId] }))
         .sort((a, b) => a.title.localeCompare(b.title)),

@@ -18,6 +18,23 @@ stderr. Codes are `keyring-unavailable`, `keyring-invalid-data`,
 `credential-io`. The launcher maps only these fixed codes to sign-in messages;
 arbitrary stderr and stored credential values are not exposed in the UI.
 
+## Account library and diagnostics
+
+`library --json --market US` returns schema 1 with the account, market, check
+time and verified entitlement records. The optional `skippedEntitlements`
+count marks a partial result. Invalid rows, conflicting records and their
+dependent licenses are omitted without granting access. Invalid envelopes,
+authentication, pagination and transport errors still fail the whole request.
+
+Library stderr may emit `NEXUS_LIBRARY_DIAGNOSTIC_V1 STAGE HTTP_STATUS COUNT`.
+Stages are fixed codes; zero means no HTTP status is available. No response
+bodies, account identifiers or credentials are included. The launcher records
+allowlisted backend stages and process results in its private profile under
+`backend-diagnostics/backend.log` (one rotated backup, 256 KiB each). Settings
+offers an in-app viewer and Copy log. Arbitrary stdout, stderr, command
+arguments and sign-in protocol messages are not saved. Logs remain local and
+are never uploaded automatically.
+
 ## Package selection
 
 `resolve-package PRODUCT --json --market US` reads public Store metadata without

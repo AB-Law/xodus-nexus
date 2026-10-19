@@ -32,6 +32,8 @@ describe('Settings diagnostics', () => {
     expect(main).not.toContain('Rebuild backend');
     expect(main).not.toContain('Install / update backend');
     expect(main).toContain('Nexus runtime');
+    expect(main).toContain('Open backend diagnostic log');
+    expect(main).toContain('No passwords, tokens or account contents');
     expect(main).not.toContain('Install Nexus runtime');
     expect(html).not.toContain('Advertised commands');
   });

@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { startAuthTransport, type AuthViewFactory } from './auth-transport.js';
+import { BackendDiagnostics, setBackendDiagnostics } from './backend-diagnostics.js';
 const fixture = String.raw`#!/usr/bin/env node
 const readline=require('node:readline');
 const out=value=>process.stdout.write('NEXUS_AUTH_V1 '+JSON.stringify(value)+'\n');
@@ -32,6 +33,7 @@ describe('private auth transport', () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-auth-fixture-'));
     let disposed = false, opens = 0, closes = 0;
     try {
+      const diagnostics = new BackendDiagnostics(root); setBackendDiagnostics(diagnostics);
       const binary = path.join(root, 'cli'); await fs.writeFile(binary, fixture, { mode: 0o755 });
       const factory: AuthViewFactory = (send, cancel) => ({
         async open(frame) { opens++; if (mode === 'cancel') cancel(frame.session); else if (mode === 'load-failure') throw Error('synthetic-secret'); else send(frame.session, '{"synthetic":"not-a-real-token"}'); },
@@ -42,7 +44,10 @@ describe('private auth transport', () => {
       else if (mode === 'invalid' || mode === 'no-handshake' || mode === 'load-failure' || mode === 'unknown-credential') await expect(tracked.result).rejects.toThrow(/sign-in/i);
       else { const result = await tracked.result; expect(result.code).toBe(mode === 'cancel' ? 1 : 0); expect(result.output).toBe(''); }
       expect(disposed).toBe(true);
+      const logged = (await diagnostics.read()).content;
+      expect(logged).toContain('"operation":"login"');
+      expect(logged).not.toMatch(/synthetic-secret|login.live.com|CloudExperienceHost|not-a-real-token/);
       if (mode === 'success') { expect(opens).toBe(1); expect(closes).toBe(1); }
-    } finally { await fs.rm(root, { recursive: true, force: true }); }
+    } finally { setBackendDiagnostics(undefined); await fs.rm(root, { recursive: true, force: true }); }
   });
 });
