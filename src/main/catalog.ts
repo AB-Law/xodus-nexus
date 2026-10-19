@@ -1,4 +1,4 @@
-import type { CatalogProduct, CatalogSearchResult } from '../shared/types.js';
+import type { CatalogProduct, CatalogSearchResult, GameStoreDetails } from '../shared/types.js';
 
 type Fetcher = typeof fetch;
 
@@ -82,10 +82,10 @@ function string(value: unknown): string | undefined {
 
 function safeUrl(value: unknown, hosts: Set<string>): string | undefined {
   const raw = string(value);
-  if (!raw) return undefined;
+  if (!raw || raw.length > 8192) return undefined;
   try {
     const parsed = new URL(raw);
-    return parsed.protocol === 'https:' && hosts.has(parsed.hostname.toLowerCase()) ? parsed.toString() : undefined;
+    return parsed.protocol === 'https:' && !parsed.username && !parsed.password && !parsed.port && hosts.has(parsed.hostname.toLowerCase()) ? parsed.toString() : undefined;
   } catch {
     return undefined;
   }
@@ -271,9 +271,36 @@ export function parseCatalogProducts(search: StoreSearchResponse, catalog: Displ
 }
 
 export class CatalogService {
+  private readonly gameCache = new Map<string, { until: number; value: GameStoreDetails }>();
   private readonly cache = new Map<string, { expires: number; value: CatalogSearchResult }>();
 
   constructor(private readonly fetcher: Fetcher = fetch) {}
+
+  /** Read descriptive data for an installed game, independently of package support. */
+  async gameDetails(productId: string, rawMarket: string): Promise<GameStoreDetails | undefined> {
+    if (!/^[A-Z0-9]{12}$/.test(productId)) throw Error('Invalid Store product ID.');
+    const market = normalizeMarket(rawMarket), key = `${market}:${productId}`;
+    const cached = this.gameCache.get(key);
+    if (cached && cached.until > Date.now()) return structuredClone(cached.value);
+    const catalog = await this.details([productId], market);
+    const product = (Array.isArray(catalog.Products) ? catalog.Products : []).map(object).find(p => p?.ProductId === productId);
+    if (!product || product.ProductType !== 'Game') return;
+    const localized = Array.isArray(product.LocalizedProperties) ? object(product.LocalizedProperties[0]) : undefined;
+    const title = string(localized?.ProductTitle)?.slice(0, 512);
+    if (!title) return;
+    const images = Array.isArray(localized?.Images) ? localized.Images.slice(0, 200) as DisplayCatalogImage[] : [];
+    const screenshots = [...new Set(images.filter(image => object(image)?.ImagePurpose === 'Screenshot')
+      .flatMap(image => displayImage([image], ['Screenshot']) ?? []))].slice(0, 24);
+    const properties = object(product.Properties);
+    const categories = (Array.isArray(properties?.Categories) ? properties.Categories : []).flatMap(value => string(value)?.slice(0, 80) ?? []).slice(0, 12);
+    const marketProperties = Array.isArray(product.MarketProperties) ? object(product.MarketProperties[0]) : undefined;
+    const value: GameStoreDetails = { productId, title, description: (string(localized?.ProductDescription) ?? '').slice(0, 64_000),
+      publisher: string(localized?.PublisherName)?.slice(0, 512), heroUrl: displayImage(images.filter(image => object(image)), HERO_PURPOSES), categories, screenshots,
+      releaseDate: string(marketProperties?.OriginalReleaseDate) };
+    if (this.gameCache.size >= 100) this.gameCache.delete(this.gameCache.keys().next().value!);
+    this.gameCache.set(key, { until: Date.now() + CACHE_TTL_MS, value });
+    return structuredClone(value);
+  }
 
   /** Resolve licensed IDs, never search results or an install-history guess. */
   async licensedProducts(ids: string[], rawMarket: string): Promise<CatalogProduct[]> {
