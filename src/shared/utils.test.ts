@@ -62,6 +62,12 @@ describe('estimated time remaining', () => {
 });
 
 describe('download failure summary', () => {
+  it('prefers safe license guidance and does not mislabel later extraction failures', () => {
+    const marker = 'NEXUS_CONTENT_LICENSE_DIAGNOSTIC_V1 content-http 403';
+    expect(downloadFailure([marker, 'untrusted-provider-message'], 1)).toContain('purchased edition');
+    expect(downloadFailure([marker, 'untrusted-provider-message'], 1)).not.toContain('untrusted-provider-message');
+    expect(downloadFailure([marker, 'NEXUS_CONTENT_LICENSE_DIAGNOSTIC_V1 content-parsed 200', 'extraction failed'], 1)).toContain('extraction failed');
+  });
   it('shows panic cause instead of Rust backtrace hint', () => {
     const log = [
       '0% · Initializing 0 B/9.13 GiB',

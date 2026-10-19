@@ -43,6 +43,27 @@ test('backend build runs account-free credential persistence regressions', async
   assert.ok(lock.patches.some(patch => patch.file === 'xodus-keyring-credentials.patch'));
 });
 
+test('session recovery is pinned and does not replace interactive login or raw token reads', async () => {
+  const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
+  assert.ok(lock.patches.some(patch => patch.file === 'xodus-session-recovery.patch'));
+  const patch = await fs.readFile('assets/xodus-session-recovery.patch', 'utf8');
+  for (const expected of ['session-user-expired', 'ticket-timeout', 'refresh_existing_device_credentials', 'try_lock_exclusive',
+    'credential_session_valid_signin_has_no_renewal', 'ticket_real_transport_timeout_and_http_refusal_classification']) assert.ok(patch.includes(expected));
+  assert.doesNotMatch(patch, /diff --git a\/.*(?:login\.rs|tokens\/manager\.rs|webview_stdio\.rs)/);
+});
+
+test('content-license parsing is pinned, regression-tested and does not change authentication or streaming', async () => {
+  const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
+  assert.ok(lock.patches.some(patch => patch.file === 'xodus-content-response.patch'));
+  const patch = await fs.readFile('assets/xodus-content-response.patch', 'utf8');
+  for (const expected of ['content-license request', 'content_license_request_contract_is_unchanged',
+    'content_license_success_preserves_existing_first_key', 'content_license_status_precedes_body',
+    'content_license_malformed_keys_are_errors_not_panics', 'NEXUS_CONTENT_LICENSE_DIAGNOSTIC_V1']) assert.ok(patch.includes(expected), expected);
+  assert.doesNotMatch(patch, /diff --git a\/.*(?:tokens\/|login\.rs|streaming\.rs|package_plan\.rs)/);
+  const build = await fs.readFile('scripts/build-backend.mjs', 'utf8');
+  assert.match(build, /command\('cargo', \['test', '--locked', \.\.\.offline, \.\.\.features, '-p', 'xodus', 'content_license_'\]\)/);
+});
+
 test('corresponding-source archive preserves nested target source directories', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'backend-source-archive-'));
   try {

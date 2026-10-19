@@ -3,6 +3,13 @@ import { spawnTracked } from './process.js';
 import { DownloadProgress, PROGRESS_PREFIX } from './download-progress.js';
 
 describe('tracked terminal output', () => {
+  it('keeps interleaved diagnostics out of structured stdout without losing line observations', async () => {
+    const lines: string[] = [];
+    const script = "process.stdout.write('{\\\"value\\\":\\\"');setTimeout(()=>{process.stderr.write('diagnostic\\n'+'x'.repeat(5000)+'\\n');setTimeout(()=>process.stdout.write('ok\\\"}\\n'),20)},20)";
+    const result = await spawnTracked(process.execPath, ['-e', script], { stdoutOnly: true, maxOutput: 100, onLine: line => lines.push(line) }).result;
+    expect(result.code).toBe(0); expect(JSON.parse(result.output)).toEqual({ value: 'ok' });
+    expect(lines).toContain('diagnostic'); expect(lines).toContain('{"value":"ok"}');
+  });
   it('assembles split UTF-8 and ANSI independently on stdout and stderr', async () => {
     const lines: string[] = [];
     const script = "process.stdout.write(Buffer.from([0xe2])); process.stderr.write('stderr\\n');setTimeout(()=>process.stdout.write(Buffer.from([0x82,0xac,27,91])),10);setTimeout(()=>process.stdout.write('32m Downloading 1 MiB/2 MiB 50%\\r'),20)";

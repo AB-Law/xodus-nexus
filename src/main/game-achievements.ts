@@ -38,7 +38,7 @@ export function parseGameAchievements(raw: string, account: string, titleId: str
 type Reader = (binary: string, titleId: string, signal: AbortSignal) => Promise<string>;
 async function read(binary: string, titleId: string, signal: AbortSignal): Promise<string> {
   signal.throwIfAborted();
-  const tracked = spawnTracked(binary, ['achievements', titleId, '--json'], { maxOutput: MAX_BYTES });
+  const tracked = spawnTracked(binary, ['achievements', titleId, '--json'], { maxOutput: MAX_BYTES, stdoutOnly: true });
   tracked.child.stdin.end();
   const stop = () => { tracked.child.kill('SIGKILL'); };
   signal.addEventListener('abort', stop, { once: true });

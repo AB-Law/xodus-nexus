@@ -23,7 +23,7 @@ export async function installedTitleId(directory: string): Promise<string | unde
 type Reader = (binary: string, titleId: string, signal: AbortSignal) => Promise<string>;
 async function read(binary: string, titleId: string, signal: AbortSignal): Promise<string> {
   signal.throwIfAborted();
-  const tracked = spawnTracked(binary, ['game-activity', titleId, '--json'], { maxOutput: 64_000 });
+  const tracked = spawnTracked(binary, ['game-activity', titleId, '--json'], { maxOutput: 64_000, stdoutOnly: true });
   tracked.child.stdin.end();
   const stop = () => { tracked.child.kill('SIGKILL'); };
   signal.addEventListener('abort', stop, { once: true });

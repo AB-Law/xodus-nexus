@@ -50,9 +50,11 @@ Flatpak version available through Discover. Other browsers are not supported.
 ## Use
 
 - **My Library** combines owned, Game Pass and installed games, with Access, Play state and title filters.
+- Open a game for its description, categories, screenshot gallery and available Xbox achievements, time played and last activity. Xbox data depends on the account and game.
 - **Store** lets you browse and install supported PC games.
 - **Manage content** installs licensed add-ons and campaign packages.
 - **Install Queue** downloads games one at a time and lets you add more while downloading or playing another game. Pause and resume are supported, including manual resume after restarting the launcher.
+- Cancelling a new installation can keep or delete its partial files. Existing games, updates and DLC keep their files.
 - Right-click an installed game for settings, VC++ prerequisites, shortcuts or removal.
 - Removing a game can keep its files or permanently delete its installation folder without using Trash. Saves inside that folder are deleted too; saves elsewhere are not affected.
 - Game settings offer an optional **DualSense compatibility mode** if a standard DualSense is not detected. It applies only to that game and may disable advanced haptics and adaptive triggers.
@@ -63,8 +65,9 @@ Flatpak version available through Discover. Other browsers are not supported.
 Experimental gamepad navigation supports standard-mapped controllers: D-pad or
 left stick to move, A to select, B to go back, X for a game's menu, LB/RB to
 switch pages and the right stick to scroll. Mouse, touch and keyboard controls
-remain available. Moving through installed library games selects them and updates
-the detail; A focuses Play and B returns to the card. Home, My Library and Store
+remain available. Moving through library games selects them; A opens a game page
+and B returns to its card. B closes an open menu or screenshot gallery first;
+LB/RB changes screenshots inside the gallery. Home, My Library and Store
 switch on controller focus. Recent games, Settings, Install Queue and action
 buttons still require A. Up from the first library row reaches filters and search;
 Down returns to the games. Directional navigation scrolls the selected card into view.
