@@ -9,7 +9,8 @@ const plan: GameContentPlan = { gameId: 'sample', checkedAt: '', items: [
   { productId: 'PAID', title: 'Unlicensed expansion', status: 'unlicensed', note: 'No active license.' },
 ] };
 it('offers generic content management on installed game details', () => {
-  expect(renderToStaticMarkup(<LibraryPage data={demoSnapshot()} toast={() => {}} />)).toContain('Manage content');
+  const data = demoSnapshot();
+  expect(renderToStaticMarkup(<LibraryPage data={data} selection={{ id: data.games[0].id }} toast={() => {}} />)).toContain('Manage content');
 });
 it('distinguishes subscription, ownership, installation and missing licenses without hiding full titles', () => {
   const html = renderToStaticMarkup(<ContentList plan={plan} disabled={false} install={() => {}} />);

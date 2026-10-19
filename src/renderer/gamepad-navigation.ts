@@ -126,7 +126,8 @@ export function installGamepadNavigation(win: Window, options: Options): () => v
     reveal(element);
     // Only explicitly reviewed, selection-only controls may act on focus.
     // Action buttons, recents, settings and downloads always require A.
-    if (select && active && scope === doc && element.hasAttribute('data-gamepad-auto-select') && currentScope() === doc) element.click();
+    // Library cards select on focus; opening their game page requires A.
+    if (select && active && scope === doc && element.hasAttribute('data-gamepad-auto-select') && element.getAttribute('data-gamepad-auto-select') !== 'focus' && currentScope() === doc) element.click();
     win.requestAnimationFrame(() => { if (!stopped && active && focused() === element && enabled(element)) reveal(element); });
     mark();
   };
@@ -138,6 +139,9 @@ export function installGamepadNavigation(win: Window, options: Options): () => v
     if (next !== scope) {
       const previous = scope;
       scope = next;
+      // A detail drawer is its own modal scope, so no inline-detail focus
+      // request may survive it and swallow a quick reopen after B.
+      if (pendingDetail && next instanceof HTMLElement && next.getAttribute('data-gamepad-detail') === pendingDetail.id) pendingDetail = undefined;
       const target = previous instanceof HTMLElement ? returns.get(previous) : undefined;
       const origin = focused();
       if (next instanceof HTMLElement && !returns.has(next)) {
@@ -251,6 +255,8 @@ export function installGamepadNavigation(win: Window, options: Options): () => v
       }
       return; // Never act behind a modal or confirm a destructive action.
     }
+    const detailBack = [...doc.querySelectorAll<HTMLElement>('[data-gamepad-detail-back]')].find(enabled);
+    if (detailBack) { pendingDetail = undefined; detailReturn = undefined; detailBack.click(); return; }
     if (detailReturn && focused()?.closest('[data-gamepad-detail]')?.getAttribute('data-gamepad-detail') === detailReturn.id && enabled(detailReturn.origin)) {
       focus(detailReturn.origin); detailReturn = undefined; return;
     }
@@ -290,6 +296,10 @@ export function installGamepadNavigation(win: Window, options: Options): () => v
       const origin = detailReturn && focused()?.closest('[data-gamepad-detail]')?.getAttribute('data-gamepad-detail') === detailReturn.id ? detailReturn.origin : focused();
       const trigger = origin?.closest('.library-card-wrap')?.querySelector<HTMLElement>('[data-game-menu-trigger]');
       if (trigger && enabled(trigger)) trigger.click();
+    } else if (scope instanceof HTMLElement && scope.hasAttribute('data-gamepad-gallery')) {
+      // Shoulder buttons change only the active gallery, never the page behind it.
+      const target = scope.querySelector<HTMLElement>(value === 'previous-page' ? '[data-gamepad-gallery-previous]' : '[data-gamepad-gallery-next]');
+      if (target && enabled(target)) target.click();
     } else if (scope === doc) {
       options.page(value === 'previous-page' ? -1 : 1);
       pageFocus();
