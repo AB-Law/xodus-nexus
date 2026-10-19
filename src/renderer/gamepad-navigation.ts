@@ -230,6 +230,12 @@ export function installGamepadNavigation(win: Window, options: Options): () => v
     const element = focused();
     if (!element || !scope.contains(element) || !enabled(element) || pendingDetail) return;
     if (element instanceof HTMLSelectElement) selectPicker(element);
+    else if (element.hasAttribute('data-gamepad-card-activate')) {
+      // A on a Store card delegates only to its real, enabled action. Selection
+      // on focus and ordinary pointer/keyboard clicks never start an install.
+      const target = element.closest('[data-gamepad-card]')?.querySelector<HTMLElement>('[data-gamepad-card-action]');
+      if (target && scope.contains(target) && enabled(target)) target.click();
+    }
     else {
       const id = element.getAttribute('data-gamepad-detail-target');
       if (id) pendingDetail = { id, origin: element, deadline: Date.now() + 1500 };
