@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import type { InstallPlan } from '../shared/types.js';
 import { externalLauncherEnvironment } from './launcher-environment.js';
+import { observeBackendChild } from './backend-diagnostics.js';
 
 const id = (value: unknown): value is string => typeof value === 'string' && /^[A-Z0-9]{12}$/.test(value);
 const cid = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(value);
@@ -31,6 +32,7 @@ export async function readInstallPlan(binary: string, productId: string, market:
   if (!id(productId) || !/^[A-Z]{2}$/.test(market)) throw Error('Enter a valid 12-character Store Product ID.');
   const output = await new Promise<string>((resolve, reject) => {
     const child = spawn(binary, ['resolve-package', productId, '--json', '--market', market], { env: externalLauncherEnvironment(), shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
+    observeBackendChild(child, 'resolve-package');
     let stderr = '', bytes = 0, failure: Error | undefined;
     const timer = setTimeout(() => { failure = Error('Store package lookup timed out. Try again later.'); child.kill('SIGKILL'); }, 40_000);
     timer.unref();

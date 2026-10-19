@@ -34,11 +34,36 @@ it('never labels expired, trial, special, revoked or shared entitlements as owne
   expect(entitlementKind('CFQ7TTC0KGQ8',new Map([['CFQ7TTC0KGQ8',row('CFQ7TTC0KGQ8')]]))).toBeUndefined();
 });
 
-it('rejects foreign identities/market, malformed rows, duplicates and stale protocol data',()=>{
-  for(const text of [output([row()],'other'),output([row()],'one@example.test','CZ'),output([row(),row()]),output([row('invalid')]),
-    output([row(A,{isTrial:undefined})]),JSON.stringify({...JSON.parse(output()),checkedAt:'2000-01-01T00:00:00Z'})]) {
+it('rejects foreign identities/market and stale or malformed protocol envelopes',()=>{
+  for(const text of [output([row()],'other'),output([row()],'one@example.test','CZ'), 'null',
+    JSON.stringify({...JSON.parse(output()),entitlements:{}}), JSON.stringify({...JSON.parse(output()),checkedAt:'2000-01-01T00:00:00Z'})]) {
     expect(()=>parseEntitlements(text,'one@example.test','US')).toThrow();
   }
+});
+
+it('omits malformed and duplicate rows plus their dependent children without hiding independent games',()=>{
+  const result = parseEntitlements(output([row(),row(B,{isTrial:undefined}),row(C,{satisfiedByProductId:B}),row('invalid')]),'one@example.test','US');
+  expect([...result.entries.keys()]).toEqual([A]); expect(result.skipped).toBe(3);
+  for (const rows of [[row(A), row(A)], [row(A), row(A,{isTrial:true})], [row(A),row(A,{status:undefined})]]) {
+    const parsed = parseEntitlements(output([...rows,row(B,{satisfiedByProductId:A}),row(C)]),'one@example.test','US');
+    expect([...parsed.entries.keys()]).toEqual([C]); expect(parsed.skipped).toBe(3);
+  }
+});
+
+it('never defaults missing policy fields into ownership or trusts an invalid subscription parent',()=>{
+  for (const extra of [{isTrial:undefined}, {special:undefined}, {sharingSource:undefined}, {endDate:undefined}, {endDate:'invalid'}, {satisfiedByProductId:'bad'}]) {
+    const parsed = parseEntitlements(output([row(A,extra),row(B)]),'one@example.test','US');
+    expect([...parsed.entries.keys()]).toEqual([B]); expect(parsed.skipped).toBe(1);
+  }
+  const parsed = parseEntitlements(output([row('CFQ7TTC0KGQ8',{endDate:undefined}),row(A,{satisfiedByProductId:'CFQ7TTC0KGQ8'}),row(B)]),'one@example.test','US');
+  expect([...parsed.entries.keys()]).toEqual([B]);
+});
+
+it('exposes a partial-result count on all filters and content access remains limited to valid records',async()=>{
+  const text=JSON.stringify({...JSON.parse(output([row(),row(B,{endDate:undefined})])),skippedEntitlements:2});
+  const library=new AccountLibrary(async ids=>ids.map(product),async()=>text); library.select('one@example.test','/backend','US');
+  for(const kind of ['all','owned','gamepass'] as const) expect((await library.get(kind)).skippedEntitlements).toBe(3);
+  expect((await library.access()).accessByProductId).toEqual({[A]:'owned'});
 });
 
 it('loads all/owned/Game Pass using one account read and caches only bound pages in memory',async()=>{

@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { stripAnsi } from '../shared/utils.js';
 import { externalLauncherEnvironment } from './launcher-environment.js';
+import { observeBackendCommand } from './backend-diagnostics.js';
 
 export interface RunOptions {
   cwd?: string;
@@ -30,6 +31,7 @@ export function spawnTracked(command: string, args: string[], options: RunOption
     detached: options.detached ?? false,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
+  observeBackendCommand(child, command, args);
   const chunks: string[] = [];
   const max = options.maxOutput ?? 2_000_000;
   let chunksLength = 0;

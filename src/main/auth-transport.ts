@@ -3,6 +3,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { AUTH_FRAME_LIMIT, authFrame, type AuthFrame } from './auth-protocol.js';
 import { externalLauncherEnvironment } from './launcher-environment.js';
 import { CredentialErrorReader } from './credential-errors.js';
+import { backendDiagnostic, observeBackendChild } from './backend-diagnostics.js';
 export interface AuthView {
   open(frame: Extract<AuthFrame, { type: 'open' }>): Promise<void>;
   close(session: number): void;
@@ -19,6 +20,7 @@ export function startAuthTransport(binary: string, createView: AuthViewFactory, 
   const child = spawn(binary, ['--external-webview-stdio', 'login'], {
     env: { ...externalLauncherEnvironment(environment), XODUS_LOG: 'off', RUST_LOG: 'off' }, stdio: ['pipe', 'pipe', 'pipe'], shell: false,
   });
+  observeBackendChild(child, 'login');
   let ready = false, active: number | undefined, latest = 0, stopped = false, cancelled = false;
   let failure: Error | undefined, line = '', total = 0, queue = Promise.resolve();
   let abortTimer: ReturnType<typeof setTimeout> | undefined;
@@ -67,9 +69,12 @@ export function startAuthTransport(binary: string, createView: AuthViewFactory, 
     child.once('close', async code => {
       stopped = true; clearTimeout(timer); clearTimeout(force); clearTimeout(abortTimer);
       await view.dispose().catch(() => {}); await queue;
-      if (failure) reject(failure);
+      if (failure) { backendDiagnostic({ operation: 'login', event: 'validation', stage: 'protocol-error' }); reject(failure); }
       else if (code !== 0 && credentialError.message) reject(Error(credentialError.message));
-      else if (!ready || line.length || (code === 0 && (active !== undefined || latest === 0))) reject(Error('The sign-in backend did not complete its protocol.'));
+      else if (!ready || line.length || (code === 0 && (active !== undefined || latest === 0))) {
+        backendDiagnostic({ operation: 'login', event: 'validation', stage: 'protocol-error' });
+        reject(Error('The sign-in backend did not complete its protocol.'));
+      }
       else resolve({ code: cancelled ? 1 : (code ?? 1), output: '' });
     });
   });
