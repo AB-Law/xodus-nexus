@@ -7,6 +7,8 @@ import { randomUUID } from 'node:crypto';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { AppSnapshot, AuthStatus, DownloadTask, Game, GameLaunchOptions, GameOperation, GameUpdate, InstallRequest, Settings } from '../shared/types.js';
 import { downloadFailure, safeProductId } from '../shared/utils.js';
+import { downloadLimitArgs, downloadLimitKiB } from '../shared/download-bandwidth.js';
+import { DownloadBandwidthControls, isBandwidthOnlyPatch } from './download-bandwidth.js';
 import { demoAccountLibrary, demoAccountProducts, demoDownloads, demoGames, demoLaunchOptions, demoLocales, demoSnapshot, type DemoArtwork } from '../shared/demo-data.js';
 import { backendLock } from './backend-package.js';
 import { BackendManager } from './backend.js';
@@ -76,6 +78,7 @@ const cancelledDownloads = new Set<string>();
 const downloadCancellations = new Map<string, Promise<void>>();
 let downloadCleanup: DownloadCleanup;
 const downloadControls = new Map<string, (paused: boolean) => Promise<void>>();
+const downloadLimitControls = new DownloadBandwidthControls();
 const installQueue = new InstallQueue(() => finishShortcutSession());
 const gameDisplay = new GameDisplayBlocker(powerSaveBlocker);
 const serviceSessions = new Map<string, XodusServiceSession>();
@@ -489,6 +492,7 @@ async function runDownload(task: DownloadTask, binary: string, market: string, u
   if (selectedContentId) args.push('--selected-content-id', selectedContentId);
   if (structured) args.push('--progress-json');
   if (controllable) args.push('--control-stdin');
+  args.push(...downloadLimitArgs(store.settings.downloadLimitMiB, backend.current.capabilities));
   const progressTracker = new DownloadProgress();
   let lastLoggedPercent = -1;
   let pending: { paused: boolean; resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> } | undefined;
@@ -527,6 +531,7 @@ async function runDownload(task: DownloadTask, binary: string, market: string, u
     task.controlPending = false; scheduleSnapshot();
   });
   operations.set(id, tracked.child);
+  if (backend.current.capabilities.streamingBandwidthLimit) downloadLimitControls.attach(id, tracked.child.stdin);
   if (controllable) downloadControls.set(id, paused => new Promise<void>((resolve, reject) => {
     if (pending || !task.canPause || !['running', 'paused'].includes(task.status)) { reject(new Error('This download cannot be paused or resumed right now.')); return; }
     if ((task.status === 'paused') === paused) { resolve(); return; }
@@ -539,6 +544,7 @@ async function runDownload(task: DownloadTask, binary: string, market: string, u
     tracked.child.stdin.write(JSON.stringify({ schema: 1, command: paused ? 'pause' : 'resume' }) + '\n');
   }));
   const finishControls = () => {
+    downloadLimitControls.detach(id);
     downloadControls.delete(id);
     if (pending) { clearTimeout(pending.timer); pending.reject(new Error('The download has ended.')); pending = undefined; }
     task.canPause = false; task.controlPending = false;
@@ -1383,8 +1389,13 @@ function registerIpc(): void {
     emitSnapshot();
   });
   ipcMain.handle('update-settings', async (_event, patch: Partial<Settings>) => {
+    if (patch.downloadLimitMiB !== undefined) {
+      downloadLimitKiB(patch.downloadLimitMiB);
+      downloadLimitArgs(patch.downloadLimitMiB, backend.current.capabilities);
+    }
     if ((['market', 'winePath', 'externalXodusRoot', 'runtimeRoot'] as const).some(key => patch[key] !== undefined && patch[key] !== store.settings[key])) ensureIdle();
     const allowed: Partial<Settings> = {};
+    if (patch.downloadLimitMiB !== undefined) allowed.downloadLimitMiB = patch.downloadLimitMiB;
     if (typeof patch.installRoot === 'string') allowed.installRoot = path.resolve(patch.installRoot);
     if (typeof patch.market === 'string' && /^[A-Za-z-]{2,20}$/.test(patch.market)) allowed.market = patch.market;
     if (typeof patch.parallelDownloads === 'number') allowed.parallelDownloads = Math.max(1, Math.min(16, Math.round(patch.parallelDownloads)));
@@ -1394,6 +1405,12 @@ function registerIpc(): void {
     if (typeof patch.verboseLogs === 'boolean') allowed.verboseLogs = patch.verboseLogs;
     if (typeof patch.firstRunCompleted === 'boolean') allowed.firstRunCompleted = patch.firstRunCompleted;
     const settings = await store.setSettings(allowed);
+    if (patch.downloadLimitMiB !== undefined) {
+      try { await downloadLimitControls.apply(settings.downloadLimitMiB ?? 0); }
+      catch { emitSnapshot(); throw Error('The speed limit was saved, but could not be sent to the active download. Retry the installation to apply it.'); }
+    }
+    // A bandwidth-only change must not restart authentication or refresh devices.
+    if (isBandwidthOnlyPatch(patch)) { emitSnapshot(); return settings; }
     backend.setExternalRoot(settings.externalXodusRoot);
     runtime.setRoot(settings.runtimeRoot);
     await backend.refresh();

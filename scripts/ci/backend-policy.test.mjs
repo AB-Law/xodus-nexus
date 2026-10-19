@@ -8,6 +8,22 @@ import path from 'node:path';
 import os from 'node:os';
 import { backendSourceArchiveArgs } from '../backend-source-archive.mjs';
 
+test('bandwidth limit is pinned, aggregate, live controllable and does not change authentication', async () => {
+  const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
+  assert.ok(lock.patches.some(p => p.file === 'xodus-download-bandwidth.patch'));
+  const patch = await fs.readFile('assets/xodus-download-bandwidth.patch', 'utf8');
+  for (const expected of ['download_limit_kib', 'set-download-limit', 'OnceLock', 'streaming_bandwidth_is_aggregate_across_parallel_streams',
+    'streaming_bandwidth_limited_http_metadata_and_parallel_ranges_keep_bytes_and_do_not_timeout',
+    'streaming_bandwidth_update_and_unlimited_wake_active_waiters', 'streaming_bandwidth_cancellation_leaves_no_reserved_delay']) assert.ok(patch.includes(expected), expected);
+  assert.doesNotMatch(patch, /diff --git a\/.*(?:tokens\/|login\.rs|session\.rs|package_plan\.rs)/);
+  const build = await fs.readFile('scripts/build-backend.mjs', 'utf8');
+  assert.match(build, /'streaming_bandwidth_limited_http', '--', '--ignored', '--test-threads=1'/);
+  assert.ok(build.includes("'--download-limit-kib'"));
+  const main = await fs.readFile('src/main/index.ts', 'utf8');
+  assert.match(main, /if \(isBandwidthOnlyPatch\(patch\)\) \{ emitSnapshot\(\); return settings; \}/);
+  assert.ok(main.indexOf('if (isBandwidthOnlyPatch(patch))') < main.indexOf('backend.setExternalRoot(settings.externalXodusRoot)'));
+});
+
 test('backend source and ordered patch hashes are locked', async () => {
   const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
   assert.equal(lock.schema, 1);

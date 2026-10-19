@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { DownloadTask, Game, Settings } from '../shared/types.js';
+import { downloadLimitKiB } from '../shared/download-bandwidth.js';
 import { resolvePackageFile } from './windows-path.js';
 import { parsePackageXml } from './package-xml.js';
 import { manifestAttr as attr, manifestText as text, manifestElements, manifestAttribute } from './manifest-xml.js';
@@ -18,6 +19,7 @@ const defaultSettings: Settings = {
   installRoot: path.join(os.homedir(), 'Games', 'Xodus Nexus'),
   market: 'neutral',
   parallelDownloads: 4,
+  downloadLimitMiB: 0,
   winePath: '',
   externalXodusRoot: '',
   runtimeRoot: path.join(defaultDataRoot, 'runtimes'),
@@ -36,6 +38,8 @@ export class StateStore {
   async load(): Promise<void> {
     try {
       const parsed = JSON.parse(await fs.readFile(this.file, 'utf8')) as Partial<PersistedState>;
+      let downloadLimitMiB = 0;
+      try { downloadLimitKiB(parsed.settings?.downloadLimitMiB); downloadLimitMiB = parsed.settings?.downloadLimitMiB ?? 0; } catch { /* Ignore invalid saved preference; show the default in Settings. */ }
       this.state = {
         games: Array.isArray(parsed.games) ? parsed.games.map((game) => {
           // Remove obsolete route/compatibility claims from existing profiles.
@@ -49,7 +53,7 @@ export class StateStore {
             ...task, status: 'paused' as const, canPause: true, controlPending: false,
             transferRate: undefined, phase: 'Paused — resume to reconnect and restore saved download checkpoints',
           } : task) : [],
-        settings: Object.fromEntries(Object.entries({ ...defaultSettings, ...parsed.settings }).filter(([key]) => key !== 'separateGameProcess')) as unknown as Settings,
+        settings: Object.fromEntries(Object.entries({ ...defaultSettings, ...parsed.settings, downloadLimitMiB }).filter(([key]) => key !== 'separateGameProcess')) as unknown as Settings,
       };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') console.warn('State could not be loaded', error);
@@ -73,6 +77,7 @@ export class StateStore {
   }
 
   async setSettings(patch: Partial<Settings>): Promise<Settings> {
+    if (patch.downloadLimitMiB !== undefined) downloadLimitKiB(patch.downloadLimitMiB);
     this.state.settings = { ...this.state.settings, ...patch };
     await this.save();
     return this.state.settings;

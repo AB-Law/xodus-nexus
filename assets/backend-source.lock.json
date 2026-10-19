@@ -5,8 +5,8 @@
   "commit": "53ea781dcd073e31d7ea68e894134e9c959bff04",
   "rust": "1.99.0",
   "cargoLockSha256": "2259b343e00dadc263018beb7664b12e9d58a0b73bff502ad566f5f8619ce28a",
-  "patchId": "linux-run-v25",
-  "compatibility": "linux-run-v19",
+  "patchId": "linux-run-v26",
+  "compatibility": "linux-run-v20",
   "patches": [
     { "file": "xodus-linux-run.patch", "sha256": "68f260ec2c6e9264c47ed1a650868511f5412a756725d4000a865804f4712e8b" },
     { "file": "xodus-offline-mirror.patch", "sha256": "c865fc2559c43a5b3eb2bc841035c076eae5c42a90fe488f90514384aa916986" },
@@ -32,6 +32,7 @@
     { "file": "xodus-achievements.patch", "sha256": "55e4b56b943f491da4c9836a5d6655417ed63ab6383576a8e0f153ec986039b0" },
     { "file": "xodus-session-recovery.patch", "sha256": "fa67d768214247a5955716b9691616b45330ebda504703bf372fdda2252b0831" },
     { "file": "xodus-content-response.patch", "sha256": "e9997951526cfa08e3dd8c5fc4c383bf630e7ab8992d9e211acee40fdc6422a4" },
-    { "file": "xodus-streaming-recovery.patch", "sha256": "7e8550d7b50faf3b3cb7cfcf6e47cff35a0369737d421ef454d4dcf0c9c8ffad" }
+    { "file": "xodus-streaming-recovery.patch", "sha256": "7e8550d7b50faf3b3cb7cfcf6e47cff35a0369737d421ef454d4dcf0c9c8ffad" },
+    { "file": "xodus-download-bandwidth.patch", "sha256": "4655c51eb93811ea41500be05062a4ff0f64dde3d819dddde12e48d91b075293" }
   ]
 }

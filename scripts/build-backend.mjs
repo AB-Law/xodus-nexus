@@ -47,6 +47,8 @@ command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'c
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'content_license_']);
 command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-service', 'store_']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'msixvc', 'streaming_']);
+// The aggregate HTTP probe mutates the process-wide limiter, so run it alone.
+command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'msixvc', 'streaming_bandwidth_limited_http', '--', '--ignored', '--test-threads=1']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'msixvc', 'package_metadata']);
 command('cargo', ['build', '--release', '--locked', ...offline, ...features, '-p', 'xodus-cli', '-p', 'xodus-service']);
 const cli = path.join(target, 'release/xodus-cli');
@@ -58,7 +60,7 @@ for (const name of ['account', 'login', 'logout', 'download', 'streaming', 'run'
 }
 if (!command(cli, ['run', '--help'], true).includes('--materialize-chain')) throw Error('Launch-chain support missing');
 const streamingHelp = command(cli, ['streaming', '--help'], true);
-for (const flag of ['--progress-json', '--control-stdin', '--selected-content-id']) {
+for (const flag of ['--progress-json', '--control-stdin', '--selected-content-id', '--download-limit-kib']) {
   if (!streamingHelp.includes(flag)) throw Error(`Structured download capability missing: ${flag}`);
 }
 // xodus-service has no --help parser; running it would access keychain/network.
