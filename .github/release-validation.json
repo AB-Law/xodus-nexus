@@ -3,6 +3,26 @@
   "approvals": [
     {
       "kind": "launcher",
+      "runId": "39289505769",
+      "commit": "48eae449a35d00e4a71a9c7bb5d890b8b87f925e",
+      "manifestSha256": "44f6068c4d8c1953110c546f90bcb09ec88b527426e64a2d1d94b16f70c0225c",
+      "notesSha256": "40c87c6da4183a5a888eaec14a52a6d3aec6935e2eb0717bdcb0ce1d00f2420b",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit human approval of launcher 0.3.8 notes and stable promotion on 2026-10-19. Successful main CI 39289505769 passed 744 source tests, 30 runtime-tool checks and 31 CI-tool checks. Exact AppImage and candidate identity passed SHA-256/SHA-512 verification; packaged version, backend recipe and new patches match the checked source. A separately authorized isolated Balatro run used this unchanged CI launcher, exact backend 0.2.8 candidate and unchanged released runtime gf291f544 with Xbox cloud synchronization enabled. The human confirmed gameplay and normal quit. Game and launcher exited 0, the account service and private bridge were ready, no test processes or service sessions remained, and all seven protected original inputs, original game/prefix fingerprints, runtime components and candidate bytes were unchanged. No cloud-roundtrip, multiplayer-match or affected-user recovery claim. Promote the original candidate without rebuilding or activating production components."
+    },
+    {
+      "kind": "backend",
+      "runId": "39289505869",
+      "commit": "48eae449a35d00e4a71a9c7bb5d890b8b87f925e",
+      "manifestSha256": "d8a02cf3ee7f458d018b132873ed59e514976da7f7799804a13458cb7d97f243",
+      "notesSha256": "eabc0e36880eee5fade48e507598099782b3dd472f80bc605fb150a3f27bbd4a",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit human approval of backend 0.2.8 notes and stable promotion on 2026-10-19. Successful main CI 39289505869 used pinned Rust 1.99.0 and passed 56 CLI, 12 credential, 10 content-license, 14 Store, 1 streaming and 6 package-metadata tests. Exact binary and corresponding-source archives passed candidate identity and SHA-256/SHA-512 verification; recipe hash and corresponding-source recipe/patch bytes match the checked 24-patch lock. All extracted CLI/service/LICENSE hashes match the candidate metadata. A separately authorized isolated Balatro/cloud run used these unchanged CI binaries, exact launcher 0.3.8 and unchanged released runtime gf291f544. The human confirmed gameplay and normal quit; game and launcher exited 0, account service and bridge were ready, cleanup completed and protected originals and candidate/component hashes were unchanged. Recovery of external issues 138 and 172 remains unconfirmed. No cloud-roundtrip or multiplayer-match claim. Publish these original bytes without rebuilding or changing production settings."
+    },
+    {
+      "kind": "launcher",
       "runId": "39211145433",
       "commit": "8e51133d251ee1778faca1cc3f1f387a922d1fbd",
       "manifestSha256": "6857eedef6c5d207f291861c5be9c4d59b0cdec76d9c1f112eeca9426b827630",
