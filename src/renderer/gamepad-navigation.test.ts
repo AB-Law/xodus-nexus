@@ -74,6 +74,24 @@ describe('gamepad input isolation and edge detection', () => {
 });
 
 describe('direction and geometry', () => {
+  it.each(['left', 'right', 'up', 'down'] as const)('never jumps diagonally when pressing %s', direction => {
+    const target = direction === 'left' ? rect(0,0) : direction === 'right' ? rect(200,0) : direction === 'up' ? rect(0,0) : rect(0,200);
+    expect(navigationTarget(rect(100,100), [{value:'diagonal',rect:target}], direction)).toBeUndefined();
+  });
+  it('prefers a distant same-row button over a close diagonal one', () => {
+    expect(navigationTarget(rect(800,300), [{value:'above',rect:rect(680,245)},{value:'left',rect:rect(100,300)}], 'left')).toBe('left');
+  });
+  it('does not treat a five-pixel corner overlap as the same row', () => {
+    expect(navigationTarget(rect(800,300), [{value:'above-corner',rect:rect(680,265)},{value:'left',rect:rect(100,300)}], 'left')).toBe('left');
+  });
+  it('allows small vertically offset controls only inside an explicit action row', () => {
+    const from=rect(800,300), target={value:'refresh',rect:rect(680,285,20,20)};
+    expect(navigationTarget(from,[target],'left')).toBeUndefined();
+    expect(navigationTarget(from,[target],'left',true)).toBe('refresh');
+  });
+  it('keeps the same column with a tiny refresh control beside larger buttons', () => {
+    expect(navigationTarget(rect(300,500), [{value:'small-diagonal',rect:rect(390,450,20,20)},{value:'above',rect:rect(300,200,100,40)}], 'up')).toBe('above');
+  });
   it.each([[0.8, 0, 'right'], [-0.8, 0, 'left'], [0, 0.8, 'down'], [0, -0.8, 'up'], [0.6, 0.9, 'down']] as const)('stick %s/%s selects %s', (x, y, direction) => {
     expect(padDirection(pad([], [x, y]))).toBe(direction);
   });
@@ -94,7 +112,7 @@ describe('direction and geometry', () => {
   it('can select an offscreen row so it can be scrolled into view', () => {
     expect(navigationTarget(rect(0, 700), [{ value: 'next-row', rect: rect(0, 1000) }], 'down')).toBe('next-row');
   });
-  it.each([2, 3, 4])('keeps the column with %s responsive grid columns and tall cards', columns => {
+  it.each([2, 3, 4, 5, 6])('keeps the column with %s responsive grid columns and tall cards', columns => {
     const cards = Array.from({ length: columns * 2 }, (_, value) => ({ value,
       rect: rect((value % columns) * 193, Math.floor(value / columns) * 330, 180, 317) }));
     for (let column = 0; column < columns; column++) {

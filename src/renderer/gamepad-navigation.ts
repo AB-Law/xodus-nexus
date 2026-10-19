@@ -50,7 +50,7 @@ export class PadInput {
   }
 }
 
-export function navigationTarget<T>(from: Rect, targets: readonly { value: T; rect: Rect }[], direction: Direction): T | undefined {
+export function navigationTarget<T>(from: Rect, targets: readonly { value: T; rect: Rect }[], direction: Direction, allowCornerOverlap = false): T | undefined {
   const horizontal = direction === 'left' || direction === 'right';
   const sign = direction === 'up' || direction === 'left' ? -1 : 1;
   const center = (rect: Rect) => horizontal ? (rect.left + rect.right) / 2 : (rect.top + rect.bottom) / 2;
@@ -59,9 +59,14 @@ export function navigationTarget<T>(from: Rect, targets: readonly { value: T; re
   for (const { value, rect } of targets) {
     const forward = (center(rect) - center(from)) * sign;
     if (forward < 1) continue;
-    const gap = horizontal ? Math.max(0, rect.top - from.bottom, from.top - rect.bottom)
-      : Math.max(0, rect.left - from.right, from.left - rect.right);
-    const distance = forward + Math.abs(cross(rect) - cross(from)) * 0.35 + gap * 4;
+    // Stay in the directional beam. A nearby diagonal must never win over
+    // the visible control in the same row/column, or cause a jump at an edge.
+    const overlap = horizontal ? Math.min(rect.bottom, from.bottom) - Math.max(rect.top, from.top)
+      : Math.min(rect.right, from.right) - Math.max(rect.left, from.left);
+    const crossDistance = Math.abs(cross(rect) - cross(from));
+    const crossSize = (r: Rect) => horizontal ? r.bottom - r.top : r.right - r.left;
+    if (overlap <= 1 || (!allowCornerOverlap && crossDistance > Math.max(crossSize(from), crossSize(rect)) / 2)) continue;
+    const distance = forward + crossDistance * 0.35;
     if (distance < score) { best = value; score = distance; }
   }
   return best;
@@ -81,6 +86,7 @@ export function installGamepadNavigation(win: Window, options: Options): () => v
   const doc = win.document;
   const inputs = new Map<string, PadInput>();
   const returns = new WeakMap<Element, HTMLElement>();
+  const sidebarReturns = new WeakMap<Element, HTMLElement>();
   let active = false, stopped = false, frame = 0, previousTime = 0;
   let scope: HTMLElement | Document = doc;
   let picker: HTMLElement | undefined;
@@ -274,24 +280,72 @@ export function installGamepadNavigation(win: Window, options: Options): () => v
     if (directions.includes(value as Direction)) {
       const element = focused();
       if (element) {
-        const region = scope === doc ? element.closest<HTMLElement>('[data-gamepad-grid],[data-gamepad-filters],[data-gamepad-library-footer],[data-gamepad-detail]') ?? scope : scope;
         const direction = value as Direction;
+        // The sidebar and page are separate navigation regions. Their controls
+        // need not line up vertically, so enter the page explicitly instead of
+        // applying the strict within-region directional beam across that gap.
+        if (scope === doc && direction === 'right' && element.closest('.sidebar')) {
+          const content = doc.querySelector<HTMLElement>('.page-scroll');
+          if (content) {
+            const targets = candidates(content);
+            const grid = targets.filter(target => target.closest('[data-gamepad-grid]'));
+            const shell = content.closest('.content-shell');
+            const previous = shell ? sidebarReturns.get(shell) : undefined;
+            const entry = previous && shell?.contains(previous) && enabled(previous) ? previous : targets.find(target => target.hasAttribute('data-gamepad-play'))
+              ?? grid.find(target => target.closest('[data-gamepad-card]')?.classList.contains('selected'))
+              ?? grid[0] ?? targets.find(target => target.closest('[data-gamepad-filters]')) ?? initial(content);
+            focus(entry, true);
+          }
+          return;
+        }
+        const actionRow = direction === 'left' || direction === 'right' ? element.closest<HTMLElement>('[data-gamepad-action-row]') : undefined;
+        const region = scope === doc ? actionRow ?? element.closest<HTMLElement>('[data-gamepad-grid],[data-gamepad-filters],[data-gamepad-library-header],[data-gamepad-library-footer],[data-gamepad-detail],.page-scroll,.topbar') ?? scope : scope;
         const choose = (root: HTMLElement | Document) => navigationTarget(focusBox(element).getBoundingClientRect(), candidates(root).filter(target => target !== element)
-          .map(target => ({ value: target, rect: focusBox(target).getBoundingClientRect() })), direction);
+          .map(target => ({ value: target, rect: focusBox(target).getBoundingClientRect() })), direction, root === actionRow);
         let target = choose(region);
         const library = element.closest<HTMLElement>('.library-page');
+        if (!target && !library && element.closest('.store-page') && region instanceof HTMLElement && region.hasAttribute('data-gamepad-grid') && (direction === 'up' || direction === 'down')) target = choose(scope);
         if (!target && library && region instanceof HTMLElement) {
-          // Only vertical library transitions are allowed. Never drift into
-          // the sidebar or the detail pane at a card/filter row edge.
+          // Cross library rows explicitly, without diagonal drift into an
+          // unrelated card or control. Sidebar exit is handled separately.
           let next: string | undefined;
           if (region.hasAttribute('data-gamepad-grid') && direction === 'up') next = '[data-gamepad-filters]';
           else if (region.hasAttribute('data-gamepad-grid') && direction === 'down') next = '[data-gamepad-library-footer]';
+          else if (region.hasAttribute('data-gamepad-filters') && direction === 'up') next = '[data-gamepad-library-header]';
+          else if (region.hasAttribute('data-gamepad-library-header') && direction === 'down') next = '[data-gamepad-filters]';
           else if ((region.hasAttribute('data-gamepad-filters') && direction === 'down') || (region.hasAttribute('data-gamepad-library-footer') && direction === 'up')) next = '[data-gamepad-grid]';
           const root = next ? library.querySelector<HTMLElement>(next) : undefined;
-          if (root) target = choose(root);
+          if (root) {
+            target = choose(root);
+            // Header actions are right-aligned, while filters span the page.
+            // A vertical region crossing may need a different column, but it
+            // must not weaken the strict directional beam within a card grid.
+            if (!target && (region.hasAttribute('data-gamepad-library-header') || root.hasAttribute('data-gamepad-library-header'))) {
+              const rect = element.getBoundingClientRect(), x = (rect.left + rect.right) / 2;
+              target = candidates(root).sort((a, b) => {
+                const distance = (e: HTMLElement) => { const r = e.getBoundingClientRect(); return Math.abs((r.left + r.right) / 2 - x); };
+                return distance(a) - distance(b);
+              })[0];
+            }
+          }
           if (!target && direction === 'down' && region.hasAttribute('data-gamepad-grid')) {
             const parent = scrollParent(focusBox(element));
             if (parent) parent.scrollTop += Math.min(260, parent.clientHeight * 0.5);
+          }
+        }
+        if (!target && scope === doc && direction === 'left') {
+          const shell = element.closest('.content-shell');
+          const sidebar = doc.querySelector<HTMLElement>('.sidebar');
+          if (shell && sidebar) {
+            target = candidates(sidebar).find(item => item.matches('.nav-item.active'))
+              ?? candidates(sidebar).find(item => item.matches('.nav-item'));
+            if (target) {
+              sidebarReturns.set(shell, element);
+              // This is a focus handoff, not a page change. In particular,
+              // leaving a game detail must not reselect/reset its Library page.
+              focus(target);
+              return;
+            }
           }
         }
         focus(target, true);
