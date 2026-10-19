@@ -12,11 +12,11 @@ const image = (value: unknown): value is string => typeof value === 'string' && 
 
 async function readProfile(binary: string, signal: AbortSignal): Promise<string> {
   signal.throwIfAborted();
-  const tracked = spawnTracked(binary, ['profile', '--json'], { maxOutput: 4_000_000 });
+  const tracked = spawnTracked(binary, ['profile', '--json'], { maxOutput: 4_000_000, stdoutOnly: true });
   const stop = () => { tracked.child.kill('SIGKILL'); };
   signal.addEventListener('abort', stop, { once: true });
   if (signal.aborted) stop();
-  const timer = setTimeout(stop, 30_000); timer.unref();
+  const timer = setTimeout(stop, 50_000); timer.unref();
   try {
     const result = await tracked.result;
     signal.throwIfAborted();

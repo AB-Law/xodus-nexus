@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { spawnTracked } from './process.js';
 import { backendDiagnostic } from './backend-diagnostics.js';
+import { sessionFailureMessage } from './session-errors.js';
 import type { AccountLibraryPage, CatalogProduct } from '../shared/types.js';
 
 interface Entitlement {
@@ -63,16 +64,19 @@ export function entitlementKind(productId: string, entries: Map<string, Entitlem
 
 async function read(binary: string, market: string, signal: AbortSignal): Promise<string> {
   signal.throwIfAborted();
-  const tracked = spawnTracked(binary, ['library', '--json', '--market', market], { maxOutput: 8_000_000 });
+  const tracked = spawnTracked(binary, ['library', '--json', '--market', market], { maxOutput: 8_000_000, stdoutOnly: true });
+  let diagnostics = '';
+  const stderr = (bytes: Buffer) => { diagnostics = (diagnostics + bytes.toString('utf8')).slice(-64_000); };
+  tracked.child.stderr.on('data', stderr);
   const stop = () => { tracked.child.kill('SIGKILL'); };
   signal.addEventListener('abort', stop, { once: true });
   if (signal.aborted) stop();
   const timer = setTimeout(stop, 50_000); timer.unref();
   try {
     const result = await tracked.result; signal.throwIfAborted();
-    if (result.code !== 0) throw Error('Microsoft account licenses could not be loaded. Try Refresh later.');
+    if (result.code !== 0) throw Error(sessionFailureMessage(diagnostics) ?? 'Microsoft account licenses could not be loaded. Try Refresh later.');
     return result.output;
-  } finally { clearTimeout(timer); signal.removeEventListener('abort', stop); }
+  } finally { clearTimeout(timer); signal.removeEventListener('abort', stop); tracked.child.stderr.removeListener('data', stderr); }
 }
 
 /** Credentials stay in the CLI. Account-bound memory only, no license dumps in UI/disk logs. */

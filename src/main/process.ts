@@ -9,6 +9,8 @@ export interface RunOptions {
   env?: NodeJS.ProcessEnv;
   onLine?: (line: string) => void;
   maxOutput?: number;
+  /** Keep structured stdout separate from stderr diagnostics; line callbacks still see both. */
+  stdoutOnly?: boolean;
   /** Give a game its own Linux process group; downloads retain their defaults. */
   detached?: boolean;
   /** Optional bounded drain after the child exits but inherited pipes stay open. */
@@ -36,7 +38,7 @@ export function spawnTracked(command: string, args: string[], options: RunOption
   const max = options.maxOutput ?? 2_000_000;
   let chunksLength = 0;
   const readers: { consume: (chunk: Buffer) => void; finish: () => void }[] = [];
-  const reader = () => {
+  const reader = (stdout: boolean) => {
     let buffered = '';
     const decoder = new StringDecoder('utf8');
     const consume = (chunk: Buffer) => {
@@ -51,10 +53,12 @@ export function spawnTracked(command: string, args: string[], options: RunOption
       if (line) options.onLine?.(line);
     }
     if (buffered.length > 64_000) buffered = buffered.slice(-64_000);
-    const clean = stripAnsi(text);
-    chunks.push(clean);
-    chunksLength += clean.length;
-    while (chunksLength > max && chunks.length > 1) chunksLength -= chunks.shift()!.length;
+    if (stdout || !options.stdoutOnly) {
+      const clean = stripAnsi(text);
+      chunks.push(clean);
+      chunksLength += clean.length;
+      while (chunksLength > max && chunks.length > 1) chunksLength -= chunks.shift()!.length;
+    }
     };
     const result = { consume, finish: () => {
       buffered += decoder.end();
@@ -63,8 +67,8 @@ export function spawnTracked(command: string, args: string[], options: RunOption
     } };
     readers.push(result); return result;
   };
-  child.stdout.on('data', reader().consume);
-  child.stderr.on('data', reader().consume);
+  child.stdout.on('data', reader(true).consume);
+  child.stderr.on('data', reader(false).consume);
   const result = new Promise<RunResult>((resolve, reject) => {
     let finished = false;
     let drain: ReturnType<typeof setTimeout> | undefined;
