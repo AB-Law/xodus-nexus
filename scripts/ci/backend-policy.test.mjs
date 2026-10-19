@@ -43,6 +43,15 @@ test('backend build runs account-free credential persistence regressions', async
   assert.ok(lock.patches.some(patch => patch.file === 'xodus-keyring-credentials.patch'));
 });
 
+test('session recovery is pinned and does not replace interactive login or raw token reads', async () => {
+  const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
+  assert.ok(lock.patches.some(patch => patch.file === 'xodus-session-recovery.patch'));
+  const patch = await fs.readFile('assets/xodus-session-recovery.patch', 'utf8');
+  for (const expected of ['session-user-expired', 'ticket-timeout', 'refresh_existing_device_credentials', 'try_lock_exclusive',
+    'credential_session_valid_signin_has_no_renewal', 'ticket_real_transport_timeout_and_http_refusal_classification']) assert.ok(patch.includes(expected));
+  assert.doesNotMatch(patch, /diff --git a\/.*(?:login\.rs|tokens\/manager\.rs|webview_stdio\.rs)/);
+});
+
 test('corresponding-source archive preserves nested target source directories', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'backend-source-archive-'));
   try {

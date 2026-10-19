@@ -6,6 +6,21 @@ import { spawn } from 'node:child_process';
 import { BackendDiagnostics, BackendDiagnosticReader, observeBackendChild, setBackendDiagnostics } from './backend-diagnostics.js';
 import { spawnTracked } from './process.js';
 
+it('records only allowlisted session stages for optional account reads', () => {
+  for (const operation of ['library', 'profile']) {
+    const events: unknown[] = [];
+    const reader = new BackendDiagnosticReader(operation, event => events.push(event));
+    reader.push(Buffer.from('NEXUS_SESSION_DIAGNOSTIC_V1 ticket-timeout\nNEXUS_SESSION_DIAGNOSTIC_V1 ticket-retry\nNEXUS_SESSION_DIAGNOSTIC_V1 session-user-expired\n'));
+    expect(events).toHaveLength(3);
+    for (const raw of ['NEXUS_SESSION_DIAGNOSTIC_V1 private-secret',
+      'prefix NEXUS_SESSION_DIAGNOSTIC_V1 ticket-timeout', 'NEXUS_SESSION_DIAGNOSTIC_V1 ticket-timeout private-secret']) reader.push(Buffer.from(raw + '\n'));
+    expect(events).toHaveLength(3); expect(JSON.stringify(events)).not.toContain('private-secret');
+  }
+  const events: unknown[] = [];
+  new BackendDiagnosticReader('login', event => events.push(event)).push(Buffer.from('NEXUS_SESSION_DIAGNOSTIC_V1 ticket-timeout\n'));
+  expect(events).toHaveLength(0);
+});
+
 it('parses fixed legacy and new stages across chunks, never raw or injected output', () => {
   const events: unknown[] = [];
   const reader = new BackendDiagnosticReader('library', event => events.push(event));

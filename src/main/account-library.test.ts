@@ -1,4 +1,7 @@
 import { expect, it, vi } from 'vitest';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { AccountLibrary, entitlementKind, parseEntitlements } from './account-library.js';
 import type { CatalogProduct } from '../shared/types.js';
 
@@ -6,6 +9,33 @@ const A='9AAAAAAAAAAA', B='9BBBBBBBBBBB', C='9CCCCCCCCCCC';
 const row=(productId=A, extra={})=>({productId,status:'Active',isTrial:false,sharingSource:'None',endDate:'2099-01-01T00:00:00Z',special:false,...extra});
 const output=(entries=[row()],account='one@example.test',market='US')=>JSON.stringify({schema:1,account,market,checkedAt:new Date().toISOString(),entitlements:entries});
 const product=(productId:string):CatalogProduct=>({productId,title:productId,description:'',categories:[],installability:'supported',supportNote:''});
+
+it('maps real failed child processes to safe session guidance and recovers on a later refresh', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-session-reader-'));
+  const binary = path.join(directory, 'backend');
+  const catalog = vi.fn(async (ids: string[]) => ids.map(product));
+  const library = new AccountLibrary(catalog); library.select('one@example.test', binary, 'US');
+  const fixture = async (stdout: string, stderr: string, code: number) => fs.writeFile(binary,
+    `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(stdout)});process.stderr.write(${JSON.stringify(stderr)});process.exit(${code});\n`, { mode: 0o700 });
+  try {
+    for (const [stage, message] of [['session-user-expired', 'Sign in again'], ['ticket-timeout', 'timed out'], ['session-device-refresh-failed', 'could not be renewed']]) {
+      await fixture('', `private@example.test raw-secret\nNEXUS_SESSION_DIAGNOSTIC_V1 ${stage}\n`, 1);
+      const failure = await library.get('all').catch(error => error as Error);
+      expect(failure).toBeInstanceOf(Error);
+      expect((failure as Error).message).toContain(message);
+      expect((failure as Error).message).not.toMatch(/example\.test|raw-secret/);
+    }
+    expect(catalog).not.toHaveBeenCalled();
+    await fixture('NEXUS_SESSION_DIAGNOSTIC_V1 session-user-expired\n', 'untrusted error\n', 1);
+    await expect(library.get('all')).rejects.toThrow('licenses could not be loaded');
+    await fixture('', 'NEXUS_SESSION_DIAGNOSTIC_V1 ticket-timeout\nNEXUS_SESSION_DIAGNOSTIC_V1 ticket-response-received\nentitlement failure private-secret\n', 1);
+    await expect(library.get('all')).rejects.toThrow('licenses could not be loaded');
+    const response = output() + '\n'; const middle = Math.floor(response.length / 2);
+    await fs.writeFile(binary, `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(response.slice(0, middle))});setTimeout(()=>{process.stderr.write('NEXUS_SESSION_DIAGNOSTIC_V1 ticket-response-received\\n');setTimeout(()=>process.stdout.write(${JSON.stringify(response.slice(middle))}),20)},20);\n`, { mode: 0o700 });
+    expect((await library.get('all', undefined, true)).products.map(item => item.productId)).toEqual([A]);
+    expect(catalog).toHaveBeenCalledTimes(1);
+  } finally { library.reset(); await fs.rm(directory, { recursive: true, force: true }); }
+});
 
 it('provides fresh access for content planning without loading unrelated catalog products', async () => {
   const catalog=vi.fn(async (ids:string[])=>ids.map(product));
