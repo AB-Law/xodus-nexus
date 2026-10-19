@@ -287,6 +287,7 @@ export interface AccountLibraryPage {
   accessByProductId: Record<string, 'owned' | 'gamepass'>;
   cursor?: string;
   checkedAt: string;
+  skippedEntitlements?: number;
 }
 
 export interface LauncherApi {
