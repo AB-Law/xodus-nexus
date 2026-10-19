@@ -9,9 +9,29 @@ export class InstallQueue {
   private jobs: Job[] = [];
   private active?: string;
   private stopped = false;
+  private holds = 0;
+  private waiters = new Map<string, (() => void)[]>();
   constructor(private readonly idle: () => void = () => {}) {}
   get size(): number { return this.jobs.length + Number(Boolean(this.active)); }
   has(id: string): boolean { return this.active === id || this.jobs.some(job => job.id === id); }
+  hold(): () => void {
+    this.holds++; let released = false;
+    return () => { if (!released) { released = true; this.holds--; void this.pump(); } };
+  }
+  settled(id: string, timeoutMs = 15_000): Promise<void> {
+    if (!this.has(id)) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const finish = () => { clearTimeout(timer); resolve(); };
+      const timer = setTimeout(() => {
+        this.waiters.set(id, (this.waiters.get(id) ?? []).filter(waiter => waiter !== finish));
+        if (!this.waiters.get(id)?.length) this.waiters.delete(id);
+        reject(Error('The download is still stopping. Files were not deleted.'));
+      }, timeoutMs);
+      timer.unref();
+      this.waiters.set(id, [...this.waiters.get(id) ?? [], finish]);
+    });
+  }
+  private notify(id: string): void { this.waiters.get(id)?.forEach(resolve => resolve()); this.waiters.delete(id); }
   enqueue(job: Job): void {
     if (this.stopped) throw Error('The launcher is closing.');
     if (this.has(job.id)) throw Error('Installation is already queued.');
@@ -22,11 +42,12 @@ export class InstallQueue {
     const index = this.jobs.findIndex(job => job.id === id);
     if (index < 0) return false;
     this.jobs.splice(index, 1);
+    this.notify(id);
     return true;
   }
   stop(): void { this.stopped = true; }
   private async pump(): Promise<void> {
-    if (this.active || this.stopped) return;
+    if (this.active || this.stopped || this.holds) return;
     const job = this.jobs.shift();
     if (!job) return;
     this.active = job.id;
@@ -34,7 +55,7 @@ export class InstallQueue {
     catch (error) {
       try { await job.failed(error); }
       catch { this.stopped = true; console.error('Could not persist installation failure; queue stopped.'); }
-    } finally { this.active = undefined; if (!this.jobs.length) this.idle(); void this.pump(); }
+    } finally { this.active = undefined; this.notify(job.id); if (!this.jobs.length) this.idle(); void this.pump(); }
   }
 }
 
