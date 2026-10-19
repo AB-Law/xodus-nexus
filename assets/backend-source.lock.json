@@ -5,7 +5,7 @@
   "commit": "53ea781dcd073e31d7ea68e894134e9c959bff04",
   "rust": "1.99.0",
   "cargoLockSha256": "2259b343e00dadc263018beb7664b12e9d58a0b73bff502ad566f5f8619ce28a",
-  "patchId": "linux-run-v23",
+  "patchId": "linux-run-v24",
   "compatibility": "linux-run-v18",
   "patches": [
     { "file": "xodus-linux-run.patch", "sha256": "68f260ec2c6e9264c47ed1a650868511f5412a756725d4000a865804f4712e8b" },
@@ -30,6 +30,7 @@
     { "file": "xodus-library-resilience.patch", "sha256": "0136157efe8a1419f91243c496656c4d043422e126c40e4a552e769c53de3545" },
     { "file": "xodus-game-activity.patch", "sha256": "89bfd422f951515dd393eb479901ff9613441c627d139918c233a19ec21f1e06" },
     { "file": "xodus-achievements.patch", "sha256": "55e4b56b943f491da4c9836a5d6655417ed63ab6383576a8e0f153ec986039b0" },
-    { "file": "xodus-session-recovery.patch", "sha256": "fa67d768214247a5955716b9691616b45330ebda504703bf372fdda2252b0831" }
+    { "file": "xodus-session-recovery.patch", "sha256": "fa67d768214247a5955716b9691616b45330ebda504703bf372fdda2252b0831" },
+    { "file": "xodus-content-response.patch", "sha256": "e9997951526cfa08e3dd8c5fc4c383bf630e7ab8992d9e211acee40fdc6422a4" }
   ]
 }
