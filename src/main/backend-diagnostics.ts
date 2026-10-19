@@ -5,12 +5,14 @@ import type { DiagnosticLog } from '../shared/types.js';
 import { readDiagnosticTail } from './diagnostic-log.js';
 import { sessionStages } from './session-errors.js';
 import { contentLicenseDiagnostic, contentLicenseStages } from '../shared/content-license.js';
+import { transferDiagnostic, transferStages } from '../shared/transfer-failure.js';
 
 const operations = new Set(['account', 'profile', 'achievements', 'library', 'login', 'logout', 'streaming', 'download', 'license', 'run', 'resolve-package', 'service', 'probe']);
 const credentialStages = new Set(['keyring-unavailable', 'keyring-invalid-data', 'keyring-missing-data', 'keyring-write-verification', 'credential-io', 'device-authentication']);
 const stages = new Set([
   ...sessionStages,
   ...contentLicenseStages,
+  ...transferStages,
   'keyring-unavailable', 'keyring-invalid-data', 'keyring-missing-data', 'keyring-write-verification', 'credential-io', 'device-authentication',
   'stored-account', 'account-changed', 'stored-device', 'device-token', 'stored-user', 'user-token', 'http-client',
   'store-ticket', 'store-ticket-refused', 'store-ticket-type', 'store-ticket-format', 'market', 'account-check',
@@ -117,9 +119,11 @@ export class BackendDiagnosticReader {
     const credential = /^NEXUS_CREDENTIAL_ERROR_V1 ([a-z-]+)$/.exec(line);
     const session = /^NEXUS_SESSION_DIAGNOSTIC_V1 ([a-z-]+)$/.exec(line);
     const content = contentLicenseDiagnostic(line);
+    const transfer = transferDiagnostic(line);
     const numeric = /^NEXUS_LIBRARY_DIAGNOSTIC_V1 ([a-z-]+) (\d{1,3}) (\d{1,6})$/.exec(line);
     const legacy = /^Account library unavailable \(([a-z-]+)\); credentials and installed games are unchanged\.$/.exec(line);
     if (credential && credentialStages.has(credential[1])) stage = credential[1];
+    else if (transfer && ['streaming', 'download'].includes(this.operation)) { stage = transfer.stage; status = transfer.status; }
     else if (content && ['streaming', 'download', 'license', 'run'].includes(this.operation)) { stage = content.stage; status = content.status; }
     else if (session && ['library', 'profile'].includes(this.operation) && sessionStages.has(session[1])) stage = session[1];
     else if (numeric && this.operation === 'library') {

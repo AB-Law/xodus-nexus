@@ -1,5 +1,6 @@
 import type { BackendCapabilities } from './types.js';
 import { contentLicenseFailure } from './content-license.js';
+import { transferFailure } from './transfer-failure.js';
 
 const COMMAND_LINE = /^[ \t]{2}([a-z][a-z0-9-]+)[ \t]{2,}/gm;
 
@@ -62,6 +63,8 @@ export function progressBytesFromLine(line: string): { current: number; total: n
 }
 
 export function downloadFailure(log: string[], exitCode: number): string {
+  const transfer = transferFailure(log);
+  if (transfer) return `Xodus exited with code ${exitCode}: ${transfer}`;
   const licensing = contentLicenseFailure(log);
   if (licensing) return `Xodus exited with code ${exitCode}: ${licensing}`;
   const detail = [...log].reverse().find((line) =>

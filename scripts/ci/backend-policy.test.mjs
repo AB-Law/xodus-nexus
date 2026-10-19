@@ -64,6 +64,20 @@ test('content-license parsing is pinned, regression-tested and does not change a
   assert.match(build, /command\('cargo', \['test', '--locked', \.\.\.offline, \.\.\.features, '-p', 'xodus', 'content_license_'\]\)/);
 });
 
+test('streaming recovery keeps verified ranges and checkpoints without touching authentication', async () => {
+  const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
+  assert.ok(lock.patches.some(patch => patch.file === 'xodus-streaming-recovery.patch'));
+  const patch = await fs.readFile('assets/xodus-streaming-recovery.patch', 'utf8');
+  for (const text of ['NEXUS_TRANSFER_DIAGNOSTIC_V1', 'transfer-http', 'transfer-range',
+    'streaming_resume_terminal_http_error_checkpoints_only_written_pages_then_restarts_exactly',
+    'streaming_http_production_timeout_tolerates_a_six_second_slow_response',
+    'streaming_failure_cancels_and_settles_parallel_workers_without_completing_failed_jobs',
+    'streaming_failure_preserves_existing_game_and_dlc_files_and_completed_marker']) assert.ok(patch.includes(text), text);
+  assert.doesNotMatch(patch, /diff --git a\/.*(?:tokens\/|licensing\/|license\.rs|login\.rs|package_plan\.rs)/);
+  const build = await fs.readFile('scripts/build-backend.mjs', 'utf8');
+  assert.match(build, /command\('cargo', \['test', '--locked', \.\.\.offline, \.\.\.features, '-p', 'msixvc', 'streaming_'\]\)/);
+});
+
 test('corresponding-source archive preserves nested target source directories', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'backend-source-archive-'));
   try {
