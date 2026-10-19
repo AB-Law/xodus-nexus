@@ -3,9 +3,56 @@ import path from 'node:path';
 import os from 'node:os';
 import { expect, it } from 'vitest';
 import { AccountProfile } from './account-profile.js';
+import { BackendDiagnostics, setBackendDiagnostics } from './backend-diagnostics.js';
 
 const avatar = 'data:image/png;base64,iVBORw0KGgo=';
 const result = (account = 'one@example.test') => JSON.stringify({ schema: 1, account, gamertag: 'ExampleGamer', gamerpicDataUrl: avatar });
+
+it('lets a real synthetic profile child finish once despite repeated Refresh requests', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-profile-process-'));
+  const binary = path.join(root, 'xodus-cli');
+  const log = new BackendDiagnostics(root); setBackendDiagnostics(log);
+  try {
+    await fs.writeFile(binary, `#!/usr/bin/env node\nsetTimeout(()=>process.stdout.write(${JSON.stringify(result() + '\n')}),100);\n`, { mode: 0o700 });
+    const profile = new AccountProfile(root, () => {}, value => value);
+    await profile.select('one@example.test', binary, true);
+    for (let i = 0; i < 4; i++) await profile.select('one@example.test', binary, true);
+    await profile.settled();
+    expect(profile.value?.gamertag).toBe('ExampleGamer');
+    const records = (await log.read()).content.trim().split('\n').map(line => JSON.parse(line));
+    const exits = records.filter(row => row.operation === 'profile' && row.event === 'exit');
+    expect(exits).toHaveLength(1); expect(exits[0].code).toBe(0); expect(exits[0].signal).toBeUndefined();
+    expect(JSON.stringify(records)).not.toContain('one@example.test');
+  } finally { setBackendDiagnostics(undefined); await fs.rm(root, { recursive: true, force: true }); }
+});
+
+it('coalesces repeated same-account refreshes instead of killing the in-flight profile', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-profile-refresh-'));
+  let finish!: (text: string) => void, reads = 0, aborts = 0;
+  try {
+    const profile = new AccountProfile(root, () => {}, value => value, async (_binary, signal) => {
+      reads++; signal.addEventListener('abort', () => { aborts++; });
+      return new Promise(resolve => { finish = resolve; });
+    });
+    await profile.select('one@example.test', '/backend', true);
+    for (let i = 0; i < 4; i++) await profile.select('one@example.test', '/backend', true);
+    expect(aborts).toBe(0); expect(reads).toBe(1);
+    finish(result()); await profile.settled(); expect(profile.value?.gamertag).toBe('ExampleGamer');
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
+
+it('cancels an obsolete backend request and ignores its late result on a silent backend switch', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-profile-backend-'));
+  const jobs: { binary: string; signal: AbortSignal; finish: (text: string) => void }[] = [];
+  try {
+    const profile = new AccountProfile(root, () => {}, value => value, async (binary, signal) => new Promise(resolve => { jobs.push({ binary, signal, finish: resolve }); }));
+    await profile.select('one@example.test', '/old'); const old = profile.settled();
+    await profile.select('one@example.test', '/new', false);
+    expect(jobs).toHaveLength(2); expect(jobs[0].signal.aborted).toBe(true);
+    jobs[0].finish(result()); await old; expect(profile.value).toBeUndefined();
+    jobs[1].finish(result()); await profile.settled(); expect(profile.value?.gamertag).toBe('ExampleGamer');
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
 it('loads a genuine profile result, reuses only its account cache offline, and clears on logout', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-profile-'));
   try {
