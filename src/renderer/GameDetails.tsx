@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Clock3, Gamepad2, Images, LoaderCircle, MoreHorizontal, RefreshCw, X } from 'lucide-react';
 import type { AppSnapshot, Game, GameActivity, GameStoreDetails } from '../shared/types';
 import './game-details.css';
+import { Achievements } from './Achievements';
 
 export function formatMinutes(minutes?: number): string {
   if (minutes === undefined || !Number.isFinite(minutes) || minutes < 0) return 'Unavailable';
@@ -61,6 +62,7 @@ interface PageProps {
   manage: ReactNode;
   notices?: ReactNode;
   technical?: ReactNode;
+  achievements?: ReactNode;
 }
 interface ContentProps extends PageProps {
   details?: GameStoreDetails;
@@ -72,7 +74,7 @@ interface ContentProps extends PageProps {
 }
 
 /** Descriptive data never gates Play or changes package/licensing decisions. */
-export function GameDetailsContent({ game, back, play, manage, notices, technical, details, activity, metadataLoading, activityLoading, metadataError, refresh }: ContentProps) {
+export function GameDetailsContent({ game, back, play, manage, notices, technical, achievements, details, activity, metadataLoading, activityLoading, metadataError, refresh }: ContentProps) {
   const [gallery, setGallery] = useState<number>();
   const [expanded, setExpanded] = useState(false);
   const manageRef = useRef<HTMLDetailsElement>(null);
@@ -112,6 +114,7 @@ export function GameDetailsContent({ game, back, play, manage, notices, technica
         <details ref={manageRef} className="gd-actions" data-game-menu={manageOpen ? '' : undefined} onToggle={event => setManageOpen(event.currentTarget.open)}><summary aria-label="More game actions"><MoreHorizontal /><span>Manage</span></summary><div onClick={event => { if ((event.target as HTMLElement).closest('button:not(:disabled)')) closeManage(); }}>{manage}</div></details>
       </section>
       {notices}
+      {achievements}
       <div className="gd-detail-columns">
         <div className="gd-description-column">
           <section className="gd-about"><h2>About the game</h2><p>{metadataLoading ? 'Loading game information…' : description ? expanded ? description : shortDescription : metadataError ? 'Game information could not be loaded. You can still play.' : 'Microsoft Store did not provide a description for this game.'}</p>{description !== shortDescription ? <button className="gd-text-button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? 'Show less' : 'Read more'}<ChevronRight /></button> : null}</section>
@@ -143,5 +146,5 @@ export function GameDetails(props: PageProps & { data: AppSnapshot }) {
     void window.launcher.getGameActivity(game.id, refresh).then(value => { if (request.current === id) setActivity(value); }).catch(() => { if (request.current === id) setActivity({ status: 'error' }); }).finally(() => { if (request.current === id) setActivityLoading(false); });
   }, [game.id, data.auth.username, data.auth.stored, data.auth.running, data.backend.binaryPath]);
   useEffect(() => { setActivity(undefined); loadActivity(); return () => { request.current++; }; }, [loadActivity]);
-  return <GameDetailsContent {...props} details={details} activity={activity} metadataLoading={metadataLoading} metadataError={metadataError} activityLoading={activityLoading} refresh={() => loadActivity(true)} />;
+  return <GameDetailsContent {...props} details={details} activity={activity} metadataLoading={metadataLoading} metadataError={metadataError} activityLoading={activityLoading} refresh={() => loadActivity(true)} achievements={<Achievements gameId={game.id} title={game.title} data={data} />} />;
 }
