@@ -118,6 +118,16 @@ test('session recovery is pinned and does not replace interactive login or raw t
   assert.doesNotMatch(patch, /diff --git a\/.*(?:login\.rs|tokens\/manager\.rs|webview_stdio\.rs)/);
 });
 
+test('delegation-compact store tickets are converted only for Store and licensing requests', async () => {
+  const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
+  assert.ok(lock.patches.some(patch => patch.file === 'xodus-store-ticket.patch'));
+  const patch = await fs.readFile('assets/xodus-store-ticket.patch', 'utf8');
+  for (const expected of ['pub fn store_ticket', 'store_ticket_accepts_compact_and_delegation_compact_forms',
+    'store_license_accepts_delegation_compact_user_tickets']) assert.ok(patch.includes(expected), expected);
+  assert.doesNotMatch(patch, /diff --git a\/.*(?:tokens\/|login\.rs)/);
+  assert.doesNotMatch(patch, /^-.*"d=\{\}"/m);
+});
+
 test('content-license parsing is pinned, regression-tested and does not change authentication or streaming', async () => {
   const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
   assert.ok(lock.patches.some(patch => patch.file === 'xodus-content-response.patch'));
