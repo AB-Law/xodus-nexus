@@ -98,9 +98,25 @@ export function TopStatus({ data, go }: { data: AppSnapshot; go: (page: Page) =>
   </div>;
 }
 
-export function DiagnosticDialog({ log, close }: { log: DiagnosticLog; close: () => void }) {
+export function DiagnosticDialog({ log, close, revealFile, copyLog }: { log: DiagnosticLog; close: () => void; revealFile?: () => Promise<void>; copyLog?: () => Promise<void> }) {
   const [copyStatus, setCopyStatus] = useState('Copy log');
-  return <div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}><section className="game-dialog diagnostic-dialog" role="dialog" aria-modal="true" aria-label="Diagnostic log"><h2>{log.name}</h2><p>Private diagnostic log, review before sharing.{log.truncated ? ' Showing the most recent 512 KiB.' : ''}</p><pre>{log.content || 'The log is empty.'}</pre><div className="dialog-actions"><button className="secondary" onClick={async () => { try { await navigator.clipboard.writeText(log.content); setCopyStatus('Copied'); } catch { setCopyStatus('Copy failed, select the text instead'); } }}>{copyStatus}</button><button className="secondary" data-gamepad-cancel onClick={close}>Close</button></div></section></div>;
+  const [copying, setCopying] = useState(false);
+  const [copyError, setCopyError] = useState('');
+  const [fileError, setFileError] = useState(false);
+  async function copy() {
+    setCopying(true); setCopyError(''); setCopyStatus('Copy log');
+    try {
+      if (copyLog) await copyLog();
+      else if (!log.truncated) await navigator.clipboard.writeText(log.content);
+      else throw Error('The full log is no longer available.');
+      setCopyStatus('Copied');
+    } catch (error) {
+      setCopyError(error instanceof Error && error.message.includes('too large for the clipboard')
+        ? 'This log is too large for the clipboard. Use Show log file to attach the complete file.'
+        : 'Could not copy the complete log. Try again or use Show log file.');
+    } finally { setCopying(false); }
+  }
+  return <div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}><section className="game-dialog diagnostic-dialog" role="dialog" aria-modal="true" aria-label="Diagnostic log"><h2>{log.name}</h2><p>Private diagnostic log, review before sharing.{log.truncated ? ' Preview shows the most recent 512 KiB. Copy log copies the complete file.' : ''}</p><pre>{log.content || 'The log is empty.'}</pre>{fileError ? <p role="alert">The log file is no longer available.</p> : null}{copyError ? <p role="alert">{copyError}</p> : null}<div className="dialog-actions">{revealFile ? <button className="secondary" onClick={() => { setFileError(false); void revealFile().catch(() => setFileError(true)); }}>Show log file</button> : null}<button className="secondary" disabled={copying} onClick={() => void copy()}>{copying ? 'Copying…' : copyStatus}</button><button className="secondary" data-gamepad-cancel onClick={close}>Close</button></div></section></div>;
 }
 
 export function BackendLogButton({ toast }: { toast: (value: Toast) => void }) {
@@ -551,7 +567,7 @@ export function LibraryPage({ data, toast, filters, onFiltersChange, selection }
   const [editTools, setEditTools] = useState<GameLaunchTools>({ ...defaultLaunchTools });
   const [localeOptions, setLocaleOptions] = useState<string[]>([]);
   const [dialogBusy, setDialogBusy] = useState(false);
-  const [diagnosticLog, setDiagnosticLog] = useState<DiagnosticLog>();
+  const [diagnosticLog, setDiagnosticLog] = useState<{ log: DiagnosticLog; operationId: string }>();
   const [contentGameId, setContentGameId] = useState<string>();
   const [detailOpen, setDetailOpen] = useState(Boolean(selection));
   const pageRef = useRef<HTMLElement>(null);
@@ -671,7 +687,7 @@ export function LibraryPage({ data, toast, filters, onFiltersChange, selection }
     catch (error) { toast({ kind: 'error', message: errorMessage(error) }); }
   }
   async function openDiagnosticLog(id: string) {
-    try { setDiagnosticLog(await window.launcher.readDiagnosticLog(id)); }
+    try { setDiagnosticLog({ log: await window.launcher.readDiagnosticLog(id), operationId: id }); }
     catch (error) { toast({ kind: 'error', message: errorMessage(error) }); }
   }
 
@@ -715,7 +731,7 @@ export function LibraryPage({ data, toast, filters, onFiltersChange, selection }
     </div>
     {selectedPanel}
     {menu && menuGame ? <GameContextMenu x={menu.x} y={menu.y} {...managementProps(menuGame)} /> : null}
-{diagnosticLog ? <DiagnosticDialog log={diagnosticLog} close={() => setDiagnosticLog(undefined)} /> : null}
+{diagnosticLog ? <DiagnosticDialog log={diagnosticLog.log} close={() => setDiagnosticLog(undefined)} revealFile={() => window.launcher.revealDiagnosticLog(diagnosticLog.operationId)} copyLog={() => window.launcher.copyDiagnosticLog(diagnosticLog.operationId)} /> : null}
     {contentGameId && data.games.find(game => game.id === contentGameId) ? <GameContentDialog key={`${contentGameId}:${data.auth.username}:${data.auth.stored}`} game={data.games.find(game => game.id === contentGameId)!} data={data} close={() => setContentGameId(undefined)} toast={toast} /> : null}
     {dialogGame && modalGame ? <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !dialogBusy) setDialogGame(undefined); }}><section className="game-dialog" role="dialog" aria-modal="true" aria-label={dialogGame.kind === 'remove' ? `Remove ${modalGame.title}` : `Settings for ${modalGame.title}`}>
       {dialogGame.kind === 'remove' ? <GameRemovalContents game={modalGame} busy={dialogBusy} close={() => setDialogGame(undefined)} remove={mode => { void removeGame(mode); }} /> : <form onSubmit={saveGameSettings}>

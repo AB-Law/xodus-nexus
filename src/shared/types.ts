@@ -363,6 +363,8 @@ export interface LauncherApi {
   rollbackLauncherUpdate(): Promise<void>;
   checkGameUpdates(id?: string): Promise<void>;
   readDiagnosticLog(operationId: string): Promise<DiagnosticLog>;
+  copyDiagnosticLog(operationId: string): Promise<void>;
+  revealDiagnosticLog(operationId: string): Promise<void>;
   readBackendDiagnosticLog(): Promise<DiagnosticLog>;
   login(): Promise<void>;
   logout(): Promise<void>;

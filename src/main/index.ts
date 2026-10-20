@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, Notification, powerSaveBlocker, screen, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, Notification, powerSaveBlocker, screen, shell } from 'electron';
 import { constants, createWriteStream, promises as fs, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -29,7 +29,7 @@ import { gameLaunchArguments, preparedGameWine } from './game-launch.js';
 import { prepareGameWrapper, type GameWrapper } from './game-wrapper.js';
 import { normalizeLaunchTools } from '../shared/launch-tools.js';
 import { LauncherUpdater } from './launcher-update.js';
-import { readDiagnosticTail } from './diagnostic-log.js';
+import { copyDiagnosticFile, diagnosticLogFile, readDiagnosticTail } from './diagnostic-log.js';
 import { BackendDiagnostics, setBackendDiagnostics } from './backend-diagnostics.js';
 import { queryGameUpdate } from './game-updates.js';
 import { DownloadProgress, PROGRESS_PREFIX } from './download-progress.js';
@@ -1086,6 +1086,8 @@ function registerDemoIpc(catalogMarket: () => string): void {
   ipcMain.handle('rollback-launcher-update', () => {});
   ipcMain.handle('check-game-updates', () => {});
   ipcMain.handle('read-diagnostic-log', () => ({ name: 'demo.log', content: 'Demo diagnostic log. No account data.', truncated: false }));
+  ipcMain.handle('copy-diagnostic-log', () => clipboard.writeText('Demo diagnostic log. No account data.'));
+  ipcMain.handle('reveal-diagnostic-log', () => undefined);
   ipcMain.handle('read-backend-diagnostic-log', () => ({ name: 'backend.log', content: 'Sample backend diagnostics. No account data.', truncated: false }));
   ipcMain.handle('login', () => {});
   ipcMain.handle('logout', () => {});
@@ -1192,6 +1194,15 @@ function registerIpc(): void {
   ipcMain.handle('read-diagnostic-log', (_event, id: string) => {
     if (!gameOperation?.logPath || gameOperation.id !== id) throw new Error('This diagnostic log is no longer available.');
     return readDiagnosticTail(gameOperation.logPath, path.join(path.dirname(store.settings.runtimeRoot), 'logs'));
+  });
+  ipcMain.handle('reveal-diagnostic-log', async (_event, id: string) => {
+    if (!gameOperation?.logPath || gameOperation.id !== id) throw new Error('This diagnostic log is no longer available.');
+    const file = await diagnosticLogFile(gameOperation.logPath, path.join(path.dirname(store.settings.runtimeRoot), 'logs'));
+    shell.showItemInFolder(file);
+  });
+  ipcMain.handle('copy-diagnostic-log', async (_event, id: string) => {
+    if (!gameOperation?.logPath || gameOperation.id !== id) throw new Error('This diagnostic log is no longer available.');
+    await copyDiagnosticFile(gameOperation.logPath, path.join(path.dirname(store.settings.runtimeRoot), 'logs'), text => clipboard.writeText(text));
   });
   ipcMain.handle('login', () => requestAuth('login'));
   ipcMain.handle('logout', () => requestAuth('logout'));

@@ -24,6 +24,13 @@ it('shows game update badges and a separate version-check action', () => {
 it('renders diagnostic logs as escaped text rather than executable HTML', () => {
   const html = renderToStaticMarkup(<DiagnosticDialog log={{ name: 'game.log', content: '<script>bad()</script>', truncated: true }} close={() => {}} />);
   expect(html).not.toContain('<script>'); expect(html).toContain('&lt;script&gt;'); expect(html).toContain('512 KiB');
+  expect(html).toContain('Copy log'); expect(html).not.toContain('Copy excerpt');
+  expect(html).toContain('Copy log copies the complete file');
+});
+it('offers a complete game log without changing untruncated backend copies', () => {
+  const html = renderToStaticMarkup(<DiagnosticDialog log={{ name: 'game.log', content: 'full text', truncated: false }} close={() => {}} revealFile={async () => {}} />);
+  expect(html).toContain('Show log file'); expect(html).toContain('Copy log');
+  expect(html).not.toContain('Copy excerpt'); expect(html).not.toContain('512 KiB');
 });
 it('offers Resume and Cancel for paused downloads, without treating them as finished', () => {
   const data = demoSnapshot();
