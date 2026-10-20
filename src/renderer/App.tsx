@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import type { AccountLibraryPage, AppSnapshot, CatalogProduct, CatalogSearchResult, DiagnosticLog, Game, GameContentPlan, GameLaunchOptions, Page, Settings } from '../shared/types';
 import { estimateTimeRemaining } from '../shared/utils';
-import { runtimeDisplay } from '../shared/runtime-display';
+import { nexusRuntimeUpdateAvailable, runtimeDisplay } from '../shared/runtime-display';
 import { subscriptionBadge } from '../shared/subscription';
 import { defaultLaunchTools, normalizeLaunchTools } from '../shared/launch-tools';
 import type { GameLaunchTools } from '../shared/types';
@@ -92,8 +92,15 @@ function AccountAvatar({ auth, large = false }: { auth: AppSnapshot['auth']; lar
 }
 
 export function TopStatus({ data, go }: { data: AppSnapshot; go: (page: Page) => void }) {
+  const restart = data.launcherUpdate?.restartRequired;
+  const updates = [
+    data.launcherUpdate?.latestVersion && !restart ? `Launcher ${data.launcherUpdate.latestVersion}` : '',
+    data.backend.releaseAvailable && data.backend.updateAvailable ? `Backend ${data.backend.releaseVersion ?? ''}`.trim() : '',
+    nexusRuntimeUpdateAvailable(data.runtime) ? `Runtime ${data.runtime.nexusVersion?.replace(/^runtime-/, '') ?? ''}`.trim() : '',
+  ].filter(Boolean);
+  const updateTitle = [restart ? 'Restart to finish launcher update.' : '', updates.length ? `Available updates: ${updates.join(', ')}` : ''].filter(Boolean).join(' ');
   return <div className="top-status">
-    {data.launcherUpdate?.latestVersion || data.launcherUpdate?.restartRequired ? <button className="update-notice" title={data.launcherUpdate.restartRequired ? 'Restart to finish launcher update' : `Launcher ${data.launcherUpdate.latestVersion} is available`} onClick={() => go('settings')}><ArrowDownToLine /><strong>{data.launcherUpdate.restartRequired ? 'Restart available' : 'Update available'}</strong></button> : null}
+    {updates.length || restart ? <button className="update-notice" title={updateTitle} aria-label={updateTitle} onClick={() => go('settings')}><ArrowDownToLine /><strong>{restart ? 'Restart available' : 'Update available'}</strong></button> : null}
     <StatusDot tone={data.backend.available ? 'green' : 'red'} /><span>{data.backend.available ? 'Xodus ready' : 'Backend offline'}</span><button title="Settings" onClick={() => go('settings')}><Settings2 /></button>
   </div>;
 }
@@ -890,7 +897,7 @@ export function SettingsPage({ data, toast }: { data: AppSnapshot; toast: (value
       {data.runtime.error ? <div className="alert amber"><CircleAlert /><span>{data.runtime.error}</span></div> : null}{data.runtime.phase ? <div className="runtime-phase"><LoaderCircle className={data.runtime.updating ? 'spin' : ''} /><span>{data.runtime.phase}</span></div> : null}
       <div className="button-row end">
         <button className="secondary" disabled={Boolean(busy) || data.runtime.nexusChecking} onClick={() => invoke('runtime-check', () => window.launcher.checkNexusRuntime())}>{busy === 'runtime-check' || data.runtime.nexusChecking ? <LoaderCircle className="spin" /> : <RefreshCw />}Check for updates</button>
-        {data.runtime.nexusAvailable && data.runtime.name !== data.runtime.nexusName?.replace(/-x86_64\.tar\.xz$/, '') ? <button className="primary" disabled={Boolean(busy) || data.runtime.updating} onClick={() => invoke('runtime-install-nexus', () => window.launcher.installNexusRuntime(), 'Nexus runtime was verified, installed, and selected.')}>{busy === 'runtime-install-nexus' || data.runtime.updating ? <LoaderCircle className="spin" /> : <ArrowDownToLine />}Install Nexus runtime{data.runtime.nexusVersion ? ` ${data.runtime.nexusVersion.replace(/^runtime-/, '')}` : ''}</button> : null}
+        {nexusRuntimeUpdateAvailable(data.runtime) ? <button className="primary" disabled={Boolean(busy) || data.runtime.updating} onClick={() => invoke('runtime-install-nexus', () => window.launcher.installNexusRuntime(), 'Nexus runtime was verified, installed, and selected.')}>{busy === 'runtime-install-nexus' || data.runtime.updating ? <LoaderCircle className="spin" /> : <ArrowDownToLine />}Install Nexus runtime{data.runtime.nexusVersion ? ` ${data.runtime.nexusVersion.replace(/^runtime-/, '')}` : ''}</button> : null}
       </div>
       {data.runtime.updating || runtimeLogs.length > 0 ? <pre className="build-log">{runtimeLogs.join('\n') || 'Waiting for output…'}</pre> : null}
     </section>
