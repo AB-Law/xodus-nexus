@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "release",
+  "status": "development",
   "sources": {
     "wine": {
       "url": "https://github.com/xodus-gaming/wine.git",
@@ -169,16 +169,20 @@
     },
     {
       "file": "assets/wine-appstate-registration.patch",
-      "sha256": "a2a385e7075d42f1174010db525be28995834f75c196059829b339314f20e048"
+      "sha256": "90d564fdadd25043ed03ec1279fa43b7717c43183ffb2d2dbee2a03158e4f090"
     },
     {
       "file": "assets/xgameruntime-taskqueue-handle-lifetime.patch",
       "sha256": "71b03c151786233956161feb5b5f0ce369101d353d5cab8b86eb717381b8c96c"
+    },
+    {
+      "file": "assets/xgameruntime-taskqueue-repeat-termination.patch",
+      "sha256": "0dd3bc5e8e32f546de2b060eaa6bc8c90197d9dd522d3ae150451a93900880d0"
     }
   ],
   "expectedWineSources": {
-    "dlls/twinapi.appcore/main.c": "6ee522b3ea4faffba2acf17ea5ef7d0ff34513db05c56cb46872172e88307bf7",
-    "dlls/twinapi.appcore/appstate-registration.h": "a609c80f826b070ff11ef2d30445ff2e9e38e23f670710465a026d9ea6c5d162"
+    "dlls/twinapi.appcore/main.c": "867b24b1a57331b9d28ba1355033e7b3a6f899bcccd6af024ea43c21b24c722e",
+    "dlls/twinapi.appcore/appstate-registration.h": "f011a711a77fd91a7d30d63f91adebcc31a2c161130af1160cd2b960f812f016"
   },
   "expectedVkd3dSources": {
     "libs/vkd3d-shader/hlsl.l": "4bcde7ac8e4e43ea848483ca78dce9be0c2bf431398a912f53d339c6581791d5"
@@ -206,7 +210,7 @@
     "dlls/xgameruntime/xstore_package_license.h": "678f109e0a0af3f5e87951666f7c891af3999658f8698eb8855387ea355e2a31",
     "dlls/xgameruntime/xsystem.c": "a3c151c5d05875b68f49c534aae9d40e3f15ec800af0f85e159ede7c95401880",
     "dlls/xgameruntime/xsystemanalytics.c": "189e99c83273b429325ecefa2b9246c45863c22f0c4006a791ec57b8f7b9d384",
-    "dlls/xgameruntime/xthreading.c": "b8fd175e1c46f61678c17f9778349de17188ef6c394f38594d869ba6365853fe",
+    "dlls/xgameruntime/xthreading.c": "2cf262d75eb6da156f14f2702ccd3d59953da5bc8f4b898709c25d5489383361",
     "dlls/xgameruntime/xuser.c": "74667ccfbde1cf063b477f53b335b4b9d07057998187a49384e7e39ba51d3ed1",
     "dlls/xgameruntime/xuser_device_events.h": "ed3b6ac25510b7bff288e36859781811e7de3985d418159ce25a2b00bc6d35cb",
     "dlls/xgameruntime/xuser_privilege.h": "4aa9a2736b59feb4d86cb86d95d99119ab1ccb6ab07b6b9a53c7da61acd0a77b",
@@ -229,7 +233,7 @@
   },
   "requiresBackendVersion": "0.2.1",
   "limitations": [
-    "App-state notifications support registration and unregistration for desktop processes. Wine has no app-container suspension event source, so no suspend/resume notifications are synthesized. App-constrained notification APIs remain unsupported.",
+    "App-state and app-constrained notifications support registration and unregistration for desktop processes. Wine has no app-container lifecycle event source, so no suspend/resume or constrained-state notifications are synthesized.",
     "Device-association subscriptions retain registration state and task queues. Device-to-Xbox-user association discovery and event delivery are unavailable; no controller association changes are synthesized.",
     "Privilege resolution refreshes authenticated XSTS claims for the requested user. Missing or denied privileges fail; account restriction and subscription remediation UI is not implemented.",
     "Application-specific device-ID queries return the documented unavailable-ID sentinel, not a unique platform identifier or hardware-attestation token.",

@@ -7,6 +7,31 @@ import type { DownloadTask } from '../shared/types.js';
 
 const created: string[] = [];
 
+describe('download bandwidth settings', () => {
+  it('defaults to unlimited and persists fractional MiB/s without changing parallelism', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'nexus-bandwidth-state-')); created.push(directory);
+    const store = new StateStore(directory); await store.load();
+    expect(store.settings.downloadLimitMiB).toBe(0);
+    const parallel = store.settings.parallelDownloads;
+    await store.setSettings({ downloadLimitMiB: 0.5 });
+    const reopened = new StateStore(directory); await reopened.load();
+    expect(reopened.settings.downloadLimitMiB).toBe(0.5);
+    expect(reopened.settings.parallelDownloads).toBe(parallel);
+    await expect(reopened.setSettings({ downloadLimitMiB: -1 })).rejects.toThrow('Download speed limit');
+    expect(reopened.settings.downloadLimitMiB).toBe(0.5);
+    const final = new StateStore(directory); await final.load();
+    expect(final.settings.downloadLimitMiB).toBe(0.5);
+  });
+  it('migrates old profiles and rejects invalid persisted rate values', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'nexus-bandwidth-migrate-')); created.push(directory);
+    for (const value of [undefined, -1, null, '2', 2048, 0.000001]) {
+      await writeFile(path.join(directory, 'launcher-state.json'), JSON.stringify({ settings: { downloadLimitMiB: value } }));
+      const store = new StateStore(directory); await store.load();
+      expect(store.settings.downloadLimitMiB).toBe(0);
+    }
+  });
+});
+
 describe('manifest XML comments', () => {
   it('imports only active metadata and never changes the manifest', async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'nexus-xml-comments-'));

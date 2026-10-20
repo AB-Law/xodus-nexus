@@ -6,11 +6,38 @@ keeps that contract when its launch arguments and behavior remain unchanged.
 
 ## Credential errors
 
-Persistent credential writes require an exact read-back before success. Missing
-or malformed device-token caches can be regenerated through genuine device
+Persistent credential writes require an exact read-back before success.
+Interactive sign-in stores the account and its complete token set together in
+one verified system-keyring record. Existing split credential records remain
+readable without automatic migration. Logout removes both storage layouts.
+
+Missing or malformed device-token caches can be regenerated through genuine device
 authentication while preserving the device identity and stored account. Invalid
 device identities and unavailable keyrings fail without automatic deletion or
 replacement provisioning.
+
+Persistent credentials written through `KeychainBackend` use the versioned
+`XODUS_KEYRING_BASE64_V1:` ASCII envelope to preserve token bytes across
+keyring serialization and reload. Base64 is **not encryption** and does not
+change the selected keyring or its password
+policy. Decoding happens before JSON validation and exact write verification.
+Existing raw credentials remain readable without read-time writes or deletion;
+malformed envelopes fail with a sanitized error. Logout treats already-missing
+entries as successfully removed while preserving other keyring errors.
+
+Sign out and sign in again if previously stored token data is already damaged.
+Older Nexus backends and unmodified upstream Xodus cannot read the new envelope
+in their shared credential store. Downgrades and switching to those builds are
+not supported; signing out alone does not restore compatibility because the
+device identity is preserved. Neither a keyring reset nor deletion of
+unrelated passwords is required. A password-protected keyring is recommended for at-rest
+security, independently of this encoding workaround.
+
+The `credential_encoding_*` Rust tests run under the existing `credential_`
+filter. `python3 scripts/keyring-textual-roundtrip.test.py` reproduces the GNOME
+writer/reader mismatch and validates the envelope using in-memory GLib keyfiles
+and synthetic data only. It is also run by Linux `test:ci-tools`; Python 3 and
+`libglib-2.0` are required. No D-Bus session, account, or real keyring is accessed.
 
 Credential failures exit nonzero and emit `NEXUS_CREDENTIAL_ERROR_V1 CODE` on
 stderr. Codes are `keyring-unavailable`, `keyring-invalid-data`,

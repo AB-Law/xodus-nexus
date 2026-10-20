@@ -29,6 +29,21 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
 });
 `;
 describe('private auth transport', () => {
+  it.each([false, true])('does not report a successful sign-in as invalid when cleanup aborts a pending view (late close: %s)', async incomplete => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-auth-completion-'));
+    let abort!: (error: Error) => void;
+    try {
+      const binary = path.join(root, 'cli');
+      const body = incomplete ? fixture.replace("out({type:'close',session:1});", '') : fixture;
+      await fs.writeFile(binary, body, { mode: 0o700 });
+      const tracked = startAuthTransport(binary, send => ({
+        async open(frame) { send(frame.session, '{}'); await new Promise<void>((_resolve, reject) => { abort = reject; }); },
+        close() {}, async context() {}, async dispose() { abort(Error('load aborted by disposal')); },
+      }), { ...process.env, FIXTURE_MODE: 'success' }, 3000);
+      if (incomplete) await expect(tracked.result).rejects.toThrow('did not complete its protocol');
+      else expect((await tracked.result).code).toBe(0);
+    } finally { await fs.rm(root, { recursive: true, force: true }); }
+  });
   it.each(['success', 'invalid', 'no-handshake', 'cancel', 'load-failure', 'credential-failure', 'unknown-credential'])('handles %s without exposing protocol output', async mode => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-auth-fixture-'));
     let disposed = false, opens = 0, closes = 0;

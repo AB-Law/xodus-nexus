@@ -3,12 +3,37 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { AccountLibrary, entitlementKind, parseEntitlements } from './account-library.js';
+import { CatalogService } from './catalog.js';
 import type { CatalogProduct } from '../shared/types.js';
 
 const A='9AAAAAAAAAAA', B='9BBBBBBBBBBB', C='9CCCCCCCCCCC';
 const row=(productId=A, extra={})=>({productId,status:'Active',isTrial:false,sharingSource:'None',endDate:'2099-01-01T00:00:00Z',special:false,...extra});
 const output=(entries=[row()],account='one@example.test',market='US')=>JSON.stringify({schema:1,account,market,checkedAt:new Date().toISOString(),entitlements:entries});
 const product=(productId:string):CatalogProduct=>({productId,title:productId,description:'',categories:[],installability:'supported',supportNote:''});
+
+it.each(['network', 'http', 'json', 'shape'])('does not cache a %s catalog failure as an empty successful library', async failure => {
+  let healthy = false;
+  const fetcher = vi.fn(async () => {
+    if (!healthy) {
+      if (failure === 'network') throw Error('private signed URL must not appear');
+      if (failure === 'http') return new Response('', { status: 503 });
+      if (failure === 'json') return new Response('{');
+      return new Response('{}');
+    }
+    return new Response(JSON.stringify({ Products: [{ ProductId: A, ProductType: 'Game',
+      LocalizedProperties: [{ ProductTitle: 'A game' }],
+      DisplaySkuAvailabilities: [{ Sku: { Properties: { Packages: [{ PackageFormat: 'MSIXVC', PlatformDependencies: [{ PlatformName: 'Windows.Desktop' }] }] } } }],
+    }] }));
+  });
+  const catalog = new CatalogService(fetcher as typeof fetch);
+  const library = new AccountLibrary((ids, market) => catalog.licensedProducts(ids, market), async () => output());
+  library.select('one@example.test', '/backend', 'US');
+  await expect(library.get('all')).rejects.toThrow('game details could not be loaded');
+  expect((await library.access()).accessByProductId[A]).toBe('owned');
+  healthy = true;
+  expect((await library.get('all')).products.map(entry => entry.productId)).toEqual([A]);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
 
 it('maps real failed child processes to safe session guidance and recovers on a later refresh', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-session-reader-'));
@@ -18,7 +43,7 @@ it('maps real failed child processes to safe session guidance and recovers on a 
   const fixture = async (stdout: string, stderr: string, code: number) => fs.writeFile(binary,
     `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(stdout)});process.stderr.write(${JSON.stringify(stderr)});process.exit(${code});\n`, { mode: 0o700 });
   try {
-    for (const [stage, message] of [['session-user-expired', 'Sign in again'], ['ticket-timeout', 'timed out'], ['session-device-refresh-failed', 'could not be renewed']]) {
+    for (const [stage, message] of [['session-user-expired', 'Sign in again'], ['ticket-timeout', 'timed out'], ['session-device-refresh-failed', 'could not be renewed'], ['ticket-response-parse', 'unreadable response'], ['ticket-interaction-required', 'interactive sign-in']]) {
       await fixture('', `private@example.test raw-secret\nNEXUS_SESSION_DIAGNOSTIC_V1 ${stage}\n`, 1);
       const failure = await library.get('all').catch(error => error as Error);
       expect(failure).toBeInstanceOf(Error);
@@ -26,6 +51,8 @@ it('maps real failed child processes to safe session guidance and recovers on a 
       expect((failure as Error).message).not.toMatch(/example\.test|raw-secret/);
     }
     expect(catalog).not.toHaveBeenCalled();
+    await fixture('', 'private-secret\nNEXUS_TICKET_DIAGNOSTIC_V1 ticket-refused 800488AB\n', 1);
+    await expect(library.get('all')).rejects.toThrow('Microsoft refused the stored sign-in (code 0x800488AB)');
     await fixture('NEXUS_SESSION_DIAGNOSTIC_V1 session-user-expired\n', 'untrusted error\n', 1);
     await expect(library.get('all')).rejects.toThrow('licenses could not be loaded');
     await fixture('', 'NEXUS_SESSION_DIAGNOSTIC_V1 ticket-timeout\nNEXUS_SESSION_DIAGNOSTIC_V1 ticket-response-received\nentitlement failure private-secret\n', 1);

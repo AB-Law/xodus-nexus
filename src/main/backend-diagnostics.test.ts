@@ -6,6 +6,45 @@ import { spawn } from 'node:child_process';
 import { BackendDiagnostics, BackendDiagnosticReader, observeBackendChild, setBackendDiagnostics } from './backend-diagnostics.js';
 import { spawnTracked } from './process.js';
 
+it('accepts only a bounded ticket error code for profile/library and never stores fault text or URLs', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-ticket-diagnostic-'));
+  try {
+    const log = new BackendDiagnostics(root);
+    for (const operation of ['library', 'profile', 'login', 'run', 'streaming']) {
+      const reader = new BackendDiagnosticReader(operation, event => log.record(event));
+      const frame = 'NEXUS_TICKET_DIAGNOSTIC_V1 ticket-refused 800488AB';
+      for (const raw of [frame, frame + ' private-secret', frame.replace('800488AB', 'https://private.test/?token=secret'),
+        frame.replace('800488AB', '800488ABC'), frame.replace('800488AB', '800488AZ')]) reader.push(Buffer.from(raw + '\n'));
+    }
+    log.record({ operation: 'library', event: 'diagnostic', stage: 'ticket-refused', serviceCode: 'private-secret' });
+    const { content } = await log.read();
+    const records = content.trim().split('\n').map(line => JSON.parse(line));
+    expect(records.filter(row => row.serviceCode)).toHaveLength(2);
+    expect(records.filter(row => row.serviceCode).map(row => row.operation)).toEqual(['library', 'profile']);
+    expect(content).not.toMatch(/private-secret|private.test|token=secret/);
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
+
+it('records exact transfer causes only for download operations and never signed URLs', () => {
+  for (const operation of ['streaming','download']) {
+    const events: unknown[] = [];
+    const reader = new BackendDiagnosticReader(operation, event => events.push(event));
+    const text = 'https://private.example/?token=SECRET\nNEXUS_TRANSFER_DIAGNOSTIC_V1 transfer-http 503\nNEXUS_TRANSFER_DIAGNOSTIC_V1 transfer-idle-timeout 0\n';
+    for (const byte of Buffer.from(text)) reader.push(Buffer.from([byte]));
+    expect(events).toEqual([
+      {operation,event:'diagnostic',stage:'transfer-http',status:503,skipped:undefined},
+      {operation,event:'diagnostic',stage:'transfer-idle-timeout',status:undefined,skipped:undefined},
+    ]);
+    for (const line of ['NEXUS_TRANSFER_DIAGNOSTIC_V1 unknown 0','NEXUS_TRANSFER_DIAGNOSTIC_V1 transfer-http 999','NEXUS_TRANSFER_DIAGNOSTIC_V1 transfer-http 403 SECRET']) reader.push(Buffer.from(line+'\n'));
+    expect(events).toHaveLength(2); expect(JSON.stringify(events)).not.toContain('SECRET');
+  }
+  for (const operation of ['login','library','profile','run','license']) {
+    const events: unknown[] = [];
+    new BackendDiagnosticReader(operation,event=>events.push(event)).push(Buffer.from('NEXUS_TRANSFER_DIAGNOSTIC_V1 transfer-http 403\n'));
+    expect(events).toHaveLength(0);
+  }
+});
+
 it('records allowlisted content-license stages/status only for licensing operations', () => {
   for (const operation of ['streaming', 'download', 'license', 'run']) {
     const events: unknown[] = [];

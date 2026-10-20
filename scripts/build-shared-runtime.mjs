@@ -161,9 +161,11 @@ for (const [name, file] of Object.entries(outputs)) {
 const tests = path.join(work, 'tests');
 provenance.runtimeCompatibility = await buildCompatibility(components);
 await fs.mkdir(tests);
-for (const fixture of [false, true]) run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-Wextra', '-Werror',
+for (const constrained of [false, true]) for (const fixture of [false, true]) run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-Wextra', '-Werror',
+  ...(constrained ? ['-DAPPCONSTRAINED_PROBE'] : []),
   ...(fixture ? ['-DAPPSTATE_SOURCE_FIXTURE', '-I', path.join(source, 'dlls/twinapi.appcore')] : []),
-  path.join(project, 'scripts/runtime-tests/appstate-probe.c'), '-o', path.join(tests, fixture ? 'appstate-source-probe.exe' : 'appstate-probe.exe'), '-lruntimeobject'], work);
+  path.join(project, 'scripts/runtime-tests/appstate-probe.c'), '-o', path.join(tests,
+    `${constrained ? 'appconstrained' : 'appstate'}${fixture ? '-source' : ''}-probe.exe`), '-lruntimeobject'], work);
 run('x86_64-w64-mingw32-gcc', ['-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', path.join(project, 'scripts/runtime-tests/hlsl-state-keywords-probe.c'), '-o', path.join(tests, 'hlsl-state-keywords-probe.exe')], work);
 // Account-free SDK fixture lives only in tests, never in the shipped runtime.
 const pgsTests = path.join(tests, 'playfab-folder');

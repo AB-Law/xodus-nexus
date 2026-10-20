@@ -1,7 +1,23 @@
 import { expect, it } from 'vitest';
-import { sessionFailureMessage, sessionStages } from './session-errors.js';
+import { sessionFailureMessage, sessionStages, ticketFailureDiagnostic } from './session-errors.js';
 
 const line = (stage: string) => `NEXUS_SESSION_DIAGNOSTIC_V1 ${stage}\n`;
+it('distinguishes refusal, interactive prompts and verification/format errors without exposing payloads', () => {
+  const frame = 'NEXUS_TICKET_DIAGNOSTIC_V1 ticket-interaction-required 800488AB';
+  expect(ticketFailureDiagnostic(frame)).toEqual({ stage: 'ticket-interaction-required', serviceCode: '800488AB' });
+  expect(sessionFailureMessage(frame)).toContain('interactive sign-in (code 0x800488AB)');
+  expect(sessionFailureMessage(frame)).toContain('has not been deleted');
+  expect(sessionFailureMessage('NEXUS_TICKET_DIAGNOSTIC_V1 ticket-refused 800488AB')).toContain('Microsoft refused');
+  expect(sessionFailureMessage(line('ticket-request-build'))).toContain('build a ticket request');
+  expect(sessionFailureMessage(line('ticket-response-parse'))).toContain('unreadable response');
+  expect(sessionFailureMessage(line('ticket-response-signature'))).toContain('verification failed');
+  expect(sessionFailureMessage(frame + '\n' + line('ticket-response-received'))).toBeUndefined();
+  expect(sessionFailureMessage(frame + '\n' + line('ticket-timeout'))).not.toContain('800488AB');
+  for (const raw of [frame + ' secret', 'prefix ' + frame, frame.replace('800488AB', '800488AZ'), frame.replace('800488AB', '800488ab'),
+    frame.replace('800488AB', 'secret@example.test'), frame.replace('800488AB', '800488A'), frame.replace('800488AB', '800488ABC')]) {
+    expect(ticketFailureDiagnostic(raw)).toBeUndefined(); expect(sessionFailureMessage(raw)).toBeUndefined();
+  }
+});
 it('distinguishes expired sign-in, transient transport and renewal failures using fixed text', () => {
   expect(sessionFailureMessage(line('session-user-expired'))).toContain('Sign in again');
   expect(sessionFailureMessage(line('session-user-expired'))).toContain('has not been deleted');
