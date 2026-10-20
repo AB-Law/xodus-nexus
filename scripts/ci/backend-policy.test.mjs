@@ -8,6 +8,18 @@ import path from 'node:path';
 import os from 'node:os';
 import { backendSourceArchiveArgs } from '../backend-source-archive.mjs';
 
+test('auth response consistency and coherent credential persistence are pinned and account-free tested', async () => {
+  const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
+  assert.ok(lock.patches.some(p => p.file === 'xodus-auth-consistency.patch'));
+  const patch = await fs.readFile('assets/xodus-auth-consistency.patch', 'utf8');
+  for (const expected of ['impl TryFrom<soap::RequestSecurityTokenResponse>', 'save_user_session',
+    'credential_login_session_failed_write_preserves_previous_session_and_empty_set_is_refused',
+    'credential_login_session_readback_failure_never_exposes_mixed_account_and_token',
+    'credential_token_response_valid_compact_delegation_and_legacy_remain_supported',
+    'credential_invalid_device_proof_returns_an_error_before_any_request']) assert.ok(patch.includes(expected), expected);
+  assert.doesNotMatch(patch, /^\+.*(?:verify_and_decrypt_envelope|\.scope_policy\(|\.hosting_app\()/m);
+});
+
 test('ticket diagnostics preserve requests, signature verification and non-retryable refusals', async () => {
   const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
   assert.ok(lock.patches.some(p => p.file === 'xodus-ticket-diagnostics.patch'));

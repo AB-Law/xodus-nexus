@@ -6,8 +6,12 @@ keeps that contract when its launch arguments and behavior remain unchanged.
 
 ## Credential errors
 
-Persistent credential writes require an exact read-back before success. Missing
-or malformed device-token caches can be regenerated through genuine device
+Persistent credential writes require an exact read-back before success.
+Interactive sign-in stores the account and its complete token set together in
+one verified system-keyring record. Existing split credential records remain
+readable without automatic migration. Logout removes both storage layouts.
+
+Missing or malformed device-token caches can be regenerated through genuine device
 authentication while preserving the device identity and stored account. Invalid
 device identities and unavailable keyrings fail without automatic deletion or
 replacement provisioning.
