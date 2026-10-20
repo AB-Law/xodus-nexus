@@ -3,6 +3,36 @@
   "approvals": [
     {
       "kind": "launcher",
+      "runId": "39473729924",
+      "commit": "8411926de55a24b6c9b910b79e61300fd63a8121",
+      "manifestSha256": "87b758ee5621aaefddadb8f026d6f1fa2ab0e080e887ff22c2c1261fd180b778",
+      "notesSha256": "4d174bf62108eca32b2d2b4a124227b9d71a694b61ce0b2ee82925e30685528c",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit human approval of the changelogs and stable promotion on 2026-10-20 after successful exact-candidate Balatro gameplay and normal quit. All three main CI workflows succeeded at 8411926. Launcher source tests799, runtime-tools34 and CI-tools45 passed; backend146 selected tests passed with two ignored. Clean runtime compiler199608 and shader regression72 checks passed, plus29 native suites,121 HTTP/TLS checks, bundled H264/AAC and40 software-DXVK checks. Exact candidate manifests, binary/source archives and SHA256/SHA512 pairs were verified. The authorized isolated test used these unchanged launcher0.3.9/backend0.2.9/runtime11.0-20261020-g8411926d artifacts with normal Xbox cloud synchronization enabled. The human confirmed gameplay and quit; game and launcher exited0, service/private bridge were ready, no fatal or service-cleanup error occurred, and all originals, source keyring records, candidate/component hashes and production pointers stayed unchanged. Zero test processes or service sessions remained after private-helper cleanup. No independently verified cloud roundtrip, multiplayer or affected-reporter recovery claim. Runtime approval changes only the release-status metadata, preserving source/base/media and all build inputs. Publish these exact tested bytes without rebuilding or activating production components."
+    },
+    {
+      "kind": "backend",
+      "runId": "39473729409",
+      "commit": "8411926de55a24b6c9b910b79e61300fd63a8121",
+      "manifestSha256": "e5ba11f1cf40c9c05f28342c9f468287ac260ae5bd1f4451cdc88a945aeea954",
+      "notesSha256": "347d12e9a4ffac9b3847f5661d0f11648f922c89a7dbe13bb79d18299d3a4ddd",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit human approval of the changelogs and stable promotion on 2026-10-20 after successful exact-candidate Balatro gameplay and normal quit. All three main CI workflows succeeded at 8411926. Launcher source tests799, runtime-tools34 and CI-tools45 passed; backend146 selected tests passed with two ignored. Clean runtime compiler199608 and shader regression72 checks passed, plus29 native suites,121 HTTP/TLS checks, bundled H264/AAC and40 software-DXVK checks. Exact candidate manifests, binary/source archives and SHA256/SHA512 pairs were verified. The authorized isolated test used these unchanged launcher0.3.9/backend0.2.9/runtime11.0-20261020-g8411926d artifacts with normal Xbox cloud synchronization enabled. The human confirmed gameplay and quit; game and launcher exited0, service/private bridge were ready, no fatal or service-cleanup error occurred, and all originals, source keyring records, candidate/component hashes and production pointers stayed unchanged. Zero test processes or service sessions remained after private-helper cleanup. No independently verified cloud roundtrip, multiplayer or affected-reporter recovery claim. Runtime approval changes only the release-status metadata, preserving source/base/media and all build inputs. Publish these exact tested bytes without rebuilding or activating production components."
+    },
+    {
+      "kind": "runtime",
+      "runId": "39473729628",
+      "commit": "8411926de55a24b6c9b910b79e61300fd63a8121",
+      "manifestSha256": "fdf0402407496f3e4ddff83f7fed35f0f6bf389fbfe100aa3c1967650fe16758",
+      "notesSha256": "909a56bdb85a4875bfa22f1b0a377841bfd30b9ae87bec197ef3263e016a9ecf",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit human approval of the changelogs and stable promotion on 2026-10-20 after successful exact-candidate Balatro gameplay and normal quit. All three main CI workflows succeeded at 8411926. Launcher source tests799, runtime-tools34 and CI-tools45 passed; backend146 selected tests passed with two ignored. Clean runtime compiler199608 and shader regression72 checks passed, plus29 native suites,121 HTTP/TLS checks, bundled H264/AAC and40 software-DXVK checks. Exact candidate manifests, binary/source archives and SHA256/SHA512 pairs were verified. The authorized isolated test used these unchanged launcher0.3.9/backend0.2.9/runtime11.0-20261020-g8411926d artifacts with normal Xbox cloud synchronization enabled. The human confirmed gameplay and quit; game and launcher exited0, service/private bridge were ready, no fatal or service-cleanup error occurred, and all originals, source keyring records, candidate/component hashes and production pointers stayed unchanged. Zero test processes or service sessions remained after private-helper cleanup. No independently verified cloud roundtrip, multiplayer or affected-reporter recovery claim. Runtime approval changes only the release-status metadata, preserving source/base/media and all build inputs. Publish these exact tested bytes without rebuilding or activating production components."
+    },
+    {
+      "kind": "launcher",
       "runId": "39289505769",
       "commit": "48eae449a35d00e4a71a9c7bb5d890b8b87f925e",
       "manifestSha256": "44f6068c4d8c1953110c546f90bcb09ec88b527426e64a2d1d94b16f70c0225c",
