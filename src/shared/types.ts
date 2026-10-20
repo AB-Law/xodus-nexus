@@ -204,6 +204,13 @@ export interface GameUpdate {
 
 export interface DiagnosticLog { name: string; content: string; truncated: boolean }
 
+export interface KeyringStatus {
+  state: 'ready' | 'locked' | 'stopped' | 'disabled' | 'missing' | 'needs-setup' | 'unavailable';
+  gameMode: boolean;
+  canStart: boolean;
+  message: string;
+}
+
 export interface AppSnapshot {
   backend: BackendStatus;
   runtime: RuntimeStatus;
@@ -348,6 +355,8 @@ export interface LauncherApi {
   installNexusRuntime(): Promise<void>;
   rollbackRuntimePreview(): Promise<void>;
   refreshAccount(): Promise<AuthStatus>;
+  checkKeyring(): Promise<KeyringStatus>;
+  startKeyring(): Promise<KeyringStatus>;
   checkLauncherUpdate(): Promise<LauncherUpdate | undefined>;
   installLauncherUpdate(): Promise<void>;
   restartLauncher(): Promise<void>;

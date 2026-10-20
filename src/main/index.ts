@@ -57,6 +57,7 @@ import { addSteamShortcut, steamAccounts, steamRunning } from './steam-shortcuts
 import { gameSteamPortrait, nexusSteamArtwork } from './steam-artwork.js';
 import { addLiveSteamShortcut } from './steam-live.js';
 import { DownloadCompletionNotifications } from './download-notifications.js';
+import { KeyringSupport } from './keyring.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const downloadNotifications = new DownloadCompletionNotifications({
@@ -97,6 +98,7 @@ const gameActivities = new GameActivities();
 const gameAchievements = new GameAchievementsReader();
 const accountLibrary = new AccountLibrary((ids, market) => catalog.licensedProducts(ids, market));
 const demoMode = process.env.XODUS_DEMO === '1';
+const keyringSupport = new KeyringSupport();
 const demoArtwork = new Map<string, DemoArtwork>();
 let launcherUpdater: LauncherUpdater;
 const gameUpdates: Record<string, GameUpdate> = {};
@@ -1061,6 +1063,8 @@ function registerDemoIpc(catalogMarket: () => string): void {
   ipcMain.handle('runtime-install-nexus', () => {});
   ipcMain.handle('runtime-rollback-preview', () => {});
   ipcMain.handle('account-refresh', () => snapshot().auth);
+  ipcMain.handle('keyring-check', () => ({ state: 'ready', gameMode: false, canStart: false, message: 'Sample system wallet is running and unlocked. No real keyring is accessed.' }));
+  ipcMain.handle('keyring-start', () => ({ state: 'ready', gameMode: false, canStart: false, message: 'Demo mode does not start real services.' }));
   ipcMain.handle('check-launcher-update', () => snapshot().launcherUpdate);
   ipcMain.handle('install-launcher-update', () => {});
   ipcMain.handle('restart-launcher', () => {});
@@ -1143,6 +1147,13 @@ function registerIpc(): void {
     emitSnapshot();
   });
   ipcMain.handle('account-refresh', () => refreshAccount());
+  ipcMain.handle('keyring-check', () => keyringSupport.check());
+  ipcMain.handle('keyring-start', async () => {
+    ensureIdle();
+    const result = await keyringSupport.start();
+    if (result.state === 'ready') void refreshAccount().catch(() => { /* Explicit refresh remains available. */ });
+    return result;
+  });
   ipcMain.handle('check-launcher-update', async () => { await checkLauncherUpdate(); emitSnapshot(); return snapshot().launcherUpdate; });
   ipcMain.handle('install-launcher-update', async () => { ensureIdle(); if (authState.running) throw new Error('Wait for sign-in to finish.'); await launcherUpdater.install(); });
   ipcMain.handle('rollback-launcher-update', async () => { ensureIdle(); await launcherUpdater.rollback(); });

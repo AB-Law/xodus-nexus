@@ -616,3 +616,20 @@ button.primary, button.secondary { border-radius: 5px; min-height: 40px; font-si
 .content-list strong, .content-list small { display: block; overflow-wrap: anywhere; }
 .content-list small { margin-top: 5px; color: #b6bec8; }
 .content-list button { flex-shrink: 0; }
+.keyring-setup { margin: 16px 0; padding: 14px; border: 1px solid var(--border, #3a4046); border-radius: 6px; }
+.keyring-status { display: flex; align-items: flex-start; gap: 10px; }
+.keyring-status > svg { flex: 0 0 20px; width: 20px; height: 20px; }
+.keyring-status p { margin: 6px 0 12px; }
+.keyring-setup .fine-print { margin: 10px 0 0; }
+.keyring-setup .button-row { margin-top: 12px; flex-wrap: wrap; }
+.keyring-compact { padding: 10px 12px; margin: 12px 0; }
+.keyring-compact-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.keyring-compact .keyring-status { align-items: center; gap: 8px; }
+.keyring-compact .keyring-status > svg { flex-basis: 16px; width: 16px; height: 16px; }
+.keyring-compact .keyring-status strong { font-size: 12px; }
+.keyring-compact .keyring-status small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
+.keyring-compact .button-row { flex: 0 0 auto; margin: 0; gap: 6px; }
+.keyring-compact button { min-height: 32px; padding: 6px 9px; font-size: 11px; }
+.keyring-compact .keyring-problem { margin: 10px 0 0; font-size: 12px; line-height: 1.5; }
+.keyring-help { margin-top: 8px; font-size: 11px; color: var(--muted); }
+.keyring-help > summary { cursor: pointer; width: fit-content; }

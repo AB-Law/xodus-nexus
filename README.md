@@ -63,6 +63,15 @@ Flatpak version available through Discover. Other browsers are not supported.
 - **Settings → Downloads** sets a combined game download speed limit in MiB/s (0 means unlimited). A supporting Nexus backend is required; saving the limit also applies it to active downloads.
 - For account, library or installation errors, use **Settings → Xodus backend → Open backend diagnostic log**. The local log contains safe error codes and operation results, not credentials. Review it before sharing.
 
+The system keyring (KDE Wallet or GNOME Keyring) stores your Microsoft sign-in
+credentials so you do not need to sign in each time. It must be enabled and
+unlocked, with Secret Service support. The first-run wizard and account Settings can check
+the service and start an installed provider (`busctl` is needed for these checks).
+On KDE, enable the wallet in **System Settings → KDE Wallet** if it was disabled.
+Complete wallet setup and unlock it in Desktop Mode before using Steam Game Mode,
+where password prompts may not be visible. Keep the wallet password enabled;
+Nexus does not change passwords, reset credentials or install a provider.
+
 Experimental gamepad navigation supports standard-mapped controllers: D-pad or
 left stick to move, A to select, B to go back, X for a game's menu, LB/RB to
 switch pages and the right stick to scroll. Mouse, touch and keyboard controls
