@@ -40,6 +40,7 @@ import { GameShortcuts, shortcutArguments, shortcutInstanceData, shortcutInstanc
 import { ShortcutLaunch } from './shortcut-launch.js';
 import { loadShortcutIcon } from './shortcut-icon.js';
 import { AccountProfile } from './account-profile.js';
+import { AccountRefresh, readAccount } from './account-refresh.js';
 import { AccountLibrary } from './account-library.js';
 import { GameActivities, installedTitleId } from './game-activity.js';
 import { GameAchievementsReader } from './game-achievements.js';
@@ -263,54 +264,65 @@ async function syncManagedWinePath(): Promise<void> {
   if (selected && selected !== store.settings.winePath) await store.setSettings({ winePath: selected });
 }
 
-async function refreshAccount(emit = true): Promise<AuthStatus> {
+const accountRefresh = new AccountRefresh();
+function accountRefreshKey(): string {
   const status = backend.current;
-  if (!status.available || !status.binaryPath) {
-    authState = { ...authState, stored: null, username: undefined, note: 'Account status is unavailable because the Xodus backend is offline.' };
-  } else if (!status.capabilities.account) {
-    authState = {
-      ...authState,
-      stored: null,
-      username: undefined,
-      note: status.source === 'external'
-        ? 'This external Xodus build cannot report the stored account. Install the Nexus backend from Settings.'
-        : 'This managed backend predates read-only account status. Update it from Settings.',
-    };
-  } else {
-    const result = await run(status.binaryPath, ['account', '--json'], { maxOutput: 20_000 });
-    if (result.code !== 0) {
-      authState = { ...authState, stored: null, username: undefined, note: 'Xodus could not read its system-keychain account record.' };
+  return JSON.stringify([status.available, status.binaryPath, status.source, status.capabilities, currentMarket()]);
+}
+async function refreshAccount(emit = true, afterAuth = false): Promise<AuthStatus> {
+  if (authState.running && !afterAuth) return structuredClone(authState);
+  const status = backend.current;
+  const key = accountRefreshKey();
+  await accountRefresh.run(key, async signal => {
+    let next: Pick<AuthStatus, 'stored' | 'username' | 'note'>;
+    if (!status.available || !status.binaryPath) {
+      next = { stored: null, username: undefined, note: 'Account status is unavailable because the Xodus backend is offline.' };
+    } else if (!status.capabilities.account) {
+      next = {
+        stored: null,
+        username: undefined,
+        note: status.source === 'external'
+          ? 'This external Xodus build cannot report the stored account. Install the Nexus backend from Settings.'
+          : 'This managed backend predates read-only account status. Update it from Settings.',
+      };
     } else {
-      try {
-        const line = result.output.split('\n').map((entry) => entry.trim()).reverse().find((entry) => entry.startsWith('{'));
-        const account = JSON.parse(line ?? '') as { stored?: unknown; username?: unknown };
-        if (account.stored === true && typeof account.username === 'string' && account.username.trim()) {
-          authState = {
-            ...authState,
-            stored: true,
-            username: account.username.trim(),
-            note: runtime?.current.name?.includes('-xgamesave-pr28-')
-              ? 'Credentials are stored by Xodus. The experimental PR #28 runtime can try in-game Xbox sign-in and two-way cloud save sync; this account status alone does not verify either.'
-              : 'Credentials are stored by Xodus in the system keychain. This does not mean in-game Xbox platform sign-in is implemented.',
-          };
-        } else if (account.stored === false) {
-          authState = { ...authState, stored: false, username: undefined, note: 'No Microsoft account is stored by Xodus.' };
-        } else {
-          throw new Error('unexpected account response');
+      const result = await readAccount(status.binaryPath, signal).catch(() => ({ code: -1, output: '' }));
+      if (result.code !== 0) {
+        next = { stored: null, username: undefined, note: 'Xodus could not read its system-keychain account record.' };
+      } else {
+        try {
+          const line = result.output.split('\n').map((entry) => entry.trim()).reverse().find((entry) => entry.startsWith('{'));
+          const account = JSON.parse(line ?? '') as { stored?: unknown; username?: unknown };
+          if (account.stored === true && typeof account.username === 'string' && account.username.trim()) {
+            next = {
+              stored: true,
+              username: account.username.trim(),
+              note: runtime?.current.name?.includes('-xgamesave-pr28-')
+                ? 'Credentials are stored by Xodus. The experimental PR #28 runtime can try in-game Xbox sign-in and two-way cloud save sync; this account status alone does not verify either.'
+                : 'Credentials are stored by Xodus in the system keychain. This does not mean in-game Xbox platform sign-in is implemented.',
+            };
+          } else if (account.stored === false) {
+            next = { stored: false, username: undefined, note: 'No Microsoft account is stored by Xodus.' };
+          } else {
+            throw new Error('unexpected account response');
+          }
+        } catch {
+          next = { stored: null, username: undefined, note: 'Xodus returned an unreadable account-status response.' };
         }
-      } catch {
-        authState = { ...authState, stored: null, username: undefined, note: 'Xodus returned an unreadable account-status response.' };
       }
     }
-  }
-  accountLibrary.select(authState.stored === true ? authState.username : undefined,
-    status.capabilities.library ? status.binaryPath : undefined, currentMarket());
-  gameActivities.select(authState.stored === true ? authState.username : undefined,
-    status.capabilities.gameActivity ? status.binaryPath : undefined);
-  gameAchievements.select(authState.stored === true ? authState.username : undefined,
-    status.capabilities.achievements ? status.binaryPath : undefined);
-  await accountProfile?.select(authState.stored === true ? authState.username : undefined,
-    status.capabilities.profile ? status.binaryPath : undefined, emit);
+    return next;
+  }, async next => {
+    authState = { ...authState, ...next };
+    accountLibrary.select(authState.stored === true ? authState.username : undefined,
+      status.capabilities.library ? status.binaryPath : undefined, currentMarket());
+    gameActivities.select(authState.stored === true ? authState.username : undefined,
+      status.capabilities.gameActivity ? status.binaryPath : undefined);
+    gameAchievements.select(authState.stored === true ? authState.username : undefined,
+      status.capabilities.achievements ? status.binaryPath : undefined);
+    await accountProfile?.select(authState.stored === true ? authState.username : undefined,
+      status.capabilities.profile ? status.binaryPath : undefined, emit);
+  }, () => key === accountRefreshKey() && (!authState.running || afterAuth));
   if (emit) emitSnapshot();
   return structuredClone(authState);
 }
@@ -319,6 +331,7 @@ async function runAuth(command: 'login' | 'logout'): Promise<void> {
   ensureIdle();
   const binary = requireBackend(command);
   const id = `auth-${randomUUID()}`;
+  accountRefresh.invalidate();
   accountLibrary.reset();
   gameActivities.select();
   gameAchievements.select();
@@ -336,7 +349,8 @@ async function runAuth(command: 'login' | 'logout'): Promise<void> {
       : spawnTracked(binary, [command], { onLine: (line) => emitLog('auth', line) });
     operations.set(id, tracked.child);
     const result = await tracked.result;
-    if (result.code === 0) await refreshAccount(false);
+    accountRefresh.invalidate();
+    if (result.code === 0) await refreshAccount(false, true);
     authState = {
       ...authState,
       running: false,
@@ -1702,6 +1716,7 @@ app.on('before-quit', (event) => {
   installQueue.stop();
   accountLibrary.reset();
   accountProfile?.cancel();
+  accountRefresh.invalidate();
   if (shutdownStarted || (!backendDiagnostics?.pendingWrites && !authJob && !preparingInstall && downloadCancellations.size === 0 && installQueue.size === 0 && operations.size === 0 && serviceSessions.size === 0 && !checkingGameUpdates && !launcherUpdater?.state.updating)) return;
   event.preventDefault();
   shutdownStarted = true;

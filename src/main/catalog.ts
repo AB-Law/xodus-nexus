@@ -305,7 +305,7 @@ export class CatalogService {
   /** Resolve licensed IDs, never search results or an install-history guess. */
   async licensedProducts(ids: string[], rawMarket: string): Promise<CatalogProduct[]> {
     if (ids.length > 60 || ids.some(id => !/^[A-Z0-9]{12}$/.test(id))) throw Error('Invalid licensed product list.');
-    const catalog = await this.details(ids, normalizeMarket(rawMarket));
+    const catalog = await this.details(ids, normalizeMarket(rawMarket), true);
     const wanted = new Set(ids);
     const rows = (Array.isArray(catalog.Products) ? catalog.Products : []).flatMap(entry => {
       const product = object(entry);
@@ -325,7 +325,7 @@ export class CatalogService {
     return parseCatalogProducts({ productsList: rows }, catalog).filter(product => product.installability === 'supported');
   }
 
-  private async details(ids: string[], market: string): Promise<DisplayCatalogResponse> {
+  private async details(ids: string[], market: string, required = false): Promise<DisplayCatalogResponse> {
     const details = new Map<string, Record<string, unknown>>();
     let pending = ids.filter((value, index, values) => values.indexOf(value) === index);
     for (let depth = 0; depth < 4 && pending.length > 0 && details.size < 100; depth += 1) {
@@ -339,8 +339,9 @@ export class CatalogService {
         detailsUrl.searchParams.set('languages', 'en-us,neutral');
         try {
           const response = await this.fetcher(detailsUrl, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
-          if (!response.ok) continue;
+          if (!response.ok) throw Error('Catalog request failed.');
           const catalog = await response.json() as DisplayCatalogResponse;
+          if (!catalog || !Array.isArray(catalog.Products)) throw Error('Invalid catalog response.');
           for (const entry of Array.isArray(catalog.Products) ? catalog.Products : []) {
             const record = object(entry);
             const id = string(record?.ProductId)?.toUpperCase();
@@ -351,6 +352,7 @@ export class CatalogService {
             }
           }
         } catch {
+          if (required) throw Error('Microsoft Store game details could not be loaded. Check your connection and retry the library.');
           // Cards remain visible even when display catalog enrichment is unavailable.
         }
       }
