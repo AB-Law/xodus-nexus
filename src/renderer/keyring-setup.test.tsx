@@ -16,3 +16,11 @@ it.each(['wizard', 'settings'])('offers explicit keyring checks and safe setup g
   expect(html).not.toContain('Start keyring service'); // Only offered after an actual activatable-provider result.
   if (location === 'wizard') expect(html.indexOf('aria-label="System keyring"')).toBeLessThan(html.indexOf('class="wizard-account"'));
 });
+it.each([false, true])('keeps limiter instructions short with bandwidth support=%s', supported => {
+  const data = demoSnapshot(); data.backend.capabilities.streamingBandwidthLimit = supported;
+  const html = renderToStaticMarkup(<SettingsPage data={data} toast={() => {}} />);
+  expect(html).toContain('0 = unlimited. Applies to active and future game downloads.');
+  expect(html).not.toContain('Small network-buffering bursts');
+  expect(html).not.toContain('Update the Nexus backend to use a speed limit');
+  expect(html).not.toContain('Keep your wallet password enabled');
+});
