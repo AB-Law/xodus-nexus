@@ -53,7 +53,6 @@ import { installSelection, readInstallPlan } from './install-plan.js';
 import { adoptLauncherFonts } from './launcher-fonts.js';
 import { externalLauncherEnvironment } from './launcher-environment.js';
 import { openDesktopTarget } from './desktop-open.js';
-import { prepareGameModeKeyring } from './session-environment.js';
 import { addSteamShortcut, steamAccounts, steamRunning } from './steam-shortcuts.js';
 import { gameSteamPortrait, nexusSteamArtwork } from './steam-artwork.js';
 import { addLiveSteamShortcut } from './steam-live.js';
@@ -1608,9 +1607,6 @@ app.whenReady().then(async () => {
       launcher: app.getVersion(), backend: backend?.current.version, source: backend?.current.source,
     }));
     setBackendDiagnostics(backendDiagnostics);
-  }
-  if (!demoMode && await prepareGameModeKeyring() === 'unavailable') {
-    console.warn('Game Mode keyring display preparation unavailable; using normal account checks.');
   }
   shortcutOnly = Boolean(startupRequest.gameId) && !demoMode;
   store = new StateStore(app.getPath('userData'));
