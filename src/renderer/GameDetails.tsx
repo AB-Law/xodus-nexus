@@ -90,6 +90,25 @@ export function GameDetailsContent({ game, back, play, manage, notices, technica
   const release = details?.releaseDate && Number.isFinite(Date.parse(details.releaseDate)) ? new Date(details.releaseDate).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : undefined;
   const lastPlayed = activity?.lastPlayed && Number.isFinite(Date.parse(activity.lastPlayed)) ? new Date(activity.lastPlayed).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'Unavailable';
   useEffect(() => {
+    if (!manageOpen) return;
+    const fit = () => {
+      const summary = manageRef.current?.querySelector('summary');
+      const menu = manageRef.current?.querySelector<HTMLElement>('[role="menu"]');
+      if (!summary || !menu) return;
+      const rect = summary.getBoundingClientRect();
+      const top = Math.max(8, (document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0) + 8);
+      const above = rect.top - top - 6, below = window.innerHeight - rect.bottom - 14;
+      const upwards = below < 240 && above > below;
+      menu.style.top = upwards ? 'auto' : 'calc(100% + 6px)';
+      menu.style.bottom = upwards ? 'calc(100% + 6px)' : 'auto';
+      menu.style.maxHeight = `${Math.max(40, Math.min(380, upwards ? above : below))}px`;
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    window.addEventListener('scroll', fit, true);
+    return () => { window.removeEventListener('resize', fit); window.removeEventListener('scroll', fit, true); };
+  }, [manageOpen]);
+  useEffect(() => {
     const escape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || document.querySelector('[role="dialog"][aria-modal="true"]')) return;
       if (manageRef.current?.open) { event.preventDefault(); closeManage(); return; }
@@ -111,7 +130,7 @@ export function GameDetailsContent({ game, back, play, manage, notices, technica
         <div className="button-row gd-play-controls">{play}</div>
         <div className="gd-stat"><Clock3 /><div><span>Xbox time played <button className="gd-refresh" aria-label="Refresh Xbox activity" disabled={activityLoading} onClick={refresh}>{activityLoading ? <LoaderCircle className="spin" /> : <RefreshCw />}</button></span><strong>{activityLoading && !activity ? 'Loading…' : formatMinutes(activity?.minutesPlayed)}</strong><small>{activityLoading ? 'Reading Xbox activity…' : activityNote(activity)}</small></div></div>
         <div className="gd-stat gd-last-played"><div><span>Last played</span><strong>{activityLoading && !activity ? 'Loading…' : lastPlayed}</strong></div></div>
-        <details ref={manageRef} className="gd-actions" data-game-menu={manageOpen ? '' : undefined} onToggle={event => setManageOpen(event.currentTarget.open)}><summary aria-label="More game actions"><MoreHorizontal /><span>Manage</span></summary><div onClick={event => { if ((event.target as HTMLElement).closest('button:not(:disabled)')) closeManage(); }}>{manage}</div></details>
+        <details ref={manageRef} className="gd-actions" data-game-menu={manageOpen ? '' : undefined} onToggle={event => setManageOpen(event.currentTarget.open)}><summary aria-label="More game actions"><MoreHorizontal /><span>Manage</span></summary><div role="menu" aria-label="Manage game" onClick={event => { if ((event.target as HTMLElement).closest('button:not(:disabled)')) closeManage(); }}>{manage}</div></details>
       </section>
       {notices}
       {achievements}

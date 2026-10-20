@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, Notification, powerSaveBlocker, screen, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, Notification, powerSaveBlocker, screen, shell } from 'electron';
 import { constants, createWriteStream, promises as fs, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -29,7 +29,7 @@ import { gameLaunchArguments, preparedGameWine } from './game-launch.js';
 import { prepareGameWrapper, type GameWrapper } from './game-wrapper.js';
 import { normalizeLaunchTools } from '../shared/launch-tools.js';
 import { LauncherUpdater } from './launcher-update.js';
-import { readDiagnosticTail } from './diagnostic-log.js';
+import { copyDiagnosticFile, diagnosticLogFile, readDiagnosticTail } from './diagnostic-log.js';
 import { BackendDiagnostics, setBackendDiagnostics } from './backend-diagnostics.js';
 import { queryGameUpdate } from './game-updates.js';
 import { DownloadProgress, PROGRESS_PREFIX } from './download-progress.js';
@@ -53,11 +53,12 @@ import { installSelection, readInstallPlan } from './install-plan.js';
 import { adoptLauncherFonts } from './launcher-fonts.js';
 import { externalLauncherEnvironment } from './launcher-environment.js';
 import { openDesktopTarget } from './desktop-open.js';
-import { prepareGameModeKeyring } from './session-environment.js';
 import { addSteamShortcut, steamAccounts, steamRunning } from './steam-shortcuts.js';
 import { gameSteamPortrait, nexusSteamArtwork } from './steam-artwork.js';
 import { addLiveSteamShortcut } from './steam-live.js';
 import { DownloadCompletionNotifications } from './download-notifications.js';
+import { KeyringSupport } from './keyring.js';
+import { showBeforeAccountCheck } from './launcher-startup.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const downloadNotifications = new DownloadCompletionNotifications({
@@ -98,6 +99,7 @@ const gameActivities = new GameActivities();
 const gameAchievements = new GameAchievementsReader();
 const accountLibrary = new AccountLibrary((ids, market) => catalog.licensedProducts(ids, market));
 const demoMode = process.env.XODUS_DEMO === '1';
+const keyringSupport = new KeyringSupport();
 const demoArtwork = new Map<string, DemoArtwork>();
 let launcherUpdater: LauncherUpdater;
 const gameUpdates: Record<string, GameUpdate> = {};
@@ -325,6 +327,20 @@ async function refreshAccount(emit = true, afterAuth = false): Promise<AuthStatu
   }, () => key === accountRefreshKey() && (!authState.running || afterAuth));
   if (emit) emitSnapshot();
   return structuredClone(authState);
+}
+
+async function refreshInitialAccount(): Promise<void> {
+  const initialAuthState = authState;
+  const keyring = await keyringSupport.check();
+  // Never overwrite a sign-in/refresh that the user started while metadata
+  // was being checked, even if that newer operation has already completed.
+  if (shutdownStarted || authState !== initialAuthState || authState.running) return;
+  if (keyring.gameMode && ['locked', 'stopped', 'disabled', 'missing', 'needs-setup'].includes(keyring.state)) {
+    authState = { ...authState, stored: null, note: keyring.message };
+    emitSnapshot();
+    return;
+  }
+  await refreshAccount();
 }
 
 async function runAuth(command: 'login' | 'logout'): Promise<void> {
@@ -1062,12 +1078,16 @@ function registerDemoIpc(catalogMarket: () => string): void {
   ipcMain.handle('runtime-install-nexus', () => {});
   ipcMain.handle('runtime-rollback-preview', () => {});
   ipcMain.handle('account-refresh', () => snapshot().auth);
+  ipcMain.handle('keyring-check', () => ({ state: 'ready', gameMode: false, canStart: false, message: 'Sample system wallet is running and unlocked. No real keyring is accessed.' }));
+  ipcMain.handle('keyring-start', () => ({ state: 'ready', gameMode: false, canStart: false, message: 'Demo mode does not start real services.' }));
   ipcMain.handle('check-launcher-update', () => snapshot().launcherUpdate);
   ipcMain.handle('install-launcher-update', () => {});
   ipcMain.handle('restart-launcher', () => {});
   ipcMain.handle('rollback-launcher-update', () => {});
   ipcMain.handle('check-game-updates', () => {});
   ipcMain.handle('read-diagnostic-log', () => ({ name: 'demo.log', content: 'Demo diagnostic log. No account data.', truncated: false }));
+  ipcMain.handle('copy-diagnostic-log', () => clipboard.writeText('Demo diagnostic log. No account data.'));
+  ipcMain.handle('reveal-diagnostic-log', () => undefined);
   ipcMain.handle('read-backend-diagnostic-log', () => ({ name: 'backend.log', content: 'Sample backend diagnostics. No account data.', truncated: false }));
   ipcMain.handle('login', () => {});
   ipcMain.handle('logout', () => {});
@@ -1144,6 +1164,13 @@ function registerIpc(): void {
     emitSnapshot();
   });
   ipcMain.handle('account-refresh', () => refreshAccount());
+  ipcMain.handle('keyring-check', () => keyringSupport.check());
+  ipcMain.handle('keyring-start', async () => {
+    ensureIdle();
+    const result = await keyringSupport.start();
+    if (result.state === 'ready') void refreshAccount().catch(() => { /* Explicit refresh remains available. */ });
+    return result;
+  });
   ipcMain.handle('check-launcher-update', async () => { await checkLauncherUpdate(); emitSnapshot(); return snapshot().launcherUpdate; });
   ipcMain.handle('install-launcher-update', async () => { ensureIdle(); if (authState.running) throw new Error('Wait for sign-in to finish.'); await launcherUpdater.install(); });
   ipcMain.handle('rollback-launcher-update', async () => { ensureIdle(); await launcherUpdater.rollback(); });
@@ -1167,6 +1194,15 @@ function registerIpc(): void {
   ipcMain.handle('read-diagnostic-log', (_event, id: string) => {
     if (!gameOperation?.logPath || gameOperation.id !== id) throw new Error('This diagnostic log is no longer available.');
     return readDiagnosticTail(gameOperation.logPath, path.join(path.dirname(store.settings.runtimeRoot), 'logs'));
+  });
+  ipcMain.handle('reveal-diagnostic-log', async (_event, id: string) => {
+    if (!gameOperation?.logPath || gameOperation.id !== id) throw new Error('This diagnostic log is no longer available.');
+    const file = await diagnosticLogFile(gameOperation.logPath, path.join(path.dirname(store.settings.runtimeRoot), 'logs'));
+    shell.showItemInFolder(file);
+  });
+  ipcMain.handle('copy-diagnostic-log', async (_event, id: string) => {
+    if (!gameOperation?.logPath || gameOperation.id !== id) throw new Error('This diagnostic log is no longer available.');
+    await copyDiagnosticFile(gameOperation.logPath, path.join(path.dirname(store.settings.runtimeRoot), 'logs'), text => clipboard.writeText(text));
   });
   ipcMain.handle('login', () => requestAuth('login'));
   ipcMain.handle('logout', () => requestAuth('logout'));
@@ -1609,9 +1645,6 @@ app.whenReady().then(async () => {
     }));
     setBackendDiagnostics(backendDiagnostics);
   }
-  if (!demoMode && await prepareGameModeKeyring() === 'unavailable') {
-    console.warn('Game Mode keyring display preparation unavailable; using normal account checks.');
-  }
   shortcutOnly = Boolean(startupRequest.gameId) && !demoMode;
   store = new StateStore(app.getPath('userData'));
   await store.load();
@@ -1681,21 +1714,26 @@ app.whenReady().then(async () => {
         backend.current.releaseAvailable && backend.current.updateAvailable) {
       try {
         await backend.update(emitSnapshot);
-        await refreshAccount(false);
+        if (mainWindow?.isVisible()) void refreshInitialAccount().catch(() => { /* The setup UI remains usable. */ });
       } catch { /* The block reason stays visible in the wizard and Settings. */ }
     }
     emitSnapshot();
   }, () => { /* Keep the installed backend available if GitHub is unreachable. */ });
   void runtime.checkNexus().then(() => emitSnapshot(), () => { /* Nexus runtime is optional. */ });
   await syncManagedWinePath();
-  await refreshAccount(false);
   void enrichLibraryCovers().then(() => emitSnapshot(), () => { /* Covers are optional. */ });
   void enrichDownloadCovers(store.downloads, currentMarket()).catch(() => { /* Covers are optional. */ });
   void checkLauncherUpdate().then(() => emitSnapshot());
   registerIpc();
   launchReady = true;
-  if (startupRequest.gameId) receiveLaunchRequest(startupRequest.gameId);
-  else await showLauncher();
+  if (startupRequest.gameId) {
+    await refreshAccount(false);
+    receiveLaunchRequest(startupRequest.gameId);
+  } else await showBeforeAccountCheck(showLauncher, refreshInitialAccount, () => {
+    if (shutdownStarted || authState.running || authState.lastResult === 'success') return;
+    authState = { ...authState, note: 'Account status is unavailable. Check the system keyring in Settings, then refresh.' };
+    emitSnapshot();
+  });
   for (const id of pendingRequests.splice(0)) receiveLaunchRequest(id);
   for (const error of pendingShortcutErrors.splice(0)) void shortcutError(error);
   app.on('activate', () => { void showLauncher(); });
