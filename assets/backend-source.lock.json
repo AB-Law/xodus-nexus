@@ -38,6 +38,6 @@
     { "file": "xodus-auth-consistency.patch", "sha256": "930dd88e5ecef2628973ebb4f1652f6888951d71e6531dda7d5d7a258eb435dd" },
     { "file": "xodus-metadata-recovery.patch", "sha256": "b72c473615f2e5d359101cb5fae404aa3b54a34a73118b1c7f99238bd16860e3" },
     { "file": "xodus-streaming-handoff.patch", "sha256": "3be60b5dbca7fae0cb97e18e64665662620b9527c4c1340acfb4c2e2d497e648" },
-    { "file": "xodus-store-ticket.patch", "sha256": "ff2fcfe30111404ee3affcdb40c37b8870a5e51f8a20ff4a92d58067d9ecb936" }
+    { "file": "xodus-store-ticket.patch", "sha256": "5302a699a06208c9b51809eea31261a2a53facce1af3177611ecfc050abb4eb5" }
   ]
 }

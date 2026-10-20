@@ -126,6 +126,9 @@ test('delegation-compact store tickets are converted only for Store and licensin
     'store_license_accepts_delegation_compact_user_tickets']) assert.ok(patch.includes(expected), expected);
   assert.doesNotMatch(patch, /diff --git a\/.*(?:tokens\/|login\.rs)/);
   assert.doesNotMatch(patch, /^-.*"d=\{\}"/m);
+  assert.ok(patch.includes('Token::try_from(response).map_err(|_| FAIL)?'));
+  assert.ok(lock.patches.findIndex(p => p.file === 'xodus-auth-consistency.patch') <
+    lock.patches.findIndex(p => p.file === 'xodus-store-ticket.patch'));
 });
 
 test('content-license parsing is pinned, regression-tested and does not change authentication or streaming', async () => {

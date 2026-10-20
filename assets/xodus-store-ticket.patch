@@ -65,7 +65,7 @@ index 1f465ee..481c698 100644
      };
 -    if response.token_type != "urn:passport:compact" { return Err(FAIL) }
 +    if !user_ticket_type(&response.token_type) { return Err(FAIL) }
-     let Token::Compact(user_token) = response.into() else { return Err(FAIL) };
+     let Token::Compact(user_token) = Token::try_from(response).map_err(|_| FAIL)? else { return Err(FAIL) };
 +    let user_token = xodus::models::secrets::store_ticket(user_token);
      let mut response = context.client.post("https://licensing.mp.microsoft.com/v8.0/licenseToken")
          .timeout(Duration::from_secs(60)).header("from", "XboxLicenseManager")
