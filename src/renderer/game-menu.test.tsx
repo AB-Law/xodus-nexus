@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { readFileSync } from 'node:fs';
 import { demoSnapshot } from '../shared/demo-data';
-import { GameContextMenu, LibraryPage } from './App';
+import { GameContextMenu, GameMenuActions, LibraryPage } from './App';
 
 describe('VC++ action placement', () => {
-  it('does not show the prerequisite button in the game detail panel', () => {
+  it('keeps management actions out of the closed library grid', () => {
     const html = renderToStaticMarkup(<LibraryPage data={demoSnapshot()} toast={() => {}} />);
     expect(html).not.toContain('Install / update VC++');
   });
@@ -22,6 +23,19 @@ describe('VC++ action placement', () => {
     expect(html).toContain('disabled');
     expect(html).toContain('Select a full Proton runtime.');
   });
+});
+
+it('uses the same action component for the detail Manage and library menus', () => {
+  const props = { game: demoSnapshot().games[0], options: { cloudSaves: true, vcInstall: true }, busy: false,
+    onBrowse: () => {}, onSettings: () => {}, onInstallVc: () => {}, onRemove: () => {}, onShortcut: () => {},
+    onUpdate: () => {}, onContent: () => {} };
+  const shared = renderToStaticMarkup(<GameMenuActions {...props} />);
+  const context = renderToStaticMarkup(<GameContextMenu x={0} y={0} {...props} />);
+  expect(context).toContain(shared);
+  for (const name of ['Install / update VC++', 'Remove game', 'Game settings', 'Manage content', 'Check for updates', 'Add to Steam']) expect(shared).toContain(name);
+  const source = readFileSync('src/renderer/App.tsx', 'utf8');
+  expect(source).toContain('manage={<GameMenuActions {...managementProps(selected)} />}');
+  expect(source).toContain('{...managementProps(menuGame)}');
 });
 
 it('offers both game shortcut destinations only for ready installations', () => {
