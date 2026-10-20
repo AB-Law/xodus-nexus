@@ -108,6 +108,8 @@ test('backend build runs account-free credential persistence regressions', async
   const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
   assert.ok(lock.patches.some(patch => patch.file === 'xodus-keyring-credentials.patch'));
   assert.ok(lock.patches.some(patch => patch.file === 'xodus-keyring-encoding.patch'));
+  assert.ok(lock.patches.findIndex(p => p.file === 'xodus-auth-consistency.patch') <
+    lock.patches.findIndex(p => p.file === 'xodus-keyring-encoding.patch'));
 });
 
 test('GNOME textual keyring regression uses only in-memory synthetic data', { skip: process.platform !== 'linux' }, () => {

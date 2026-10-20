@@ -17,21 +17,19 @@ device identities and unavailable keyrings fail without automatic deletion or
 replacement provisioning.
 
 Persistent credentials written through `KeychainBackend` use the versioned
-`XODUS_KEYRING_BASE64_V1:` ASCII envelope. GNOME Keyring 50.0's passwordless
-textual format writes secrets with `g_key_file_set_value` but reads them with
-`g_key_file_get_string`: escaped quotes in JSON containing XML can fail to read,
-and other backslash escapes can silently change. Base64 avoids those escapes;
-it is **not encryption** and does not change the selected keyring or its password
+`XODUS_KEYRING_BASE64_V1:` ASCII envelope to preserve token bytes across
+keyring serialization and reload. Base64 is **not encryption** and does not
+change the selected keyring or its password
 policy. Decoding happens before JSON validation and exact write verification.
 Existing raw credentials remain readable without read-time writes or deletion;
 malformed envelopes fail with a sanitized error. Logout treats already-missing
 entries as successfully removed while preserving other keyring errors.
 
-After upgrading an affected installation, sign out and sign in once to regenerate
-lost token caches. Older backends cannot read the new envelope. Downgrading
-requires decoding wrapped entries in place before switching binaries; signing
-out alone is insufficient because it preserves the device identity. Automatic
-downgrade migration is not included. Neither a keyring reset nor deletion of
+Sign out and sign in again if previously stored token data is already damaged.
+Older Nexus backends and unmodified upstream Xodus cannot read the new envelope
+in their shared credential store. Downgrades and switching to those builds are
+not supported; signing out alone does not restore compatibility because the
+device identity is preserved. Neither a keyring reset nor deletion of
 unrelated passwords is required. A password-protected keyring is recommended for at-rest
 security, independently of this encoding workaround.
 

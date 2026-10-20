@@ -41,7 +41,7 @@
  
  pub struct KeychainBackend;
  
-@@ -6,17 +42,84 @@
+@@ -6,20 +42,84 @@
      fn get(&self, key: &str) -> Result<Option<Vec<u8>>, TokenStoreError> {
          let entry = crate::secrets::get_entry(key)?;
          match entry.get_secret() {
@@ -58,7 +58,10 @@
      }
  
      fn remove(&self, key: &str) -> Result<(), TokenStoreError> {
--        Ok(crate::secrets::get_entry(key)?.delete_credential()?)
+-        match crate::secrets::get_entry(key)?.delete_credential() {
+-            Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
+-            Err(error) => Err(error.into()),
+-        }
 +        deletion_result(crate::secrets::get_entry(key)?.delete_credential())
      }
  }
