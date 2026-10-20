@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fix repeated Xbox task-queue termination requests leaving games waiting during world cleanup or shutdown.
+
+## Unreleased
+
 ## Backend 0.2.7
 
 - Keep independently verified account-library records available when other license records are invalid or conflicting.

@@ -58,6 +58,7 @@ test('assembly replaces symlink entries without altering base/old runtime', asyn
     assert.equal(await fs.readFile(path.join(f.output, 'files/share/default_pfx/drive_c/windows/system32/windows.web.dll'), 'utf8'), 'new-windows.web.dll');
     assert.equal(await fs.readFile(path.join(f.output, 'files/share/default_pfx/drive_c/windows/system32/libvkd3d-shader-1.dll'), 'utf8'), 'new-libvkd3d-shader-1.dll');
     assert.ok(metadata.features.includes('hlsl-state-keywords-v1'));
+    assert.ok(metadata.features.includes('xtaskqueue-repeat-termination-v1'));
     assert.throws(f.run, /Command failed/);
   } finally { await fs.rm(f.root, { recursive: true, force: true }); }
 });
