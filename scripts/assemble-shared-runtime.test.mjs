@@ -42,6 +42,7 @@ test('assembly replaces symlink entries without altering base/old runtime', asyn
     f.run();
     const metadata = JSON.parse(await fs.readFile(path.join(f.output, 'XODUS_NEXUS_PATCH.json'), 'utf8'));
     assert.ok(metadata.features.includes('appstate-registration-v1'));
+    assert.ok(metadata.features.includes('appconstrained-registration-v1'));
     assert.equal(await fs.readFile(path.join(f.output, 'files/lib/wine/x86_64-windows/twinapi.appcore.dll'), 'utf8'), 'new-twinapi.appcore.dll');
     assert.equal(await fs.readFile(path.join(f.output, 'files/share/default_pfx/drive_c/windows/system32/twinapi.appcore.dll'), 'utf8'), 'new-twinapi.appcore.dll');
     for (const capability of ['xstore-entitlements-v1', 'xpackage-content-v1', 'xstore-package-license-v1']) assert.ok(metadata.features.includes(capability));

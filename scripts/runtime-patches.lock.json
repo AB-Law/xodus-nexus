@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "release",
+  "status": "development",
   "sources": {
     "wine": {
       "url": "https://github.com/xodus-gaming/wine.git",
@@ -169,7 +169,7 @@
     },
     {
       "file": "assets/wine-appstate-registration.patch",
-      "sha256": "a2a385e7075d42f1174010db525be28995834f75c196059829b339314f20e048"
+      "sha256": "90d564fdadd25043ed03ec1279fa43b7717c43183ffb2d2dbee2a03158e4f090"
     },
     {
       "file": "assets/xgameruntime-taskqueue-handle-lifetime.patch",
@@ -177,8 +177,8 @@
     }
   ],
   "expectedWineSources": {
-    "dlls/twinapi.appcore/main.c": "6ee522b3ea4faffba2acf17ea5ef7d0ff34513db05c56cb46872172e88307bf7",
-    "dlls/twinapi.appcore/appstate-registration.h": "a609c80f826b070ff11ef2d30445ff2e9e38e23f670710465a026d9ea6c5d162"
+    "dlls/twinapi.appcore/main.c": "867b24b1a57331b9d28ba1355033e7b3a6f899bcccd6af024ea43c21b24c722e",
+    "dlls/twinapi.appcore/appstate-registration.h": "f011a711a77fd91a7d30d63f91adebcc31a2c161130af1160cd2b960f812f016"
   },
   "expectedVkd3dSources": {
     "libs/vkd3d-shader/hlsl.l": "4bcde7ac8e4e43ea848483ca78dce9be0c2bf431398a912f53d339c6581791d5"
@@ -229,7 +229,7 @@
   },
   "requiresBackendVersion": "0.2.1",
   "limitations": [
-    "App-state notifications support registration and unregistration for desktop processes. Wine has no app-container suspension event source, so no suspend/resume notifications are synthesized. App-constrained notification APIs remain unsupported.",
+    "App-state and app-constrained notifications support registration and unregistration for desktop processes. Wine has no app-container lifecycle event source, so no suspend/resume or constrained-state notifications are synthesized.",
     "Device-association subscriptions retain registration state and task queues. Device-to-Xbox-user association discovery and event delivery are unavailable; no controller association changes are synthesized.",
     "Privilege resolution refreshes authenticated XSTS claims for the requested user. Missing or denied privileges fail; account restriction and subscription remediation UI is not implemented.",
     "Application-specific device-ID queries return the documented unavailable-ID sentinel, not a unique platform identifier or hardware-attestation token.",

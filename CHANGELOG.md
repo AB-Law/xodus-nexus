@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix Jurassic World Evolution 3 aborting during app-constrained notification registration at startup.
+
 ## Backend 0.2.7
 
 - Keep independently verified account-library records available when other license records are invalid or conflicting.

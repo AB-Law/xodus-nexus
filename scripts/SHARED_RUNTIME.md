@@ -91,10 +91,10 @@ must not reuse stale handles after their storage can have been recycled.
 
 ### App-state subscriptions
 
-App-state notification subscriptions support registration and unregistration,
-including concurrent callers. Desktop processes have no app-container suspension
-event source, so the runtime does not synthesize suspend/resume callbacks.
-App-constrained notifications remain unsupported.
+App-state and app-constrained subscriptions support registration and
+unregistration, including concurrent callers. Desktop processes have no
+app-container lifecycle event source, so the runtime does not synthesize
+suspend/resume or constrained-state callbacks.
 
 ### Configuration bootstrap
 
