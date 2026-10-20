@@ -29,6 +29,7 @@ async function readProfile(binary: string, signal: AbortSignal): Promise<string>
 export class AccountProfile {
   value?: XboxProfile;
   private account?: string;
+  private binary?: string;
   private generation = 0;
   private controller?: AbortController;
   private refreshedAt = 0;
@@ -48,8 +49,13 @@ export class AccountProfile {
   }
   async select(account: string | undefined, binary?: string, force = false): Promise<void> {
     const switched = account !== this.account;
-    if (switched || !account || force) this.cancel();
+    const backendChanged = binary !== this.binary;
+    // Repeated Refresh clicks must share an existing request. Aborting it can
+    // interrupt device renewal and disguises a UI cancellation as a backend crash.
+    if (switched || backendChanged || !account) this.cancel();
     this.account = account;
+    this.binary = binary;
+    if (backendChanged) this.refreshedAt = 0;
     const generation = this.generation;
     if (!account) {
       this.value = undefined; this.refreshedAt = 0; this.changed();
@@ -72,7 +78,7 @@ export class AccountProfile {
         await this.write(() => fs.rm(this.file, { force: true }));
       }
     }
-    if (generation !== this.generation || !binary || (!force && (this.controller || Date.now() - this.refreshedAt < 10 * 60_000))) return;
+    if (generation !== this.generation || !binary || this.controller || (!force && Date.now() - this.refreshedAt < 10 * 60_000)) return;
     const controller = new AbortController(); this.controller = controller;
     this.job = (async () => {
       try {

@@ -7,6 +7,8 @@ import { randomUUID } from 'node:crypto';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { AppSnapshot, AuthStatus, DownloadTask, Game, GameLaunchOptions, GameOperation, GameUpdate, InstallRequest, Settings } from '../shared/types.js';
 import { downloadFailure, safeProductId } from '../shared/utils.js';
+import { downloadLimitArgs, downloadLimitKiB } from '../shared/download-bandwidth.js';
+import { DownloadBandwidthControls, isBandwidthOnlyPatch } from './download-bandwidth.js';
 import { demoAccountLibrary, demoAccountProducts, demoDownloads, demoGames, demoLaunchOptions, demoLocales, demoSnapshot, type DemoArtwork } from '../shared/demo-data.js';
 import { backendLock } from './backend-package.js';
 import { BackendManager } from './backend.js';
@@ -38,6 +40,7 @@ import { GameShortcuts, shortcutArguments, shortcutInstanceData, shortcutInstanc
 import { ShortcutLaunch } from './shortcut-launch.js';
 import { loadShortcutIcon } from './shortcut-icon.js';
 import { AccountProfile } from './account-profile.js';
+import { AccountRefresh, readAccount } from './account-refresh.js';
 import { AccountLibrary } from './account-library.js';
 import { GameActivities, installedTitleId } from './game-activity.js';
 import { GameAchievementsReader } from './game-achievements.js';
@@ -76,6 +79,7 @@ const cancelledDownloads = new Set<string>();
 const downloadCancellations = new Map<string, Promise<void>>();
 let downloadCleanup: DownloadCleanup;
 const downloadControls = new Map<string, (paused: boolean) => Promise<void>>();
+const downloadLimitControls = new DownloadBandwidthControls();
 const installQueue = new InstallQueue(() => finishShortcutSession());
 const gameDisplay = new GameDisplayBlocker(powerSaveBlocker);
 const serviceSessions = new Map<string, XodusServiceSession>();
@@ -260,54 +264,65 @@ async function syncManagedWinePath(): Promise<void> {
   if (selected && selected !== store.settings.winePath) await store.setSettings({ winePath: selected });
 }
 
-async function refreshAccount(emit = true): Promise<AuthStatus> {
+const accountRefresh = new AccountRefresh();
+function accountRefreshKey(): string {
   const status = backend.current;
-  if (!status.available || !status.binaryPath) {
-    authState = { ...authState, stored: null, username: undefined, note: 'Account status is unavailable because the Xodus backend is offline.' };
-  } else if (!status.capabilities.account) {
-    authState = {
-      ...authState,
-      stored: null,
-      username: undefined,
-      note: status.source === 'external'
-        ? 'This external Xodus build cannot report the stored account. Install the Nexus backend from Settings.'
-        : 'This managed backend predates read-only account status. Update it from Settings.',
-    };
-  } else {
-    const result = await run(status.binaryPath, ['account', '--json'], { maxOutput: 20_000 });
-    if (result.code !== 0) {
-      authState = { ...authState, stored: null, username: undefined, note: 'Xodus could not read its system-keychain account record.' };
+  return JSON.stringify([status.available, status.binaryPath, status.source, status.capabilities, currentMarket()]);
+}
+async function refreshAccount(emit = true, afterAuth = false): Promise<AuthStatus> {
+  if (authState.running && !afterAuth) return structuredClone(authState);
+  const status = backend.current;
+  const key = accountRefreshKey();
+  await accountRefresh.run(key, async signal => {
+    let next: Pick<AuthStatus, 'stored' | 'username' | 'note'>;
+    if (!status.available || !status.binaryPath) {
+      next = { stored: null, username: undefined, note: 'Account status is unavailable because the Xodus backend is offline.' };
+    } else if (!status.capabilities.account) {
+      next = {
+        stored: null,
+        username: undefined,
+        note: status.source === 'external'
+          ? 'This external Xodus build cannot report the stored account. Install the Nexus backend from Settings.'
+          : 'This managed backend predates read-only account status. Update it from Settings.',
+      };
     } else {
-      try {
-        const line = result.output.split('\n').map((entry) => entry.trim()).reverse().find((entry) => entry.startsWith('{'));
-        const account = JSON.parse(line ?? '') as { stored?: unknown; username?: unknown };
-        if (account.stored === true && typeof account.username === 'string' && account.username.trim()) {
-          authState = {
-            ...authState,
-            stored: true,
-            username: account.username.trim(),
-            note: runtime?.current.name?.includes('-xgamesave-pr28-')
-              ? 'Credentials are stored by Xodus. The experimental PR #28 runtime can try in-game Xbox sign-in and two-way cloud save sync; this account status alone does not verify either.'
-              : 'Credentials are stored by Xodus in the system keychain. This does not mean in-game Xbox platform sign-in is implemented.',
-          };
-        } else if (account.stored === false) {
-          authState = { ...authState, stored: false, username: undefined, note: 'No Microsoft account is stored by Xodus.' };
-        } else {
-          throw new Error('unexpected account response');
+      const result = await readAccount(status.binaryPath, signal).catch(() => ({ code: -1, output: '' }));
+      if (result.code !== 0) {
+        next = { stored: null, username: undefined, note: 'Xodus could not read its system-keychain account record.' };
+      } else {
+        try {
+          const line = result.output.split('\n').map((entry) => entry.trim()).reverse().find((entry) => entry.startsWith('{'));
+          const account = JSON.parse(line ?? '') as { stored?: unknown; username?: unknown };
+          if (account.stored === true && typeof account.username === 'string' && account.username.trim()) {
+            next = {
+              stored: true,
+              username: account.username.trim(),
+              note: runtime?.current.name?.includes('-xgamesave-pr28-')
+                ? 'Credentials are stored by Xodus. The experimental PR #28 runtime can try in-game Xbox sign-in and two-way cloud save sync; this account status alone does not verify either.'
+                : 'Credentials are stored by Xodus in the system keychain. This does not mean in-game Xbox platform sign-in is implemented.',
+            };
+          } else if (account.stored === false) {
+            next = { stored: false, username: undefined, note: 'No Microsoft account is stored by Xodus.' };
+          } else {
+            throw new Error('unexpected account response');
+          }
+        } catch {
+          next = { stored: null, username: undefined, note: 'Xodus returned an unreadable account-status response.' };
         }
-      } catch {
-        authState = { ...authState, stored: null, username: undefined, note: 'Xodus returned an unreadable account-status response.' };
       }
     }
-  }
-  accountLibrary.select(authState.stored === true ? authState.username : undefined,
-    status.capabilities.library ? status.binaryPath : undefined, currentMarket());
-  gameActivities.select(authState.stored === true ? authState.username : undefined,
-    status.capabilities.gameActivity ? status.binaryPath : undefined);
-  gameAchievements.select(authState.stored === true ? authState.username : undefined,
-    status.capabilities.achievements ? status.binaryPath : undefined);
-  await accountProfile?.select(authState.stored === true ? authState.username : undefined,
-    status.capabilities.profile ? status.binaryPath : undefined, emit);
+    return next;
+  }, async next => {
+    authState = { ...authState, ...next };
+    accountLibrary.select(authState.stored === true ? authState.username : undefined,
+      status.capabilities.library ? status.binaryPath : undefined, currentMarket());
+    gameActivities.select(authState.stored === true ? authState.username : undefined,
+      status.capabilities.gameActivity ? status.binaryPath : undefined);
+    gameAchievements.select(authState.stored === true ? authState.username : undefined,
+      status.capabilities.achievements ? status.binaryPath : undefined);
+    await accountProfile?.select(authState.stored === true ? authState.username : undefined,
+      status.capabilities.profile ? status.binaryPath : undefined, emit);
+  }, () => key === accountRefreshKey() && (!authState.running || afterAuth));
   if (emit) emitSnapshot();
   return structuredClone(authState);
 }
@@ -316,6 +331,7 @@ async function runAuth(command: 'login' | 'logout'): Promise<void> {
   ensureIdle();
   const binary = requireBackend(command);
   const id = `auth-${randomUUID()}`;
+  accountRefresh.invalidate();
   accountLibrary.reset();
   gameActivities.select();
   gameAchievements.select();
@@ -333,7 +349,8 @@ async function runAuth(command: 'login' | 'logout'): Promise<void> {
       : spawnTracked(binary, [command], { onLine: (line) => emitLog('auth', line) });
     operations.set(id, tracked.child);
     const result = await tracked.result;
-    if (result.code === 0) await refreshAccount(false);
+    accountRefresh.invalidate();
+    if (result.code === 0) await refreshAccount(false, true);
     authState = {
       ...authState,
       running: false,
@@ -489,6 +506,7 @@ async function runDownload(task: DownloadTask, binary: string, market: string, u
   if (selectedContentId) args.push('--selected-content-id', selectedContentId);
   if (structured) args.push('--progress-json');
   if (controllable) args.push('--control-stdin');
+  args.push(...downloadLimitArgs(store.settings.downloadLimitMiB, backend.current.capabilities));
   const progressTracker = new DownloadProgress();
   let lastLoggedPercent = -1;
   let pending: { paused: boolean; resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> } | undefined;
@@ -527,6 +545,7 @@ async function runDownload(task: DownloadTask, binary: string, market: string, u
     task.controlPending = false; scheduleSnapshot();
   });
   operations.set(id, tracked.child);
+  if (backend.current.capabilities.streamingBandwidthLimit) downloadLimitControls.attach(id, tracked.child.stdin);
   if (controllable) downloadControls.set(id, paused => new Promise<void>((resolve, reject) => {
     if (pending || !task.canPause || !['running', 'paused'].includes(task.status)) { reject(new Error('This download cannot be paused or resumed right now.')); return; }
     if ((task.status === 'paused') === paused) { resolve(); return; }
@@ -539,6 +558,7 @@ async function runDownload(task: DownloadTask, binary: string, market: string, u
     tracked.child.stdin.write(JSON.stringify({ schema: 1, command: paused ? 'pause' : 'resume' }) + '\n');
   }));
   const finishControls = () => {
+    downloadLimitControls.detach(id);
     downloadControls.delete(id);
     if (pending) { clearTimeout(pending.timer); pending.reject(new Error('The download has ended.')); pending = undefined; }
     task.canPause = false; task.controlPending = false;
@@ -1383,8 +1403,13 @@ function registerIpc(): void {
     emitSnapshot();
   });
   ipcMain.handle('update-settings', async (_event, patch: Partial<Settings>) => {
+    if (patch.downloadLimitMiB !== undefined) {
+      downloadLimitKiB(patch.downloadLimitMiB);
+      downloadLimitArgs(patch.downloadLimitMiB, backend.current.capabilities);
+    }
     if ((['market', 'winePath', 'externalXodusRoot', 'runtimeRoot'] as const).some(key => patch[key] !== undefined && patch[key] !== store.settings[key])) ensureIdle();
     const allowed: Partial<Settings> = {};
+    if (patch.downloadLimitMiB !== undefined) allowed.downloadLimitMiB = patch.downloadLimitMiB;
     if (typeof patch.installRoot === 'string') allowed.installRoot = path.resolve(patch.installRoot);
     if (typeof patch.market === 'string' && /^[A-Za-z-]{2,20}$/.test(patch.market)) allowed.market = patch.market;
     if (typeof patch.parallelDownloads === 'number') allowed.parallelDownloads = Math.max(1, Math.min(16, Math.round(patch.parallelDownloads)));
@@ -1394,6 +1419,12 @@ function registerIpc(): void {
     if (typeof patch.verboseLogs === 'boolean') allowed.verboseLogs = patch.verboseLogs;
     if (typeof patch.firstRunCompleted === 'boolean') allowed.firstRunCompleted = patch.firstRunCompleted;
     const settings = await store.setSettings(allowed);
+    if (patch.downloadLimitMiB !== undefined) {
+      try { await downloadLimitControls.apply(settings.downloadLimitMiB ?? 0); }
+      catch { emitSnapshot(); throw Error('The speed limit was saved, but could not be sent to the active download. Retry the installation to apply it.'); }
+    }
+    // A bandwidth-only change must not restart authentication or refresh devices.
+    if (isBandwidthOnlyPatch(patch)) { emitSnapshot(); return settings; }
     backend.setExternalRoot(settings.externalXodusRoot);
     runtime.setRoot(settings.runtimeRoot);
     await backend.refresh();
@@ -1685,6 +1716,7 @@ app.on('before-quit', (event) => {
   installQueue.stop();
   accountLibrary.reset();
   accountProfile?.cancel();
+  accountRefresh.invalidate();
   if (shutdownStarted || (!backendDiagnostics?.pendingWrites && !authJob && !preparingInstall && downloadCancellations.size === 0 && installQueue.size === 0 && operations.size === 0 && serviceSessions.size === 0 && !checkingGameUpdates && !launcherUpdater?.state.updating)) return;
   event.preventDefault();
   shutdownStarted = true;

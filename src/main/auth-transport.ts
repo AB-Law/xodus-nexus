@@ -21,7 +21,7 @@ export function startAuthTransport(binary: string, createView: AuthViewFactory, 
     env: { ...externalLauncherEnvironment(environment), XODUS_LOG: 'off', RUST_LOG: 'off' }, stdio: ['pipe', 'pipe', 'pipe'], shell: false,
   });
   observeBackendChild(child, 'login');
-  let ready = false, active: number | undefined, latest = 0, stopped = false, cancelled = false;
+  let ready = false, active: number | undefined, latest = 0, stopped = false, cancelled = false, completing = false;
   let failure: Error | undefined, line = '', total = 0, queue = Promise.resolve();
   let abortTimer: ReturnType<typeof setTimeout> | undefined;
   const decoder = new StringDecoder('utf8');
@@ -55,9 +55,15 @@ export function startAuthTransport(binary: string, createView: AuthViewFactory, 
         if (!ready) throw Error('Missing sign-in protocol handshake.');
         if (frame.type === 'open') {
           if (frame.session <= latest || latest >= 32) throw Error('Invalid sign-in session order.');
-          active = frame.session; latest = frame.session; if (!stopped) await view.open(frame);
+          active = frame.session; latest = frame.session;
+          if (!stopped) {
+            try { await view.open(frame); }
+            catch (error) { if (!completing) throw error; }
+          }
         } else if (frame.session === active) {
-          if (frame.type === 'context') { if (!stopped) await view.context(frame.session, frame.context); }
+          if (frame.type === 'context') {
+            if (!stopped) { try { await view.context(frame.session, frame.context); } catch (error) { if (!completing) throw error; } }
+          }
           else { active = undefined; view.close(frame.session); }
         } else throw Error('Unexpected sign-in session.');
       }).catch(() => fail('The sign-in backend returned an invalid response.'));
@@ -67,6 +73,9 @@ export function startAuthTransport(binary: string, createView: AuthViewFactory, 
   const result = new Promise<{ code: number; output: string }>((resolve, reject) => {
     child.once('error', () => { failure = Error('Unable to start the external sign-in backend.'); });
     child.once('close', async code => {
+      // Disposing an already successful sign-in can abort loadURL/JS promises.
+      // Ignore only those view rejections, never protocol validation failures.
+      completing = code === 0 && !cancelled && !failure;
       stopped = true; clearTimeout(timer); clearTimeout(force); clearTimeout(abortTimer);
       await view.dispose().catch(() => {}); await queue;
       if (failure) { backendDiagnostic({ operation: 'login', event: 'validation', stage: 'protocol-error' }); reject(failure); }

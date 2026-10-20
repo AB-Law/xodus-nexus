@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fix Jurassic World Evolution 3 aborting during app-constrained notification registration at startup.
+- Fix repeated Xbox task-queue termination requests leaving games waiting during world cleanup or shutdown.
+
 ## Backend 0.2.7
 
 - Keep independently verified account-library records available when other license records are invalid or conflicting.

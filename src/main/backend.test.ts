@@ -13,7 +13,7 @@ vi.mock('./process.js', async importOriginal => {
   return { ...actual, run: vi.fn(async (cmd: string, args: string[], options: object) => {
     if (cmd.endsWith('/xodus-cli')) {
       const marker = (await fs.readFile(cmd))[63];
-      return { code: 0, output: args[0] === 'streaming' ? '--selected-content-id\n' + (marker === 3 ? '--progress-json\n--control-stdin\n' : '') : args[0] === 'run' ? (marker === 2 ? '--unsupported' : '--materialize-chain') :
+      return { code: 0, output: args[0] === 'streaming' ? '--selected-content-id\n' + ([3,5].includes(marker) ? '--progress-json\n--control-stdin\n' : '') + (marker === 3 ? '--download-limit-kib\n' : '') : args[0] === 'run' ? (marker === 2 ? '--unsupported' : '--materialize-chain') :
         (marker === 1 ? 'xodus-cli 0.1.0\n  login    Login\n  streaming    Streaming\n' :
         'xodus-cli 0.1.0\n  account    Account\n  login    Login\n  logout    Logout\n  download    Download\n  streaming    Streaming\n  run    Run\n  resolve-package    Resolve packages\n' + (marker === 4 ? '' : '\nOptions:\n  --external-webview-stdio  External UI\n')) };
     }
@@ -40,8 +40,18 @@ describe('prebuilt backend', () => {
       const status = await manager.refresh();
       expect(status.capabilities.streamingProgressJson).toBe(supported);
       expect(status.capabilities.streamingControls).toBe(supported);
+      expect(status.capabilities.streamingBandwidthLimit).toBe(supported);
       expect(status.capabilities.packageSelection).toBe(true);
     } finally { await fs.rm(root, { recursive: true, force: true }); }
+  });
+  it('does not infer bandwidth limiting from pause/resume support alone', async () => {
+    const root=await fs.mkdtemp(path.join(os.tmpdir(),'nexus-limit-cap-'));
+    try {
+      const cli=path.join(root,'target','release','xodus-cli');await fs.mkdir(path.dirname(cli),{recursive:true});
+      const bytes=elf();bytes[63]=5;await fs.writeFile(cli,bytes,{mode:0o755});
+      const status=await new BackendManager(root,root,()=>{},()=>false).refresh();
+      expect(status.capabilities.streamingControls).toBe(true);expect(status.capabilities.streamingBandwidthLimit).toBe(false);
+    } finally {await fs.rm(root,{recursive:true,force:true});}
   });
   it.each(['valid', 'archive-digest', 'recipe', 'binary-digest', 'symlink', 'hardlink', 'missing-service', 'bad-elf', 'bad-service-elf', 'missing-capability', 'missing-auth-ui', 'missing-launch-chain', 'busy-after-download'])('verifies install and preserves the old pointer on failure: %s', async scenario => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-backend-test-'));

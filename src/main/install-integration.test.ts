@@ -20,6 +20,8 @@ const h = vi.hoisted(() => ({
   trash: vi.fn(), deleteFiles: vi.fn(), removeShortcut: vi.fn(async () => {}), signals: [] as string[],
   notifications: [] as { title: string; body: string }[],
   holdCancellation: false,
+  holdAccountReads: false,
+  accountReads: [] as ((result: { code: number; output: string }) => void)[],
   posters: vi.fn(async (ids: string[]) => new Map(ids.map(id => [id, `https://store-images.s-microsoft.com/${id}`]))),
 }));
 vi.mock('electron', () => ({
@@ -60,6 +62,12 @@ vi.mock('./game-wrapper.js', () => ({ prepareGameWrapper: async () => ({ command
 vi.mock('./process.js', () => ({
   run: async (_command: string, args: string[]) => ({ code: 0, output: args[0] === 'account' ? JSON.stringify({ stored: true, username: 'sample@example.test' }) : '' }),
   spawnTracked: (_command: string, args: string[], options: any) => {
+    if (args[0] === 'account') return {
+      child: { kill: vi.fn(() => true) },
+      result: h.holdAccountReads
+        ? new Promise<{ code: number; output: string }>(resolve => { h.accountReads.push(resolve); })
+        : Promise.resolve({ code: 0, output: JSON.stringify({ stored: true, username: 'sample@example.test' }) }),
+    };
     let resolve!: (result: { code: number; output: string }) => void, sequence = 0;
     const result = new Promise<{ code: number; output: string }>(done => { resolve = done; });
     const progress = (paused = false, phase = 'downloading') => options.onLine('NEXUS_PROGRESS ' + JSON.stringify({ schema: 1, event: 'progress', sequence: sequence++, phase,
@@ -107,6 +115,28 @@ afterAll(async () => {
   h.game?.finish(); for (const job of h.downloads) job.finish(130);
   await new Promise(resolve => setTimeout(resolve, 50));
   await fs.rm(h.root, { recursive: true, force: true });
+});
+
+it('real account-refresh IPC shares status reads and cannot publish a late old backend response', async () => {
+  const backend = h.backend;
+  h.holdAccountReads = true; h.accountReads = [];
+  const old = ipc('account-refresh'), repeated = ipc('account-refresh');
+  try {
+    await vi.waitFor(() => expect(h.accountReads).toHaveLength(1));
+    h.backend = { ...backend, binaryPath: path.join(h.root, 'new-synthetic-cli') };
+    const current = ipc('account-refresh');
+    await vi.waitFor(() => expect(h.accountReads).toHaveLength(2));
+    h.accountReads[1]({ code: 0, output: JSON.stringify({ stored: true, username: 'sample@example.test' }) });
+    await current;
+    h.accountReads[0]({ code: 0, output: JSON.stringify({ stored: false }) });
+    await Promise.all([old, repeated]);
+    expect(snapshot().auth.stored).toBe(true);
+    expect(snapshot().auth.username).toBe('sample@example.test');
+  } finally {
+    for (const resolve of h.accountReads) resolve({ code: 0, output: JSON.stringify({ stored: false }) });
+    h.backend = backend; h.holdAccountReads = false;
+    await ipc('account-refresh');
+  }
 });
 
 it('passes all native profiles to Steam-owned live import without login preferences, preserving offline choice', async () => {

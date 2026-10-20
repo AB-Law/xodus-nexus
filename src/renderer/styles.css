@@ -409,6 +409,7 @@ button.primary svg, button.secondary svg { width: 17px; height: 17px; }
 .settings-card { margin-bottom: 14px; padding: 24px; background: #222529; border: 1px solid var(--line); }
 .settings-card.compact { margin-bottom: 0; }
 .settings-storage { margin-bottom: 14px; }
+.settings-storage > .settings-card + .settings-card { margin-top: 14px; }
 .settings-storage .form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .settings-diagnostics { padding: 0; }
 .settings-diagnostics > summary { display: flex; align-items: center; gap: 12px; padding: 18px 24px; list-style: none; cursor: pointer; font-size: 13px; font-weight: 600; }

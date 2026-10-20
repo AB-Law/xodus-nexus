@@ -14,6 +14,7 @@ export interface BackendCapabilities {
   streaming: boolean;
   streamingProgressJson?: boolean;
   streamingControls?: boolean;
+  streamingBandwidthLimit?: boolean;
   packageSelection?: boolean;
   run: boolean;
   version?: string;
@@ -170,6 +171,7 @@ export interface Settings {
   installRoot: string;
   market: string;
   parallelDownloads: number;
+  downloadLimitMiB?: number;
   winePath: string;
   externalXodusRoot: string;
   runtimeRoot: string;
