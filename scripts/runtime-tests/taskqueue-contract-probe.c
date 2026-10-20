@@ -271,12 +271,128 @@ static void terminated_dispatch(void)
     SetEvent(done); WaitForSingleObject(watchdog, 2000);
     CloseHandle(watchdog); CloseHandle(done);
 }
+struct termination_request {
+    XTaskQueueHandle queue;
+    HANDLE entered, release, returned;
+    LONG count;
+    DWORD thread;
+    HRESULT result;
+};
+static void WINAPI repeat_finish(void *context)
+{
+    struct termination_request *r = context;
+    r->thread = GetCurrentThreadId();
+    InterlockedIncrement(&r->count);
+    if (r->entered) SetEvent(r->entered);
+    if (r->release) WaitForSingleObject(r->release, 5000);
+}
+static DWORD WINAPI repeat_wait(void *context)
+{
+    struct termination_request *r = context;
+    r->result = IXThreadingImpl_XTaskQueueTerminate(api, r->queue, TRUE, r, repeat_finish);
+    SetEvent(r->returned);
+    return 0;
+}
+static void repeated_termination(void)
+{
+    XTaskQueueHandle queue;
+    struct termination_request requests[8] = {0};
+    struct state pending = init();
+    HANDLE worker;
+    DWORD caller = GetCurrentThreadId();
+    /* Games may drain the same queue again from a destructor. Each request
+     * owns its callback/context, including requests made after full teardown. */
+    CHECK(IXThreadingImpl_XTaskQueueCreate(api, XTaskQueueDispatchMode_Manual,
+        XTaskQueueDispatchMode_Manual, &queue) == S_OK, "repeat-create");
+    for (unsigned round = 0; round < 2; ++round)
+    {
+        struct termination_request r = {0};
+        CHECK(IXThreadingImpl_XTaskQueueTerminate(api, queue, FALSE, &r, repeat_finish) == S_OK,
+            "repeat-accept-terminated-queue");
+        IXThreadingImpl_XTaskQueueDispatch(api, queue, XTaskQueuePort_Work, 0);
+        IXThreadingImpl_XTaskQueueDispatch(api, queue, XTaskQueuePort_Completion, 0);
+        CHECK(r.count == 1 && r.thread == caller, "repeat-notify-on-manual-completion");
+    }
+    IXThreadingImpl_XTaskQueueCloseHandle(api, queue);
+    CHECK(IXThreadingImpl_XTaskQueueCreate(api, XTaskQueueDispatchMode_Manual,
+        XTaskQueueDispatchMode_Manual, &queue) == S_OK, "repeat-pending-create");
+    CHECK(IXThreadingImpl_XTaskQueueSubmitCallback(api, queue, XTaskQueuePort_Work, &pending, once) == S_OK,
+        "repeat-pending-submit");
+    /* Retain all termination requests while ordinary work still needs drain. */
+    for (unsigned i = 0; i < 8; ++i)
+        CHECK(IXThreadingImpl_XTaskQueueTerminate(api, queue, FALSE, &requests[i], repeat_finish) == S_OK,
+            "repeat-pending-accepted");
+    CHECK(!IXThreadingImpl_XTaskQueueDispatch(api, queue, XTaskQueuePort_Completion, 0),
+        "repeat-no-notification-before-drain");
+    IXThreadingImpl_XTaskQueueDispatch(api, queue, XTaskQueuePort_Work, 0);
+    CHECK(pending.count == 1 && pending.canceled == 1, "repeat-pending-work-canceled-once");
+    for (unsigned i = 0; i < 8; ++i)
+        IXThreadingImpl_XTaskQueueDispatch(api, queue, XTaskQueuePort_Completion, 0);
+    for (unsigned i = 0; i < 8; ++i)
+        CHECK(requests[i].count == 1 && requests[i].thread == caller, "repeat-distinct-context-once");
+    CHECK(IXThreadingImpl_XTaskQueueSubmitCallback(api, queue, XTaskQueuePort_Work, NULL, task) == E_ABORT,
+        "repeat-keeps-submissions-disabled");
+    IXThreadingImpl_XTaskQueueCloseHandle(api, queue);
+    destroy(&pending);
+
+    /* wait=true must wait for this request, even if a prior request finished. */
+    CHECK(IXThreadingImpl_XTaskQueueCreate(api, XTaskQueueDispatchMode_ThreadPool,
+        XTaskQueueDispatchMode_ThreadPool, &queue) == S_OK, "repeat-wait-create");
+    CHECK(IXThreadingImpl_XTaskQueueTerminate(api, queue, TRUE, NULL, NULL) == S_OK, "repeat-initial-wait");
+    {
+        struct termination_request r = {0};
+        r.queue = queue;
+        r.entered = CreateEventW(NULL, TRUE, FALSE, NULL);
+        r.release = CreateEventW(NULL, TRUE, FALSE, NULL);
+        r.returned = CreateEventW(NULL, TRUE, FALSE, NULL);
+        worker = CreateThread(NULL, 0, repeat_wait, &r, 0, NULL);
+        CHECK(WaitForSingleObject(r.entered, 1000) == WAIT_OBJECT_0, "repeat-wait-callback-entered");
+        CHECK(WaitForSingleObject(r.returned, 100) == WAIT_TIMEOUT, "repeat-wait-not-prior-notification");
+        SetEvent(r.release);
+        CHECK(WaitForSingleObject(worker, 5000) == WAIT_OBJECT_0, "repeat-wait-returned");
+        CHECK(r.result == S_OK && r.count == 1, "repeat-wait-own-callback-completed");
+        CloseHandle(worker); CloseHandle(r.entered); CloseHandle(r.release); CloseHandle(r.returned);
+    }
+    IXThreadingImpl_XTaskQueueCloseHandle(api, queue);
+    /* Simultaneous synchronous callers retain independent completion state. */
+    {
+        struct termination_request concurrent[8] = {0};
+        HANDLE workers[8];
+        CHECK(IXThreadingImpl_XTaskQueueCreate(api, XTaskQueueDispatchMode_ThreadPool,
+            XTaskQueueDispatchMode_ThreadPool, &queue) == S_OK, "repeat-concurrent-create");
+        for (unsigned i = 0; i < 8; ++i)
+        {
+            concurrent[i].queue = queue;
+            concurrent[i].returned = CreateEventW(NULL, TRUE, FALSE, NULL);
+            workers[i] = CreateThread(NULL, 0, repeat_wait, &concurrent[i], 0, NULL);
+        }
+        CHECK(WaitForMultipleObjects(8, workers, TRUE, 5000) == WAIT_OBJECT_0, "repeat-concurrent-returned");
+        for (unsigned i = 0; i < 8; ++i)
+        {
+            CHECK(concurrent[i].result == S_OK && concurrent[i].count == 1, "repeat-concurrent-own-callback");
+            CloseHandle(workers[i]); CloseHandle(concurrent[i].returned);
+        }
+        IXThreadingImpl_XTaskQueueCloseHandle(api, queue);
+    }
+    for (unsigned mode = XTaskQueueDispatchMode_SerializedThreadPool; mode <= XTaskQueueDispatchMode_Immediate; ++mode)
+    {
+        CHECK(IXThreadingImpl_XTaskQueueCreate(api, mode, mode, &queue) == S_OK, "repeat-other-mode-create");
+        for (unsigned round = 0; round < 2; ++round)
+        {
+            struct termination_request r = {0};
+            CHECK(IXThreadingImpl_XTaskQueueTerminate(api, queue, TRUE, &r, repeat_finish) == S_OK,
+                "repeat-other-mode-accepted");
+            CHECK(r.count == 1, "repeat-other-mode-notified");
+        }
+        IXThreadingImpl_XTaskQueueCloseHandle(api, queue);
+    }
+}
 int main(void)
 {
     HMODULE dll = LoadLibraryA("xgameruntime.dll");
     HRESULT (WINAPI *query)(const GUID *, REFIID, void **) = (void *)GetProcAddress(dll, "QueryApiImpl");
     if (!query || FAILED(query(&CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&api))) return 2;
-    terminated_dispatch(); modes(); monitors(); lifetimes(); race();
+    repeated_termination(); terminated_dispatch(); modes(); monitors(); lifetimes(); race();
     IXThreadingImpl_Release(api);
     printf("QUEUE CHECKS %ld FAILURES %ld\n", checks, failures);
     return failures ? 1 : 0;

@@ -323,6 +323,10 @@ and license service functionality is a separate backend requirement.
 
 ## Verification
 
+Task-queue contract probes cover repeated termination both before and after
+draining, independent callback contexts, manual completion dispatch, and a
+synchronous request waiting for its own callback after an earlier termination.
+
 Close any games/downloads before running stress tests. These commands make
 fresh private prefixes and stop only their own wineservers. They never copy
 credentials or saves. The HTTP/2 suite binds a loopback TLS server and trusts
