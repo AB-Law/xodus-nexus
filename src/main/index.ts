@@ -58,6 +58,7 @@ import { gameSteamPortrait, nexusSteamArtwork } from './steam-artwork.js';
 import { addLiveSteamShortcut } from './steam-live.js';
 import { DownloadCompletionNotifications } from './download-notifications.js';
 import { KeyringSupport } from './keyring.js';
+import { showBeforeAccountCheck } from './launcher-startup.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const downloadNotifications = new DownloadCompletionNotifications({
@@ -326,6 +327,20 @@ async function refreshAccount(emit = true, afterAuth = false): Promise<AuthStatu
   }, () => key === accountRefreshKey() && (!authState.running || afterAuth));
   if (emit) emitSnapshot();
   return structuredClone(authState);
+}
+
+async function refreshInitialAccount(): Promise<void> {
+  const initialAuthState = authState;
+  const keyring = await keyringSupport.check();
+  // Never overwrite a sign-in/refresh that the user started while metadata
+  // was being checked, even if that newer operation has already completed.
+  if (shutdownStarted || authState !== initialAuthState || authState.running) return;
+  if (keyring.gameMode && ['locked', 'stopped', 'disabled', 'missing', 'needs-setup'].includes(keyring.state)) {
+    authState = { ...authState, stored: null, note: keyring.message };
+    emitSnapshot();
+    return;
+  }
+  await refreshAccount();
 }
 
 async function runAuth(command: 'login' | 'logout'): Promise<void> {
@@ -1688,21 +1703,26 @@ app.whenReady().then(async () => {
         backend.current.releaseAvailable && backend.current.updateAvailable) {
       try {
         await backend.update(emitSnapshot);
-        await refreshAccount(false);
+        if (mainWindow?.isVisible()) void refreshInitialAccount().catch(() => { /* The setup UI remains usable. */ });
       } catch { /* The block reason stays visible in the wizard and Settings. */ }
     }
     emitSnapshot();
   }, () => { /* Keep the installed backend available if GitHub is unreachable. */ });
   void runtime.checkNexus().then(() => emitSnapshot(), () => { /* Nexus runtime is optional. */ });
   await syncManagedWinePath();
-  await refreshAccount(false);
   void enrichLibraryCovers().then(() => emitSnapshot(), () => { /* Covers are optional. */ });
   void enrichDownloadCovers(store.downloads, currentMarket()).catch(() => { /* Covers are optional. */ });
   void checkLauncherUpdate().then(() => emitSnapshot());
   registerIpc();
   launchReady = true;
-  if (startupRequest.gameId) receiveLaunchRequest(startupRequest.gameId);
-  else await showLauncher();
+  if (startupRequest.gameId) {
+    await refreshAccount(false);
+    receiveLaunchRequest(startupRequest.gameId);
+  } else await showBeforeAccountCheck(showLauncher, refreshInitialAccount, () => {
+    if (shutdownStarted || authState.running || authState.lastResult === 'success') return;
+    authState = { ...authState, note: 'Account status is unavailable. Check the system keyring in Settings, then refresh.' };
+    emitSnapshot();
+  });
   for (const id of pendingRequests.splice(0)) receiveLaunchRequest(id);
   for (const error of pendingShortcutErrors.splice(0)) void shortcutError(error);
   app.on('activate', () => { void showLauncher(); });
