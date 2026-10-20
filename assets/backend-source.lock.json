@@ -5,7 +5,7 @@
   "commit": "53ea781dcd073e31d7ea68e894134e9c959bff04",
   "rust": "1.99.0",
   "cargoLockSha256": "2259b343e00dadc263018beb7664b12e9d58a0b73bff502ad566f5f8619ce28a",
-  "patchId": "linux-run-v28",
+  "patchId": "linux-run-v29",
   "compatibility": "linux-run-v22",
   "patches": [
     { "file": "xodus-linux-run.patch", "sha256": "68f260ec2c6e9264c47ed1a650868511f5412a756725d4000a865804f4712e8b" },
@@ -35,6 +35,7 @@
     { "file": "xodus-streaming-recovery.patch", "sha256": "7e8550d7b50faf3b3cb7cfcf6e47cff35a0369737d421ef454d4dcf0c9c8ffad" },
     { "file": "xodus-download-bandwidth.patch", "sha256": "4655c51eb93811ea41500be05062a4ff0f64dde3d819dddde12e48d91b075293" },
     { "file": "xodus-ticket-diagnostics.patch", "sha256": "6559c77e06f3c7f29caac95ed979b7644bd4082f9ff777f66713888969c3905e" },
-    { "file": "xodus-auth-consistency.patch", "sha256": "930dd88e5ecef2628973ebb4f1652f6888951d71e6531dda7d5d7a258eb435dd" }
+    { "file": "xodus-auth-consistency.patch", "sha256": "930dd88e5ecef2628973ebb4f1652f6888951d71e6531dda7d5d7a258eb435dd" },
+    { "file": "xodus-metadata-recovery.patch", "sha256": "b72c473615f2e5d359101cb5fae404aa3b54a34a73118b1c7f99238bd16860e3" }
   ]
 }

@@ -48,6 +48,7 @@ command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'c
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'ticket_diagnostic_']);
 command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-service', 'store_']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'msixvc', 'streaming_']);
+command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'msixvc', 'streaming::tests']);
 // The aggregate HTTP probe mutates the process-wide limiter, so run it alone.
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'msixvc', 'streaming_bandwidth_limited_http', '--', '--ignored', '--test-threads=1']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'msixvc', 'package_metadata']);

@@ -20,6 +20,19 @@ test('auth response consistency and coherent credential persistence are pinned a
   assert.doesNotMatch(patch, /^\+.*(?:verify_and_decrypt_envelope|\.scope_policy\(|\.hosting_app\()/m);
 });
 
+test('metadata recovery, consumer-independent timeout and empty-file updates are pinned and tested', async () => {
+  const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
+  assert.ok(lock.patches.some(p => p.file === 'xodus-metadata-recovery.patch'));
+  const patch = await fs.readFile('assets/xodus-metadata-recovery.patch', 'utf8');
+  for (const expected of ['streaming_metadata_empty_reconnects_stop_after_retry_limit',
+    'streaming_metadata_header_and_body_waits_have_deadlines',
+    'streaming_http_disk_or_consumer_delay_is_not_network_idle_time',
+    'streaming_updated_file_is_trimmed_even_when_its_expected_length_is_zero_or_complete',
+    'streaming_metadata_failure_returns_error_without_panic_or_touching_existing_game']) assert.ok(patch.includes(expected), expected);
+  const build = await fs.readFile('scripts/build-backend.mjs', 'utf8');
+  assert.ok(build.includes("'-p', 'msixvc', 'streaming::tests'"));
+});
+
 test('ticket diagnostics preserve requests, signature verification and non-retryable refusals', async () => {
   const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
   assert.ok(lock.patches.some(p => p.file === 'xodus-ticket-diagnostics.patch'));
