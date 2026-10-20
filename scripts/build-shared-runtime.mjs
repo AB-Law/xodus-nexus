@@ -161,6 +161,10 @@ for (const [name, file] of Object.entries(outputs)) {
 const tests = path.join(work, 'tests');
 provenance.runtimeCompatibility = await buildCompatibility(components);
 await fs.mkdir(tests);
+run('x86_64-w64-mingw32-gcc', ['-D__WINESRC__', '-municode', '-O2', '-Wall', '-Wextra',
+  '-I', path.join(build, 'dlls/xgameruntime'), '-I', path.join(source, 'dlls/xgameruntime'),
+  '-I', path.join(build, 'include'), '-I', path.join(source, 'include'),
+  path.join(project, 'scripts/runtime-tests/game-relaunch-probe.c'), '-o', path.join(tests, 'game-relaunch-probe.exe')], work);
 for (const constrained of [false, true]) for (const fixture of [false, true]) run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-Wextra', '-Werror',
   ...(constrained ? ['-DAPPCONSTRAINED_PROBE'] : []),
   ...(fixture ? ['-DAPPSTATE_SOURCE_FIXTURE', '-I', path.join(source, 'dlls/twinapi.appcore')] : []),
