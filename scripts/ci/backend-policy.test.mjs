@@ -107,6 +107,11 @@ test('backend build runs account-free credential persistence regressions', async
   assert.match(build, /command\('cargo', \['test', '--locked', \.\.\.offline, \.\.\.features, '-p', 'xodus', 'credential_'\]\)/);
   const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
   assert.ok(lock.patches.some(patch => patch.file === 'xodus-keyring-credentials.patch'));
+  assert.ok(lock.patches.some(patch => patch.file === 'xodus-keyring-encoding.patch'));
+});
+
+test('GNOME textual keyring regression uses only in-memory synthetic data', { skip: process.platform !== 'linux' }, () => {
+  execFileSync('python3', ['scripts/keyring-textual-roundtrip.test.py'], { stdio: 'pipe' });
 });
 
 test('session recovery is pinned and does not replace interactive login or raw token reads', async () => {

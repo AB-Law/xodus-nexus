@@ -16,6 +16,31 @@ authentication while preserving the device identity and stored account. Invalid
 device identities and unavailable keyrings fail without automatic deletion or
 replacement provisioning.
 
+Persistent credentials written through `KeychainBackend` use the versioned
+`XODUS_KEYRING_BASE64_V1:` ASCII envelope. GNOME Keyring 50.0's passwordless
+textual format writes secrets with `g_key_file_set_value` but reads them with
+`g_key_file_get_string`: escaped quotes in JSON containing XML can fail to read,
+and other backslash escapes can silently change. Base64 avoids those escapes;
+it is **not encryption** and does not change the selected keyring or its password
+policy. Decoding happens before JSON validation and exact write verification.
+Existing raw credentials remain readable without read-time writes or deletion;
+malformed envelopes fail with a sanitized error. Logout treats already-missing
+entries as successfully removed while preserving other keyring errors.
+
+After upgrading an affected installation, sign out and sign in once to regenerate
+lost token caches. Older backends cannot read the new envelope. Downgrading
+requires decoding wrapped entries in place before switching binaries; signing
+out alone is insufficient because it preserves the device identity. Automatic
+downgrade migration is not included. Neither a keyring reset nor deletion of
+unrelated passwords is required. A password-protected keyring is recommended for at-rest
+security, independently of this encoding workaround.
+
+The `credential_encoding_*` Rust tests run under the existing `credential_`
+filter. `python3 scripts/keyring-textual-roundtrip.test.py` reproduces the GNOME
+writer/reader mismatch and validates the envelope using in-memory GLib keyfiles
+and synthetic data only. It is also run by Linux `test:ci-tools`; Python 3 and
+`libglib-2.0` are required. No D-Bus session, account, or real keyring is accessed.
+
 Credential failures exit nonzero and emit `NEXUS_CREDENTIAL_ERROR_V1 CODE` on
 stderr. Codes are `keyring-unavailable`, `keyring-invalid-data`,
 `keyring-write-verification`, `keyring-missing-data`, `device-authentication` and
