@@ -1,0 +1,405 @@
+diff --git a/dlls/xgameruntime/xstore.c b/dlls/xgameruntime/xstore.c
+index df0e209..5400ebf 100644
+--- a/dlls/xgameruntime/xstore.c
++++ b/dlls/xgameruntime/xstore.c
+@@ -90,14 +90,12 @@ static void WINAPI x_store_XStoreCloseContextHandle( IXStoreImpl6 *iface, XStore
+ 
+ static HRESULT WINAPI x_store_XStoreQueryAssociatedProductsAsync( IXStoreImpl6 *iface, const XStoreContextHandle storeContextHandle, XStoreProductKind productKinds, UINT32 maxItemsToRetrievePerPage, XAsyncBlock *async )
+ {
+-    FIXME( "iface %p, storeContextHandle %p, productKinds %#x, maxItemsToRetrievePerPage %u, async %p stub!\n", iface, storeContextHandle, productKinds, maxItemsToRetrievePerPage, async );
+-    return E_NOTIMPL;
++    return associated_begin(storeContextHandle, productKinds, maxItemsToRetrievePerPage, async);
+ }
+ 
+ static HRESULT WINAPI x_store_XStoreQueryAssociatedProductsResult( IXStoreImpl6 *iface, XAsyncBlock *async, XStoreProductQueryHandle *productQueryHandle )
+ {
+-    FIXME( "iface %p, async %p, productQueryHandle %p stub!\n", iface, async, productQueryHandle );
+-    return E_NOTIMPL;
++    return associated_result(async, productQueryHandle);
+ }
+ 
+ static HRESULT WINAPI x_store_XStoreQueryProductsAsync( IXStoreImpl6 *iface, const XStoreContextHandle storeContextHandle, XStoreProductKind productKinds, const char **storeIds, SIZE_T storeIdsCount, const char **actionFilters, SIZE_T actionFiltersCount, XAsyncBlock *async )
+diff --git a/dlls/xgameruntime/xstore_associated.h b/dlls/xgameruntime/xstore_associated.h
+new file mode 100644
+index 0000000..8eb7a70
+--- /dev/null
++++ b/dlls/xgameruntime/xstore_associated.h
+@@ -0,0 +1,293 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later
++ * Ownership-independent XStoreQueryAssociatedProductsAsync. Products are the
++ * game's declared RelatedProducts, described by public Store catalog metadata.
++ * Nothing here proves, grants or implies ownership: every product and SKU is
++ * reported as not in the user's collection. No account bridge or title-specific
++ * ID is involved. Included at the end of xstore_entitled.h to share its async,
++ * page and handle plumbing, so enumeration, paging and close behave identically. */
++
++#define ASSOCIATED_BATCH 4
++#define ASSOCIATED_MAX_JSON (4 * 1024 * 1024)
++
++static UINT32 associated_kind( const char *type )
++{
++    if (!strcmp(type, "Consumable")) return 1;
++    if (!strcmp(type, "Durable")) return 2;
++    if (!strcmp(type, "Game")) return 4;
++    if (!strcmp(type, "Pass")) return 8;
++    if (!strcmp(type, "UnmanagedConsumable")) return 16;
++    return 0;
++}
++
++/* Best-effort list price of the first availability. Missing or malformed price
++ * data leaves the zeroed struct: a game must not see an invented price. */
++static void associated_price( IJsonObject *entry, XStorePrice *price )
++{
++    IJsonArray *availabilities = NULL;
++    IJsonObject *availability = NULL, *management = NULL, *info = NULL;
++    double list = 0, msrp = 0;
++    UINT32 count = 0;
++    char *currency = NULL;
++    if (FAILED(receipt_get_array(entry, L"Availabilities", &availabilities)) ||
++        FAILED(receipt_array_size(availabilities, &count)) || !count ||
++        FAILED(IJsonArray_GetObjectAt(availabilities, 0, &availability)) ||
++        FAILED(receipt_get_object(availability, L"OrderManagementData", &management)) ||
++        FAILED(receipt_get_object(management, L"Price", &info)) ||
++        FAILED(receipt_get_number(info, L"ListPrice", &list)) || !(list >= 0 && list < 1e7)) goto done;
++    if (FAILED(receipt_get_number(info, L"MSRP", &msrp)) || !(msrp >= list && msrp < 1e7)) msrp = list;
++    currency = receipt_string(info, L"CurrencyCode", 8);
++    price->price = list; price->basePrice = msrp;
++    price->currencyCode = currency;
++    /* Locale currency formatting is not available here; code and amount are exact. */
++    snprintf(price->formattedPrice, sizeof(price->formattedPrice), "%.2f%s%s", list, currency ? " " : "", currency ? currency : "");
++    snprintf(price->formattedBasePrice, sizeof(price->formattedBasePrice), "%.2f%s%s", msrp, currency ? " " : "", currency ? currency : "");
++    price->isOnSale = list < msrp;
++done:
++    if (info) IJsonObject_Release(info);
++    if (management) IJsonObject_Release(management);
++    if (availability) IJsonObject_Release(availability);
++    if (availabilities) IJsonArray_Release(availabilities);
++}
++
++/* S_OK: *out is a complete SKU. S_FALSE: unusable SKU, *out untouched. */
++static HRESULT associated_sku( IJsonObject *entry, const char *title, const char *description, const char *language,
++    XStoreSku *out, BOOL *has_package )
++{
++    IJsonObject *sku = NULL, *properties = NULL;
++    IJsonArray *packages = NULL;
++    char *id = NULL;
++    boolean trial = FALSE;
++    UINT32 package_count = 0;
++    HRESULT hr = S_FALSE;
++    if (FAILED(receipt_get_object(entry, L"Sku", &sku)) ||
++        !(id = receipt_string(sku, L"SkuId", 4)) || !entitled_sku_id(id) ||
++        FAILED(receipt_get_object(sku, L"Properties", &properties)) ||
++        /* Unknown trial state must not be advertised as a full SKU. */
++        FAILED(receipt_get_boolean(properties, L"IsTrial", &trial))) goto done;
++    out->skuId = id; id = NULL;
++    out->isTrial = trial;
++    if (!(out->title = strdup(title)) || !(out->description = strdup(description)) || !(out->language = strdup(language)))
++    { hr = E_OUTOFMEMORY; goto done; }
++    associated_price(entry, &out->price);
++    if (SUCCEEDED(receipt_get_array(properties, L"Packages", &packages)))
++    { receipt_array_size(packages, &package_count); if (package_count) *has_package = TRUE; }
++    hr = S_OK;
++done:
++    free(id);
++    if (packages) IJsonArray_Release(packages);
++    if (properties) IJsonObject_Release(properties);
++    if (sku) IJsonObject_Release(sku);
++    return hr;
++}
++
++/* S_OK: *out is a complete product. S_FALSE: skipped (not requested, duplicate,
++ * unaccepted kind, unknown type or no usable SKU). *out is always freeable. */
++static HRESULT associated_product( IJsonObject *json, UINT32 kinds, char **wanted, UINT32 wanted_count,
++    const struct entitled_snapshot *known, XStoreProduct *out )
++{
++    IJsonObject *localized = NULL, *properties = NULL, *entry = NULL;
++    IJsonArray *locals = NULL, *entries = NULL;
++    char *id = NULL, *type = NULL, *title = NULL, *description = NULL, *language = NULL, *offer = NULL;
++    UINT32 kind, count = 0, i;
++    BOOL package = FALSE;
++    HRESULT hr = S_FALSE;
++    if (!(id = receipt_string(json, L"ProductId", 12)) || !entitled_id(id) ||
++        !(type = receipt_string(json, L"ProductType", 32))) goto done;
++    for (i = 0; i < wanted_count && strcmp(id, wanted[i]); i++);
++    if (i == wanted_count) goto done; /* A response may not widen the request. */
++    for (i = 0; i < known->count; i++) if (!strcmp(id, known->products[i].storeId)) goto done;
++    if (!(kind = associated_kind(type)) || !(kind & kinds)) goto done;
++    if (SUCCEEDED(receipt_get_object(json, L"Properties", &properties))) offer = receipt_string(properties, L"InAppOfferToken", 256);
++    if (FAILED(receipt_get_array(json, L"LocalizedProperties", &locals)) ||
++        FAILED(receipt_array_size(locals, &count)) || !count ||
++        FAILED(IJsonArray_GetObjectAt(locals, 0, &localized)) ||
++        !(title = receipt_string(localized, L"ProductTitle", 1024)) ||
++        !(language = receipt_string(localized, L"Language", 35))) goto done;
++    description = receipt_string(localized, L"ShortDescription", 4096);
++    if (FAILED(receipt_get_array(json, L"DisplaySkuAvailabilities", &entries)) ||
++        FAILED(receipt_array_size(entries, &count)) || !count || count > 100) goto done;
++    if (!(out->skus = calloc(min(count, ENTITLED_MAX_SKUS), sizeof(*out->skus)))) { hr = E_OUTOFMEMORY; goto done; }
++    for (i = 0; i < count && out->skusCount < ENTITLED_MAX_SKUS; i++)
++    {
++        UINT32 j, n = out->skusCount;
++        out->skusCount = n + 1; /* Counted first, so a failed SKU is still freed. */
++        if (FAILED(hr = IJsonArray_GetObjectAt(entries, i, &entry))) goto done;
++        hr = associated_sku(entry, title, description ? description : "", language, &out->skus[n], &package);
++        IJsonObject_Release(entry); entry = NULL;
++        if (FAILED(hr)) goto done;
++        if (hr == S_FALSE) { out->skusCount = n; continue; }
++        for (j = 0; j < n && strcmp(out->skus[j].skuId, out->skus[n].skuId); j++);
++        if (j < n)
++        {   /* Duplicate SKU IDs are ambiguous; keep the first. */
++            free((char *)out->skus[n].skuId); free((char *)out->skus[n].title);
++            free((char *)out->skus[n].description); free((char *)out->skus[n].language);
++            free((char *)out->skus[n].price.currencyCode);
++            memset(&out->skus[n], 0, sizeof(out->skus[n])); out->skusCount = n;
++        }
++    }
++    hr = S_FALSE;
++    if (!out->skusCount) goto done;
++    out->price = out->skus[0].price;
++    out->price.currencyCode = out->skus[0].price.currencyCode ? strdup(out->skus[0].price.currencyCode) : NULL;
++    if (out->skus[0].price.currencyCode && !out->price.currencyCode) { hr = E_OUTOFMEMORY; goto done; }
++    out->storeId = id; id = NULL;
++    out->title = title; title = NULL;
++    out->description = description ? description : strdup(""); description = NULL;
++    out->language = language; language = NULL;
++    out->inAppOfferToken = offer ? offer : strdup(""); offer = NULL;
++    if (!out->description || !out->inAppOfferToken) { hr = E_OUTOFMEMORY; goto done; }
++    out->productKind = kind;
++    out->hasDigitalDownload = package;
++    out->isInUserCollection = FALSE;
++    hr = S_OK;
++done:
++    free(id); free(type); free(title); free(description); free(language); free(offer);
++    if (entry) IJsonObject_Release(entry);
++    if (entries) IJsonArray_Release(entries);
++    if (localized) IJsonObject_Release(localized);
++    if (locals) IJsonArray_Release(locals);
++    if (properties) IJsonObject_Release(properties);
++    return hr;
++}
++
++/* Appends every acceptable requested product from one catalog response. */
++static HRESULT associated_parse( const BYTE *bytes, SIZE_T size, UINT32 kinds, char **wanted, UINT32 wanted_count,
++    struct entitled_snapshot *snapshot )
++{
++    IJsonObject *document = NULL, *json = NULL;
++    IJsonArray *products = NULL;
++    UINT32 count = 0, i;
++    HRESULT hr;
++    if (FAILED(hr = receipt_json(bytes, size, &document)) ||
++        FAILED(hr = receipt_get_array(document, L"Products", &products)) ||
++        FAILED(hr = receipt_array_size(products, &count))) goto done;
++    if (count > wanted_count) { hr = E_UNEXPECTED; goto done; }
++    for (i = 0; i < count; i++)
++    {
++        XStoreProduct item = {0}, *grown;
++        if (FAILED(hr = IJsonArray_GetObjectAt(products, i, &json))) goto done;
++        hr = associated_product(json, kinds, wanted, wanted_count, snapshot, &item);
++        IJsonObject_Release(json); json = NULL;
++        if (hr != S_OK) { entitled_product_free(&item); if (FAILED(hr)) goto done; continue; }
++        if (!(grown = realloc(snapshot->products, (snapshot->count + 1) * sizeof(*grown))))
++        { entitled_product_free(&item); hr = E_OUTOFMEMORY; goto done; }
++        snapshot->products = grown; grown[snapshot->count++] = item;
++    }
++    hr = S_OK;
++done:
++    if (products) IJsonArray_Release(products);
++    if (document) IJsonObject_Release(document);
++    return hr;
++}
++
++/* Request XML: ProductId*, ProductKinds, Market, Language. No ownership input. */
++static HRESULT associated_fetch( const char *request, LONG *canceled, struct entitled_snapshot **out )
++{
++    xmlDocPtr doc = NULL;
++    xmlNodePtr root, node;
++    struct entitled_snapshot *snapshot = NULL;
++    char *ids[ENTITLED_MAX_PRODUCTS] = {0}, *market = NULL, *language = NULL;
++    UINT32 count = 0, i, batch, n;
++    UINT64 kinds;
++    ULONGLONG deadline = GetTickCount64() + 60000;
++    HRESULT hr = E_UNEXPECTED, com = CoInitializeEx(NULL, COINIT_MULTITHREADED);
++    *out = NULL;
++    doc = xmlReadMemory(request, strlen(request), NULL, NULL, XML_PARSE_NONET);
++    if (!doc || !(root = xmlDocGetRootElement(doc))) goto done;
++    for (node = root->children; node; node = node->next)
++        if (node->type == XML_ELEMENT_NODE && !strcmp((char *)node->name, "ProductId"))
++        {
++            xmlChar *value;
++            if (count == ENTITLED_MAX_PRODUCTS - 1 || !(value = xmlNodeGetContent(node))) goto done;
++            ids[count] = strdup((char *)value); xmlFree(value);
++            if (!ids[count] || !entitled_id(ids[count])) { count++; goto done; }
++            count++;
++        }
++    market = entitled_text(root, "Market"); language = entitled_text(root, "Language");
++    if (!market || strlen(market) != 2 || !language || strlen(language) > 35 ||
++        FAILED(entitled_uint(root, "ProductKinds", &kinds)) || !kinds || (kinds & ~31)) goto done;
++    for (i = 0; market[i]; i++) if (market[i] < 'A' || market[i] > 'Z') goto done;
++    for (i = 0; language[i]; i++) if (!((language[i] >= 'A' && language[i] <= 'Z') ||
++        (language[i] >= 'a' && language[i] <= 'z') || (language[i] >= '0' && language[i] <= '9') || language[i] == '-')) goto done;
++    if (!(snapshot = calloc(1, sizeof(*snapshot)))) { hr = E_OUTOFMEMORY; goto done; }
++    /* Public metadata carries no entitlement, so the snapshot does not expire. */
++    snapshot->refs = 1; snapshot->valid_until = UINT64_MAX;
++    /* No related products: nothing to look up, and no network access at all. */
++    for (batch = 0; batch < count; batch += ASSOCIATED_BATCH)
++    {
++        WCHAR path[512];
++        char joined[ASSOCIATED_BATCH * 13 + 1] = "";
++        BYTE *bytes = NULL;
++        SIZE_T size = 0;
++        if (InterlockedCompareExchange(canceled, 0, 0)) { hr = E_ABORT; goto done; }
++        if (GetTickCount64() >= deadline) { hr = HRESULT_FROM_WIN32(ERROR_TIMEOUT); goto done; }
++        n = min(ASSOCIATED_BATCH, count - batch);
++        for (i = 0; i < n; i++) { if (i) strcat(joined, ","); strcat(joined, ids[batch + i]); }
++        swprintf(path, ARRAY_SIZE(path), L"/v7.0/products?bigIds=%S&market=%S&languages=%S", joined, market, language);
++        hr = receipt_public_get(L"displaycatalog.mp.microsoft.com", path, ASSOCIATED_MAX_JSON, &bytes, &size);
++        if (SUCCEEDED(hr)) hr = associated_parse(bytes, size, kinds, &ids[batch], n, snapshot);
++        free(bytes);
++        xodus_store_license_note("store-associated-metadata", hr);
++        if (FAILED(hr)) goto done;
++    }
++    *out = snapshot; snapshot = NULL; hr = S_OK;
++done:
++    if (snapshot) entitled_snapshot_release(snapshot);
++    for (i = 0; i < count; i++) free(ids[i]);
++    free(market); free(language);
++    if (doc) xmlFreeDoc(doc);
++    if (SUCCEEDED(com)) CoUninitialize();
++    return hr;
++}
++
++static HRESULT associated_begin( XStoreContextHandle store, UINT32 kinds, UINT32 page_size, XAsyncBlock *async )
++{
++    struct entitled_async *context;
++    xmlDocPtr doc;
++    xmlNodePtr root;
++    xmlChar *bytes = NULL;
++    char kind[16], language[128] = "en-US", market[16] = "US";
++    WCHAR locale[85], country[16];
++    UINT64 xuid;
++    UINT32 i;
++    int size;
++    HRESULT hr;
++    if (!async || !kinds || (kinds & ~31) || !page_size) return E_INVALIDARG;
++    page_size = min(page_size, ENTITLED_MAX_PRODUCTS);
++    if (FAILED(hr = entitled_store_user(store, &xuid))) return hr;
++    if (!entitled_id(storeId)) return E_GAME_MISSING_GAME_CONFIG;
++    if (GetUserDefaultLocaleName(locale, ARRAY_SIZE(locale)))
++        WideCharToMultiByte(CP_UTF8, 0, locale, -1, language, sizeof(language), NULL, NULL);
++    if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SISO3166CTRYNAME, country, ARRAY_SIZE(country)))
++        WideCharToMultiByte(CP_UTF8, 0, country, -1, market, sizeof(market), NULL, NULL);
++    if (!(doc = xmlNewDoc(BAD_CAST "1.0"))) return E_OUTOFMEMORY;
++    if (!(root = xmlNewNode(NULL, BAD_CAST "Request"))) { xmlFreeDoc(doc); return E_OUTOFMEMORY; }
++    xmlDocSetRootElement(doc, root);
++    snprintf(kind, sizeof(kind), "%u", kinds);
++    /* Associated products are add-ons of the current game, never the game itself. */
++    for (i = 0; i < entitled_related_count; i++)
++        if (strcmp(storeId, entitled_related[i])) xmlNewTextChild(root, NULL, BAD_CAST "ProductId", BAD_CAST entitled_related[i]);
++    xmlNewTextChild(root, NULL, BAD_CAST "ProductKinds", BAD_CAST kind);
++    xmlNewTextChild(root, NULL, BAD_CAST "Market", BAD_CAST market);
++    xmlNewTextChild(root, NULL, BAD_CAST "Language", BAD_CAST language);
++    xmlDocDumpMemory(doc, &bytes, &size); xmlFreeDoc(doc);
++    if (!bytes) return E_OUTOFMEMORY;
++    if (size <= 0 || size > 60000) { xmlFree(bytes); return E_INVALIDARG; }
++    context = calloc(1, sizeof(*context));
++    if (context) { context->request = strdup((char *)bytes); context->page_size = page_size; context->catalog = TRUE; }
++    xmlFree(bytes);
++    if (!context) return E_OUTOFMEMORY;
++    if (!context->request) { free(context); return E_OUTOFMEMORY; }
++    return entitled_start(context, async, FALSE);
++}
++
++static HRESULT associated_result( XAsyncBlock *async, XStoreProductQueryHandle *out )
++{
++    IXThreadingImpl *threading;
++    HRESULT hr;
++    if (!async || !out) return E_INVALIDARG;
++    *out = NULL;
++    if (FAILED(hr = QueryApiImpl(&CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&threading))) return hr;
++    hr = IXThreadingImpl_XAsyncGetResult(threading, async, &associated_identity, sizeof(void *), out, NULL);
++    IXThreadingImpl_Release(threading); return hr;
++}
+diff --git a/dlls/xgameruntime/xstore_entitled.h b/dlls/xgameruntime/xstore_entitled.h
+index e7cb549..eba9371 100644
+--- a/dlls/xgameruntime/xstore_entitled.h
++++ b/dlls/xgameruntime/xstore_entitled.h
+@@ -144,22 +144,25 @@ struct entitled_page
+ static SRWLOCK entitled_pages_lock = SRWLOCK_INIT;
+ static struct entitled_page *entitled_pages;
+ 
+-static void entitled_snapshot_release( struct entitled_snapshot *snapshot )
++static void entitled_product_free( XStoreProduct *p )
+ {
+-    UINT32 i, j;
+-    if (InterlockedDecrement(&snapshot->refs)) return;
+-    for (i = 0; i < snapshot->count; i++)
++    UINT32 j;
++    free((char *)p->storeId); free((char *)p->title); free((char *)p->description); free((char *)p->language);
++    free((char *)p->inAppOfferToken); free((char *)p->price.currencyCode);
++    for (j = 0; j < p->skusCount; j++)
+     {
+-        XStoreProduct *p = &snapshot->products[i];
+-        free((char *)p->storeId); free((char *)p->title); free((char *)p->description); free((char *)p->language);
+-        free((char *)p->inAppOfferToken);
+-        for (j = 0; j < p->skusCount; j++)
+-        {
+-            free((char *)p->skus[j].skuId); free((char *)p->skus[j].title);
+-            free((char *)p->skus[j].description); free((char *)p->skus[j].language);
+-        }
+-        free(p->skus);
++        free((char *)p->skus[j].skuId); free((char *)p->skus[j].title);
++        free((char *)p->skus[j].description); free((char *)p->skus[j].language);
++        free((char *)p->skus[j].price.currencyCode);
+     }
++    free(p->skus);
++}
++
++static void entitled_snapshot_release( struct entitled_snapshot *snapshot )
++{
++    UINT32 i;
++    if (InterlockedDecrement(&snapshot->refs)) return;
++    for (i = 0; i < snapshot->count; i++) entitled_product_free(&snapshot->products[i]);
+     free(snapshot->products); free(snapshot);
+ }
+ 
+@@ -315,6 +318,7 @@ done:
+ struct entitled_async
+ {
+     LONG refs, canceled, started;
++    BOOL catalog; /* Ownership-independent XStoreQueryAssociatedProductsAsync. */
+     UINT64 store_serial, refresh;
+     char *request;
+     UINT32 page_size;
+@@ -324,6 +328,8 @@ struct entitled_async
+ };
+ static const char entitled_identity;
+ static const char entitled_next_identity;
++static const char associated_identity;
++static HRESULT associated_fetch( const char *request, LONG *canceled, struct entitled_snapshot **out );
+ 
+ #include "xstore_receipts.h"
+ #include "xstore_game_license.h"
+@@ -341,7 +347,8 @@ static DWORD WINAPI entitled_worker( void *arg )
+     struct entitled_snapshot *snapshot = NULL;
+     HRESULT hr = E_ABORT;
+     if (!InterlockedCompareExchange(&context->canceled, 0, 0))
+-        hr = entitled_fetch(context->request, &context->canceled, &snapshot);
++        hr = context->catalog ? associated_fetch(context->request, &context->canceled, &snapshot)
++                              : entitled_fetch(context->request, &context->canceled, &snapshot);
+     if (SUCCEEDED(hr))
+     {
+         if (!InterlockedCompareExchange(&context->canceled, 0, 0))
+@@ -409,7 +416,8 @@ static HRESULT entitled_start( struct entitled_async *context, XAsyncBlock *asyn
+     /* Successful Begin transfers ownership, including provider Begin failure.
+      * A failed Begin itself has not installed the provider context. */
+     hr = IXThreadingImpl_XAsyncBegin(context->threading, async, context,
+-        next ? &entitled_next_identity : &entitled_identity, "XStoreEntitledProducts", entitled_provider);
++        context->catalog ? &associated_identity : next ? &entitled_next_identity : &entitled_identity,
++        context->catalog ? "XStoreAssociatedProducts" : "XStoreEntitledProducts", entitled_provider);
+     if (FAILED(hr)) entitled_async_release(context);
+     return hr;
+ }
+@@ -506,3 +514,4 @@ static HRESULT entitled_next( XStoreProductQueryHandle handle, XAsyncBlock *asyn
+     entitled_page_release(page);
+     return entitled_start(context, async, TRUE);
+ }
++#include "xstore_associated.h"

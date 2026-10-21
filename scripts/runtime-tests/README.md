@@ -54,6 +54,10 @@ The runtime does not provide a unique platform device identifier.
   close-in-callback, expiry and nonblocking Manual Work/cancellation through the
   actual async implementation. Its test bridge always fails, with no account or
   network access. Synthetic keys and helpers are never packaged in the runtime.
+  Catalog tests parse synthetic public-catalog JSON for associated products
+  (kind filters, requested-ID scoping, duplicate/unknown-trial SKUs, price,
+  never-owned flags) and check that a game with no related products completes
+  empty through the real async path without the account bridge or network.
   Package-license tests reject absent proof, unowned/trial/wrong/expired SKUs;
   check retained result handles, actual expiry events, queued/running unregister,
   reentrant unregister/close and cancellation through the failing bridge.

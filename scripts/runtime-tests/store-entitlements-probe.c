@@ -319,6 +319,130 @@ static void test_async(struct entitled_snapshot *snapshot)
     IXThreadingImpl_XTaskQueueCloseHandle(threads, queue); IXThreadingImpl_Release(threads);
 }
 
+/* Catalog queries are ownership-independent: nothing parsed here may look owned. */
+static void test_associated_parse(void)
+{
+    const char *json = "{\"Products\":["
+        "{\"ProductId\":\"B00000000002\",\"ProductType\":\"Durable\",\"Properties\":{\"InAppOfferToken\":\"offer\"},"
+        "\"LocalizedProperties\":[{\"ProductTitle\":\"Pack & more\",\"ShortDescription\":\"Short\",\"Language\":\"en-US\"}],"
+        "\"DisplaySkuAvailabilities\":["
+        "{\"Sku\":{\"SkuId\":\"0010\",\"Properties\":{\"IsTrial\":false,\"Packages\":[{}]}},"
+        "\"Availabilities\":[{\"OrderManagementData\":{\"Price\":{\"ListPrice\":4.99,\"MSRP\":9.99,\"CurrencyCode\":\"USD\"}}}]},"
+        "{\"Sku\":{\"SkuId\":\"0010\",\"Properties\":{\"IsTrial\":true}}},"
+        "{\"Sku\":{\"SkuId\":\"0020\",\"Properties\":{\"IsTrial\":true}}},"
+        "{\"Sku\":{\"SkuId\":\"0030\",\"Properties\":{}}}]},"
+        "{\"ProductId\":\"B00000000003\",\"ProductType\":\"Consumable\","
+        "\"LocalizedProperties\":[{\"ProductTitle\":\"Coins\",\"Language\":\"en-US\"}],"
+        "\"DisplaySkuAvailabilities\":[{\"Sku\":{\"SkuId\":\"0010\",\"Properties\":{\"IsTrial\":false}}}]},"
+        "{\"ProductId\":\"B00000000004\",\"ProductType\":\"Durable\","
+        "\"LocalizedProperties\":[{\"ProductTitle\":\"Not requested\",\"Language\":\"en-US\"}],"
+        "\"DisplaySkuAvailabilities\":[{\"Sku\":{\"SkuId\":\"0010\",\"Properties\":{\"IsTrial\":false}}}]}]}";
+    char *wanted[] = {"B00000000002", "B00000000003", "B00000000005"};
+    struct entitled_snapshot *snapshot;
+    XStoreProduct *first, *second;
+    UINT32 i;
+    for (UINT32 pass = 0; pass < 3; pass++)
+    {
+        /* Kind masks: all, Durable only, Game only. */
+        UINT32 kinds = pass == 0 ? 31 : pass == 1 ? XStoreProductKind_Durable : XStoreProductKind_Game;
+        snapshot = calloc(1, sizeof(*snapshot)); snapshot->refs = 1;
+        CHECK("assoc-parse", associated_parse((BYTE *)json, strlen(json), kinds, wanted, 3, snapshot) == S_OK);
+        CHECK("assoc-kind-filter", snapshot->count == (pass == 0 ? 2 : pass == 1 ? 1 : 0));
+        if (!pass && snapshot->count == 2)
+        {
+            first = &snapshot->products[0]; second = &snapshot->products[1];
+            CHECK("assoc-ids", !strcmp(first->storeId, "B00000000002") && !strcmp(second->storeId, "B00000000003"));
+            CHECK("assoc-text", !strcmp(first->title, "Pack & more") && !strcmp(first->description, "Short") &&
+                !strcmp(first->language, "en-US") && !strcmp(first->inAppOfferToken, "offer"));
+            CHECK("assoc-kind", first->productKind == XStoreProductKind_Durable && second->productKind == XStoreProductKind_Consumable);
+            CHECK("assoc-package-metadata", first->hasDigitalDownload && !second->hasDigitalDownload);
+            CHECK("assoc-product-not-owned", !first->isInUserCollection && !second->isInUserCollection);
+            CHECK("assoc-duplicate-and-unknown-trial-skus-dropped", first->skusCount == 2 &&
+                !strcmp(first->skus[0].skuId, "0010") && !strcmp(first->skus[1].skuId, "0020"));
+            CHECK("assoc-first-duplicate-kept", !first->skus[0].isTrial && first->skus[1].isTrial);
+            for (i = 0; i < first->skusCount; i++)
+                CHECK("assoc-sku-not-owned", !first->skus[i].isInUserCollection && !first->skus[i].collectionData.endDate &&
+                    !first->skus[i].collectionData.acquiredDate && !first->skus[i].collectionData.quantity);
+            CHECK("assoc-price", fabs(first->price.price - 4.99) < 0.001 && fabs(first->price.basePrice - 9.99) < 0.001 &&
+                first->price.isOnSale && !strcmp(first->price.currencyCode, "USD") &&
+                !strcmp(first->price.formattedPrice, "4.99 USD") && !strcmp(first->price.formattedBasePrice, "9.99 USD"));
+            CHECK("assoc-product-price-owns-currency", first->price.currencyCode != first->skus[0].price.currencyCode);
+            CHECK("assoc-missing-text-is-empty", !strcmp(second->description, "") && !strcmp(second->inAppOfferToken, ""));
+            CHECK("assoc-missing-price-not-invented", second->price.price == 0 && !second->price.currencyCode && !second->price.isOnSale);
+            /* The same response may not add a product twice. */
+            CHECK("assoc-repeat", associated_parse((BYTE *)json, strlen(json), kinds, wanted, 3, snapshot) == S_OK && snapshot->count == 2);
+        }
+        entitled_snapshot_release(snapshot);
+    }
+    snapshot = calloc(1, sizeof(*snapshot)); snapshot->refs = 1;
+    CHECK("assoc-response-may-not-widen-request", associated_parse((BYTE *)json, strlen(json), 31, wanted, 1, snapshot) == E_UNEXPECTED && !snapshot->count);
+    CHECK("assoc-malformed-rejected", FAILED(associated_parse((BYTE *)"{}", 2, 31, wanted, 3, snapshot)));
+    CHECK("assoc-not-json-rejected", FAILED(associated_parse((BYTE *)"not json", 8, 31, wanted, 3, snapshot)));
+    CHECK("assoc-empty-products-ok", associated_parse((BYTE *)"{\"Products\":[]}", 15, 31, wanted, 3, snapshot) == S_OK && !snapshot->count);
+    entitled_snapshot_release(snapshot);
+}
+
+static void test_associated(void)
+{
+    IXThreadingImpl *threads;
+    XTaskQueueHandle queue;
+    XStoreContextHandle store;
+    XStoreProductQueryHandle query = NULL;
+    XAsyncBlock block = {0};
+    struct entitled_snapshot *snapshot = NULL;
+    struct entitled_page *page;
+    LONG not_canceled = 0;
+    char bad_request[] = "<Request><ProductId>not-an-id</ProductId><ProductKinds>31</ProductKinds><Market>US</Market><Language>en-US</Language></Request>";
+    UINT32 saved = entitled_related_count;
+    char saved_first[13];
+    memcpy(saved_first, entitled_related[0], 13);
+    CHECK("assoc-threading", QueryApiImpl(&CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&threads) == S_OK);
+    CHECK("assoc-queue", IXThreadingImpl_XTaskQueueCreate(threads, XTaskQueueDispatchMode_Manual, XTaskQueueDispatchMode_Manual, &queue) == S_OK);
+    CHECK("assoc-store", entitled_store_create(NULL, &store) == S_OK);
+    CHECK("assoc-requires-async", associated_begin(store, 31, 10, NULL) == E_INVALIDARG);
+    memset(&block, 0, sizeof(block)); block.queue = queue; block.callback = complete;
+    CHECK("assoc-no-kinds", associated_begin(store, 0, 10, &block) == E_INVALIDARG);
+    CHECK("assoc-unknown-kinds", associated_begin(store, 32, 10, &block) == E_INVALIDARG);
+    CHECK("assoc-zero-page", associated_begin(store, 31, 0, &block) == E_INVALIDARG);
+    CHECK("assoc-invalid-store-handle", associated_begin((void *)1, 31, 10, &block) == E_INVALIDARG);
+    entitled_store_close(store);
+    CHECK("assoc-fetch-bad-id-rejected", FAILED(associated_fetch(bad_request, &not_canceled, &snapshot)) && !snapshot);
+
+    /* No related products, or only the game itself: complete empty, with no account bridge and no network. */
+    for (UINT mode = 0; mode < 2; mode++)
+    {
+        entitled_related_count = mode; strcpy(entitled_related[0], storeId);
+        callbacks = 0; ResetEvent(bridge_started);
+        memset(&block, 0, sizeof(block)); block.queue = queue; block.callback = complete;
+        CHECK("assoc-store-2", entitled_store_create(NULL, &store) == S_OK);
+        CHECK("assoc-begin", associated_begin(store, 31, 10, &block) == S_OK);
+        entitled_store_close(store); /* In-flight request owns copied parameters. */
+        CHECK("assoc-work", IXThreadingImpl_XTaskQueueDispatch(threads, queue, XTaskQueuePort_Work, 0));
+        dispatch_until_complete(threads, queue, &block);
+        CHECK("assoc-completes-empty", IXThreadingImpl_XAsyncGetStatus(threads, &block, FALSE) == S_OK && callbacks == 1);
+        CHECK("assoc-no-account-bridge", WaitForSingleObject(bridge_started, 0) == WAIT_TIMEOUT);
+        query = NULL;
+        CHECK("assoc-result", associated_result(&block, &query) == S_OK && query);
+        enumerated = 0;
+        CHECK("assoc-empty-enumerate", entitled_enumerate(query, NULL, enumerate) == S_OK && !enumerated);
+        CHECK("assoc-empty-no-more", !entitled_has_more(query) &&
+            entitled_next(query, &block) == HRESULT_FROM_WIN32(ERROR_NO_MORE_ITEMS));
+        page = entitled_page_acquire(query);
+        CHECK("assoc-page", page != NULL);
+        if (page)
+        {
+            CHECK("assoc-never-proof-of-license", page->snapshot->proof_until == 0);
+            CHECK("assoc-public-data-does-not-expire", entitled_page_valid(page));
+            entitled_page_release(page);
+        }
+        entitled_page_close(query);
+        CHECK("assoc-closed-handle-rejected", entitled_enumerate(query, NULL, enumerate) == E_INVALIDARG);
+    }
+    entitled_related_count = saved; memcpy(entitled_related[0], saved_first, 13);
+    CHECK("assoc-result-requires-output", associated_result(&block, NULL) == E_INVALIDARG);
+    IXThreadingImpl_XTaskQueueCloseHandle(threads, queue); IXThreadingImpl_Release(threads);
+}
+
 /* Synthetic handle lifetime/event fixtures only. Actual acquisition below uses
  * the always-failing bridge; no synthetic proof can reach the shipped runtime. */
 struct license_callback_context
@@ -758,6 +882,10 @@ int main(void)
             CHECK("runtime-game-register-close", IXStoreImpl6_XStoreRegisterGameLicenseChanged(store_api, store, NULL, NULL, game_changed, &game_token) == S_OK);
             IXThreadingImpl_Release(threads);
         }
+        XAsyncBlock invalid_associated = {0};
+        XStoreProductQueryHandle associated_query = (void *)1;
+        CHECK("runtime-associated-implemented", IXStoreImpl6_XStoreQueryAssociatedProductsAsync(store_api, (void *)1, 31, 10, &invalid_associated) == E_INVALIDARG);
+        CHECK("runtime-associated-result-unbegun", FAILED(IXStoreImpl6_XStoreQueryAssociatedProductsResult(store_api, &invalid_associated, &associated_query)) && !associated_query);
         XAsyncBlock invalid_license = {0};
         CHECK("runtime-license-invalid-context", IXStoreImpl6_XStoreAcquireLicenseForPackageAsync(store_api, (void *)1, "00000001111122223333444444444444", &invalid_license) == E_INVALIDARG);
         CHECK("runtime-license-invalid-handle", !IXStoreImpl6_XStoreIsLicenseValid(store_api, (void *)1));
@@ -769,7 +897,7 @@ int main(void)
         IXStoreImpl6_Release(store_api);
     }
     bridge_started = CreateEventA(NULL, TRUE, FALSE, NULL); bridge_gate = CreateEventA(NULL, TRUE, FALSE, NULL);
-    test_receipts(); test_async(test_metadata()); test_package_licenses(); test_game_licenses();
+    test_receipts(); test_async(test_metadata()); test_associated_parse(); test_associated(); test_package_licenses(); test_game_licenses();
     CloseHandle(bridge_started); CloseHandle(bridge_gate);
     if (SUCCEEDED(hr)) RoUninitialize();
     printf("CHECKS %u FAILURES %u\n", checks, failures);

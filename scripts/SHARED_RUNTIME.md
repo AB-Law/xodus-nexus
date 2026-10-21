@@ -33,6 +33,25 @@ missing metadata and expired receipts remain errors. This implementation require
 online receipt/catalog access; products absent from the game's declared related
 list, purchase/download APIs and consumable quantities are not implemented here.
 
+### Associated products (catalog)
+
+`XStoreQueryAssociatedProductsAsync` and its result lists the add-ons the game
+declares in `RelatedProducts` (the game's own Store ID is excluded), described by
+public Store catalog metadata: title, description, product kind, SKUs, developer
+offer token, package presence and list price. It is a catalog query, not an
+ownership query, so every product and SKU reports `isInUserCollection` false,
+with no collection data, and the snapshot carries no license proof. It cannot be
+used to acquire a package license or to change game-license state. Results reuse
+the entitled-products query handles, so enumeration, paging and close behave the
+same. Requested kinds are honored and a response may not add products the game
+did not declare.
+
+A game that declares no related products completes with an empty, successful
+result without contacting the account service or the network. Catalog access
+failures remain errors. Prices are the catalog list price and currency code;
+the formatted strings are the amount and ISO code, not locale currency formatting.
+`XStoreQueryAssociatedProductsForStoreId*` is not implemented here.
+
 ### Installed content packages
 
 Content enumeration also discovers extracted PC add-on packages from disk.
