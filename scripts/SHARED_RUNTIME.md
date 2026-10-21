@@ -33,6 +33,23 @@ missing metadata and expired receipts remain errors. This implementation require
 online receipt/catalog access; products absent from the game's declared related
 list, purchase/download APIs and consumable quantities are not implemented here.
 
+### Service HTTP limits and cloud-save start-up
+
+Signed Xbox service requests (`http_request_raw`) no longer rely on WinHTTP's
+default timeouts, which let a silent server hold the calling thread for minutes:
+10 s to resolve and connect, 30 s per send and per body read, and 15 s for the
+server to start answering. A timed-out request is not retried, and other failures
+are only retried while a request series is under 30 s.
+
+`XGameSaveInitializeProvider` syncs the cloud before it returns, on the title's
+own thread. A download that keeps delivering data is never cut off for being
+slow; one that goes quiet for 30 s times out. If a request times out, the sync is
+abandoned and cloud saves stay off for the session, so the title continues with
+its local saves and nothing is uploaded over a cloud copy that was never fully
+read. The next launch tries again. As a safety valve the whole sync also has a
+10 minute ceiling, checked before each request, so a server that only trickles
+data cannot hold the title forever.
+
 ### Installed content packages
 
 Content enumeration also discovers extracted PC add-on packages from disk.

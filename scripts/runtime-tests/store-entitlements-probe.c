@@ -30,6 +30,7 @@ HRESULT xodus_store_license_xml(const char *request, SIZE_T size, char **out)
     InterlockedDecrement(&bridge_active);
     return E_FAIL;
 }
+#include "xhttp_limits.h"
 #include "xstore_entitled.h"
 /* Only this account-free executable has a synthetic installed-package index. */
 HRESULT xpackage_query_content_store(const char *identifier, SIZE_T size, char *store)
@@ -317,6 +318,27 @@ static void test_async(struct entitled_snapshot *snapshot)
     entitled_page_close(next);
     CHECK("foreign-query-rejected", !entitled_has_more((void *)1) && entitled_next((void *)1, &block) == E_INVALIDARG);
     IXThreadingImpl_XTaskQueueCloseHandle(threads, queue); IXThreadingImpl_Release(threads);
+}
+
+/* Service HTTP limits: a silent server must not hold a title for minutes. */
+static void test_http_limits(void)
+{
+    const HRESULT winhttp_timeout = HRESULT_FROM_WIN32(ERROR_WINHTTP_TIMEOUT);
+    const HRESULT sync_timeout = HRESULT_FROM_WIN32(ERROR_TIMEOUT);
+    const HRESULT reset = HRESULT_FROM_WIN32(ERROR_WINHTTP_CONNECTION_ERROR);
+    const HRESULT cancelled = HRESULT_FROM_WIN32(ERROR_WINHTTP_OPERATION_CANCELLED);
+    CHECK("limits-response-shorter-than-retry-budget", HTTP_RESPONSE_TIMEOUT < HTTP_RETRY_BUDGET);
+    /* A steady download must never be cut off for being slow: the ceiling has to be far
+     * longer than one stalled read, and a stalled read has to end well before it. */
+    CHECK("limits-ceiling-is-a-safety-valve", SAVE_SYNC_CEILING >= 10 * HTTP_RECEIVE_TIMEOUT && SAVE_SYNC_CEILING >= 10 * HTTP_RETRY_BUDGET);
+    CHECK("timeout-recognized", http_timed_out(winhttp_timeout) && http_timed_out(sync_timeout));
+    CHECK("other-errors-not-timeouts", !http_timed_out(S_OK) && !http_timed_out(E_FAIL) && !http_timed_out(reset) && !http_timed_out(cancelled));
+    CHECK("timed-out-attempt-not-retried", !http_retry_allowed(winhttp_timeout, 1000, 1001) && !http_retry_allowed(sync_timeout, 1000, 1001));
+    CHECK("transient-error-retried", http_retry_allowed(reset, 1000, 1000 + 500) && http_retry_allowed(cancelled, 1000, 1000 + 500));
+    CHECK("retry-stops-at-budget", http_retry_allowed(reset, 1000, 1000 + HTTP_RETRY_BUDGET - 1) &&
+        !http_retry_allowed(reset, 1000, 1000 + HTTP_RETRY_BUDGET) && !http_retry_allowed(reset, 1000, 1000 + 10 * HTTP_RETRY_BUDGET));
+    CHECK("no-deadline-never-passes", !http_deadline_passed(0, 0) && !http_deadline_passed(0, ~0ULL));
+    CHECK("deadline-boundaries", !http_deadline_passed(5000, 4999) && http_deadline_passed(5000, 5000) && http_deadline_passed(5000, 9000));
 }
 
 /* Synthetic handle lifetime/event fixtures only. Actual acquisition below uses
@@ -769,7 +791,7 @@ int main(void)
         IXStoreImpl6_Release(store_api);
     }
     bridge_started = CreateEventA(NULL, TRUE, FALSE, NULL); bridge_gate = CreateEventA(NULL, TRUE, FALSE, NULL);
-    test_receipts(); test_async(test_metadata()); test_package_licenses(); test_game_licenses();
+    test_receipts(); test_async(test_metadata()); test_http_limits(); test_package_licenses(); test_game_licenses();
     CloseHandle(bridge_started); CloseHandle(bridge_gate);
     if (SUCCEEDED(hr)) RoUninitialize();
     printf("CHECKS %u FAILURES %u\n", checks, failures);

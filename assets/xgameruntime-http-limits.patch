@@ -1,0 +1,191 @@
+diff --git a/dlls/xgameruntime/util.c b/dlls/xgameruntime/util.c
+index 55a40d8..3bf13b8 100644
+--- a/dlls/xgameruntime/util.c
++++ b/dlls/xgameruntime/util.c
+@@ -116,7 +116,7 @@ HRESULT http_request_raw( const WCHAR *method, const WCHAR *url, const WCHAR *he
+ {
+     URL_COMPONENTS uc = { .dwStructSize = sizeof(URL_COMPONENTS), .dwHostNameLength = -1, .dwUrlPathLength = -1 };
+     HINTERNET connection = NULL, request = NULL, session = NULL;
+-    DWORD size = sizeof(DWORD);
++    DWORD size = sizeof(DWORD), responseTimeout = HTTP_RESPONSE_TIMEOUT;
+     WCHAR *hostName = NULL;
+     BYTE *tmpBuffer;
+     HRESULT hr = S_OK;
+@@ -135,9 +135,13 @@ HRESULT http_request_raw( const WCHAR *method, const WCHAR *url, const WCHAR *he
+     memcpy( hostName, uc.lpszHostName, uc.dwHostNameLength * sizeof(WCHAR) );
+ 
+     if (!(session = WinHttpOpen( USER_AGENT, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0 ))) goto error;
++    /* The title waits on this call. Without limits a silent server holds the
++     * calling thread for the WinHTTP defaults, which can be minutes. */
++    if (!WinHttpSetTimeouts( session, HTTP_RESOLVE_TIMEOUT, HTTP_CONNECT_TIMEOUT, HTTP_SEND_TIMEOUT, HTTP_RECEIVE_TIMEOUT )) goto error;
+     if (!(connection = WinHttpConnect( session, hostName, uc.nPort, 0 ))) goto error;
+     if (!(request = WinHttpOpenRequest( connection, method, uc.lpszUrlPath, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                         uc.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0 ))) goto error;
++    if (!WinHttpSetOption( request, WINHTTP_OPTION_RECEIVE_RESPONSE_TIMEOUT, &responseTimeout, sizeof(responseTimeout) )) goto error;
+     if (!WinHttpSendRequest( request, headers ? headers : WINHTTP_NO_ADDITIONAL_HEADERS, headers ? -1 : 0, (void *)body, bodySize, bodySize, 0 )) goto error;
+     if (!WinHttpReceiveResponse( request, NULL )) goto error;
+     if (!WinHttpQueryHeaders( request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+diff --git a/dlls/xgameruntime/util.h b/dlls/xgameruntime/util.h
+index e9f45cf..eaedfed 100644
+--- a/dlls/xgameruntime/util.h
++++ b/dlls/xgameruntime/util.h
+@@ -19,6 +19,8 @@
+ #ifndef __WINE_XGAMERUNTIME_UTIL_H
+ #define __WINE_XGAMERUNTIME_UTIL_H
+ 
++#include "xhttp_limits.h"
++
+ HRESULT http_request( const WCHAR *method, const WCHAR *url, char *data, const WCHAR *headers,  const WCHAR **accept, UCHAR **buffer, SIZE_T *bufferSize );
+ HRESULT http_request_raw( const WCHAR *method, const WCHAR *url, const WCHAR *headers, const void *body, DWORD bodySize, DWORD *status, BYTE **buffer, SIZE_T *bufferSize );
+ HRESULT encode_base64( const UINT32 dataSize, const BYTE *data, const UINT32 base64Size, char *base64, BOOLEAN pad );
+diff --git a/dlls/xgameruntime/xgamesave.c b/dlls/xgameruntime/xgamesave.c
+index f7936cb..e0ab11d 100644
+--- a/dlls/xgameruntime/xgamesave.c
++++ b/dlls/xgameruntime/xgamesave.c
+@@ -127,6 +127,7 @@ struct XGameSaveProvider
+     UINT32 uploaded;
+     CRITICAL_SECTION cs;
+     CRITICAL_SECTION cloud_cs;
++    ULONGLONG sync_deadline; /* Tick count; 0 outside the initial sync. */
+     HANDLE upload_event;
+     HANDLE upload_thread;
+     BOOL upload_stopping;
+@@ -656,6 +657,14 @@ static HRESULT cloud_request( struct XGameSaveProvider *provider, const char *me
+     char url[2048], headers[1024];
+     HRESULT hr;
+ 
++    if (http_deadline_passed( provider->sync_deadline, GetTickCount64() ))
++    {
++        WARN( "%s %s skipped, the initial cloud sync passed its time ceiling.\n", method, debugstr_a( path ) );
++        *status = 0;
++        *buffer = NULL;
++        *bufferSize = 0;
++        return HRESULT_FROM_WIN32( ERROR_TIMEOUT );
++    }
+     snprintf( url, sizeof(url), "%s%s", provider->base, path );
+     snprintf( headers, sizeof(headers), "x-xbl-contract-version: 107\r\nx-xbl-pfn: %s\r\n%s", packageFamilyName, extraHeaders ? extraHeaders : "" );
+     hr = xuser_signed_request( provider->user, method, url, provider->auth, headers, body, bodySize, status, buffer, bufferSize );
+@@ -1168,6 +1177,7 @@ static HRESULT cloud_sync( struct XGameSaveProvider *provider )
+     SIZE_T size;
+     BYTE *buffer;
+     DWORD status;
++    BOOL timed_out = FALSE;
+     HRESULT hr;
+ 
+     if (FAILED(hr = xuser_device_authorization( provider->user, "http://xboxlive.com", &provider->auth ))) return hr;
+@@ -1233,6 +1243,15 @@ static HRESULT cloud_sync( struct XGameSaveProvider *provider )
+             hr = provider->files ? files_cloud_download( provider, remote[i].name, remote[i].display, remote[i].time ) :
+                                   cloud_download( provider, remote[i].name, remote[i].display, remote[i].time );
+             if (SUCCEEDED(hr)) provider->downloaded++;
++            else if (http_timed_out( hr ))
++            {
++                /* A container that could not be fetched must not look absent: a later
++                 * local save would then replace the newer cloud copy. Give up on the
++                 * cloud for this session instead. */
++                timed_out = TRUE;
++                free_state( &state );
++                goto done;
++            }
+         }
+         else if (state.dirty && SUCCEEDED(cloud_upload( provider, &state )))
+         {
+@@ -1259,7 +1278,7 @@ done:
+         struct remote_container empty = { 0 };
+         enumerate_local( provider, sync_local_callback, &empty );
+     }
+-    return provider->files ? hr : S_OK;
++    return provider->files || timed_out ? hr : S_OK;
+ }
+ 
+ static HRESULT initialize_provider( XUserHandle user, const char *configurationId, XGameSaveProviderHandle *out )
+@@ -1292,7 +1311,11 @@ static HRESULT initialize_provider( XUserHandle user, const char *configurationI
+     provider->cloud = packageFamilyName != NULL;
+     if (provider->cloud)
+     {
++        /* The title waits for this call. Stalled requests time out on their own;
++         * the ceiling only stops a server that keeps trickling data. */
++        provider->sync_deadline = GetTickCount64() + SAVE_SYNC_CEILING;
+         hr = cloud_sync( provider );
++        provider->sync_deadline = 0;
+         if (FAILED(hr))
+         {
+             ERR( "cloud sync failed, hr %#lx.\n", hr );
+diff --git a/dlls/xgameruntime/xhttp_limits.h b/dlls/xgameruntime/xhttp_limits.h
+new file mode 100644
+index 0000000..6c0fbb8
+--- /dev/null
++++ b/dlls/xgameruntime/xhttp_limits.h
+@@ -0,0 +1,49 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later
++ * Time limits for Xbox service HTTP calls that a title waits on synchronously.
++ * Without them a silent server holds the calling thread for the WinHTTP
++ * defaults (minutes), and every retry repeats that wait. */
++#ifndef __WINE_XGAMERUNTIME_XHTTP_LIMITS_H
++#define __WINE_XGAMERUNTIME_XHTTP_LIMITS_H
++
++/* No winhttp.h here: this header is included next to wininet.h, which
++ * defines conflicting types. ERROR_WINHTTP_TIMEOUT is WINHTTP_ERROR_BASE + 2. */
++#define XHTTP_ERROR_WINHTTP_TIMEOUT 12002
++
++#define HTTP_RESOLVE_TIMEOUT   10000
++#define HTTP_CONNECT_TIMEOUT   10000
++#define HTTP_SEND_TIMEOUT      30000
++#define HTTP_RECEIVE_TIMEOUT   30000
++/* Time the server may take to start answering. A body is bounded by
++ * HTTP_RECEIVE_TIMEOUT per read instead: a transfer that keeps delivering data
++ * is never cut off, and one that goes quiet for that long is. */
++#define HTTP_RESPONSE_TIMEOUT  15000
++/* No new attempt starts once a request series has used this much time. */
++#define HTTP_RETRY_BUDGET      30000
++/* Safety ceiling on the whole initial cloud sync the title waits on. Stalled
++ * requests already time out on their own, so this is not what normally ends a
++ * sync: it only stops a server that keeps trickling data from holding the title
++ * forever. It is checked before each request, so a request already running may
++ * finish after it. */
++#define SAVE_SYNC_CEILING      600000
++
++static inline BOOL http_timed_out( HRESULT hr )
++{
++    return hr == HRESULT_FROM_WIN32( XHTTP_ERROR_WINHTTP_TIMEOUT ) || hr == HRESULT_FROM_WIN32( ERROR_TIMEOUT );
++}
++
++/* A timed-out attempt already used its whole budget, and a repeat would only
++ * extend the wait. Other failures may be transient and are retried while the
++ * series is still within HTTP_RETRY_BUDGET. */
++static inline BOOL http_retry_allowed( HRESULT hr, ULONGLONG started, ULONGLONG now )
++{
++    if (http_timed_out( hr )) return FALSE;
++    return now - started < HTTP_RETRY_BUDGET;
++}
++
++/* deadline 0 means no limit. */
++static inline BOOL http_deadline_passed( ULONGLONG deadline, ULONGLONG now )
++{
++    return deadline && now >= deadline;
++}
++
++#endif
+diff --git a/dlls/xgameruntime/xuser.c b/dlls/xgameruntime/xuser.c
+index fbdd67e..926c7c1 100644
+--- a/dlls/xgameruntime/xuser.c
++++ b/dlls/xgameruntime/xuser.c
+@@ -2607,6 +2607,7 @@ HRESULT xuser_signed_request( XUserHandle user, const char *method, const char *
+     WCHAR *methodW = NULL, *urlW = NULL, *headersW = NULL;
+     char signature[105] = { 0 }, *headers = NULL;
+     SIZE_T headersSize;
++    ULONGLONG started = GetTickCount64();
+     HRESULT hr;
+ 
+     TRACE( "user %p, method %s, url %s, bodySize %lu.\n", user, debugstr_a( method ), debugstr_a( url ), bodySize );
+@@ -2624,6 +2625,11 @@ HRESULT xuser_signed_request( XUserHandle user, const char *method, const char *
+         {
+             if (attempt)
+             {
++                if (FAILED(hr) && !http_retry_allowed( hr, started, GetTickCount64() ))
++                {
++                    WARN( "request %s %s failed with hr %#lx, not retrying.\n", debugstr_a( method ), debugstr_a( url ), hr );
++                    break;
++                }
+                 WARN( "request %s %s failed with hr %#lx, retrying.\n", debugstr_a( method ), debugstr_a( url ), hr );
+                 Sleep( 500 * attempt );
+             }

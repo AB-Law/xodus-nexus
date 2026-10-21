@@ -183,6 +183,10 @@
     {
       "file": "assets/xgameruntime-game-relaunch.patch",
       "sha256": "e6bf837a8d120c4e880cb43a6743772db7a4b61ff16a68a4bdce0627fe13962d"
+    },
+    {
+      "file": "assets/xgameruntime-http-limits.patch",
+      "sha256": "5b991e5b8c3468e7b025042fa36cd2cdd0c2449ac4b0d8f9823eefbf6a00289f"
     }
   ],
   "expectedWineSources": {
@@ -202,7 +206,7 @@
     "dlls/xgameruntime/xgameinvite.c": "43c3459101f7da3a4bc6569d361f2d5f63f6a0e70006a0472c4ccb6f9bece41f",
     "dlls/xgameruntime/xgameprotocol.c": "6936d5e24532832ee2e6928ea3a9a5217f8df830588b2e6e92920dd2cf1532d3",
     "dlls/xgameruntime/xgameruntime.spec": "8e77261cdc459d2fe688c210c8024ee8eeb09057e679c3a38de941fde1a00d73",
-    "dlls/xgameruntime/xgamesave.c": "5d78ee9c7b102c24a8e3c08dae66ed88f3de529ede9d182cf2f0635d79ad90d0",
+    "dlls/xgameruntime/xgamesave.c": "0d4221c6a22ba84bc8eaafbd74df9d69fd2ccc0a8d9a69fcbf04c6a3836a45ab",
     "dlls/xgameruntime/xgamesave.idl": "544319e88951f65b21c74f785fb9376c10cac8b1d57e98c7aa3079348162ccab",
     "dlls/xgameruntime/xnetworking.c": "cfd8d0110b7ebd622f62317d3134dd866e6538e4a697b06912fa752517fe7caa",
     "dlls/xgameruntime/xpackage.c": "5aa7f3a1431963c2d5f2371f1ad85c052fc589bf2bb759154ae62300e91233b7",
@@ -216,16 +220,17 @@
     "dlls/xgameruntime/xsystem.c": "a3c151c5d05875b68f49c534aae9d40e3f15ec800af0f85e159ede7c95401880",
     "dlls/xgameruntime/xsystemanalytics.c": "189e99c83273b429325ecefa2b9246c45863c22f0c4006a791ec57b8f7b9d384",
     "dlls/xgameruntime/xthreading.c": "2cf262d75eb6da156f14f2702ccd3d59953da5bc8f4b898709c25d5489383361",
-    "dlls/xgameruntime/xuser.c": "2eaf3b1d73d9f1c791ab3553844c0c05b482331b77a23ac0bc7f2bc7a47f8c44",
+    "dlls/xgameruntime/xuser.c": "f29819abacd5580ab08503e366c607247a51c55990daba6d341600d0869b3218",
     "dlls/xgameruntime/xuser_device_events.h": "ed3b6ac25510b7bff288e36859781811e7de3985d418159ce25a2b00bc6d35cb",
     "dlls/xgameruntime/xuser_privilege.h": "4aa9a2736b59feb4d86cb86d95d99119ab1ccb6ab07b6b9a53c7da61acd0a77b",
-    "dlls/xgameruntime/util.c": "aebf1a7ebef0dff89d3a1683bc40e16c821eaeb5cc1160ce474b905d14d7cb5c",
-    "dlls/xgameruntime/util.h": "b739dba8a69a36103e72afc8dcaeaf324470d9ed47a5a7dd81b18e4e511ae69a",
+    "dlls/xgameruntime/util.c": "2e8657b7492c43633565ee688f79d602cf74ff8b4d6618401524e00a42bec6e0",
+    "dlls/xgameruntime/util.h": "2c447d83a57bab606b8af64c9427a2e8d147a00cd0b4e48353b68d3de619e0ad",
     "dlls/xgameruntime/userprovider.idl": "66fb09670b7dabfc55257475094239018ea9a19ec2be348e56cf2b17ef615d7a",
     "dlls/xgameruntime/xgamesavefiles.h": "5f21c809107e8c67659899a43f98143a4cbba744be5731cc5c68c177fdc7956a",
     "dlls/xgameruntime/xstore_game_license.h": "8bcc2fd256c3e08ba59d9d5211ffb6f70e01a95cef6d0272ddf61bb8d284bffb",
     "dlls/xgameruntime/xpackage_chunks.h": "50fd27e2bcf43479eb8280e94e7a76b61299ab8590bc3129ce7ac16757698296",
-    "dlls/xgameruntime/xpackage_monitors.h": "4a279231a0a170f06ba956fbe18c3f540cc479139280ea34ba6fe65bd74e3112"
+    "dlls/xgameruntime/xpackage_monitors.h": "4a279231a0a170f06ba956fbe18c3f540cc479139280ea34ba6fe65bd74e3112",
+    "dlls/xgameruntime/xhttp_limits.h": "86a7e3b4109160bafd731544ca74e4360d560e9e30e0a5e9c47b9196036e1867"
   },
   "runtimeCompatibilitySources": {
     "scripts/runtime-compat/build.mjs": "ac150747020a3a29d1d436c2e2af879e66ea2fe9104d4d330534d6128ba3ea19",
