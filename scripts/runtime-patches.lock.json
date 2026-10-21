@@ -187,6 +187,10 @@
     {
       "file": "assets/xgameruntime-http-limits.patch",
       "sha256": "5b991e5b8c3468e7b025042fa36cd2cdd0c2449ac4b0d8f9823eefbf6a00289f"
+    },
+    {
+      "file": "assets/wine-winhttp-http2-window.patch",
+      "sha256": "0ce01f75ff63237ba4c07eb5d168b102627211f6ef54dc1530effadfee679509"
     }
   ],
   "expectedWineSources": {

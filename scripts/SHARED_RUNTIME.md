@@ -33,6 +33,22 @@ missing metadata and expired receipts remain errors. This implementation require
 online receipt/catalog access; products absent from the game's declared related
 list, purchase/download APIs and consumable quantities are not implemented here.
 
+### HTTP/2 receive window
+
+A download over HTTP/2 can go no faster than the receive window divided by the
+round-trip time, because the server stops sending once the window is used up and
+resumes only when the client acknowledges data the application has read. The old
+fixed 65535-byte window limited a title on a 500 ms path to about 120 KB/s, so a
+16 MiB cloud-save blob took longer than the roughly 110 s the service allows a
+request. WinHTTP now offers an 8 MiB window on each stream and on the connection
+(the connection window is raised with an explicit `WINDOW_UPDATE`, since the
+`SETTINGS` value only covers streams). Unread body data is buffered up to that
+window, but the buffer starts at 64 KiB and grows only as data arrives, so small
+responses cost little and an HTTP/2 request holds at most 8 MiB. nghttp2
+acknowledges data after half the window has been read, so about half is usable
+per round trip: at 250 ms that allows a ceiling of roughly 16 MB/s per stream.
+The ceiling is not a measured speed; the server and the link can be slower.
+
 ### Service HTTP limits and cloud-save start-up
 
 Signed Xbox service requests (`http_request_raw`) no longer rely on WinHTTP's

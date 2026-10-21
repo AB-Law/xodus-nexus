@@ -357,6 +357,8 @@ int main(int argc, char **argv)
     decompression_options();
     synchronous("head-h2", L"HEAD", L"/head", FALSE, 405, 0, FALSE, FALSE);
     synchronous("body-h2", L"GET", L"/body", FALSE, 200, 200000, FALSE, FALSE);
+    synchronous("window-h2", L"GET", L"/window", FALSE, 200, 0, FALSE, FALSE);
+    synchronous("large-h2", L"GET", L"/large", FALSE, 200, 24 * 1024 * 1024, FALSE, FALSE);
     synchronous("post-h2", L"POST", L"/echo", FALSE, 201, 200000, TRUE, FALSE);
     synchronous("stream-post-h2", L"POST", L"/echo", FALSE, 201, 200000, TRUE, TRUE);
     synchronous("fallback-h1", L"GET", L"/body", TRUE, 200, 200000, FALSE, FALSE);

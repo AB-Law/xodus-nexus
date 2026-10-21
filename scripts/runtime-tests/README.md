@@ -139,7 +139,9 @@ The suite checks HTTP/1.1 and HTTP/2 requests, uploads, redirects, asynchronous
 reads and cancellation, certificate-chain ownership and TLS hostname rejection.
 Compression checks cover session/request opt-in, unchanged raw responses when
 disabled, decoded availability, small reads, large and fragmented bodies,
-chunked transfers, malformed/truncated gzip and repeated requests.
+chunked transfers, malformed/truncated gzip and repeated requests. Flow-control
+checks confirm the client offers an 8 MiB receive window on the stream and on the
+connection, and that a 24 MiB body (three windows) read in small pieces arrives intact.
 
 ## Experimental lifecycle patch
 

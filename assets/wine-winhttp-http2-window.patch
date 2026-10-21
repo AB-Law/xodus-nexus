@@ -1,0 +1,162 @@
+diff --git a/dlls/winhttp/http2.c b/dlls/winhttp/http2.c
+index 48231e5..fdb5c06 100644
+--- a/dlls/winhttp/http2.c
++++ b/dlls/winhttp/http2.c
+@@ -19,7 +19,15 @@
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(winhttp);
+ 
+-#define H2_WINDOW 65535
++/* Per-stream and connection receive window. A window caps a single download at
++ * about window / round-trip time, so the 65535-byte protocol default limits a
++ * title on a 250 ms path to about 260 KB/s at best. The unread-body buffer is
++ * allocated on demand and never exceeds this, because bytes are acknowledged
++ * only once the application has read them. nghttp2 sends the acknowledgement
++ * after half the window has been read, so about half is usable per round trip. */
++#define H2_DEFAULT_WINDOW 65535
++#define H2_WINDOW (8 * 1024 * 1024)
++#define H2_BODY_INITIAL (64 * 1024)
+ #define H2_HEADERS_LIMIT 65536
+ #define H2_FUNCTIONS(X) \
+  X(session_callbacks_new) X(session_callbacks_del) \
+@@ -27,12 +35,15 @@ WINE_DEFAULT_DEBUG_CHANNEL(winhttp);
+  X(session_callbacks_set_on_data_chunk_recv_callback) X(session_callbacks_set_on_stream_close_callback) \
+  X(option_new) X(option_del) X(option_set_no_auto_window_update) \
+  X(session_client_new2) X(session_del) X(submit_settings) X(submit_request) \
+- X(session_mem_send2) X(session_mem_recv2) X(session_resume_data) X(session_consume)
++ X(session_mem_send2) X(session_mem_recv2) X(session_resume_data) X(session_consume) \
++ X(submit_window_update)
+ #define DECLARE(name) static __typeof__(nghttp2_##name) *p_##name;
+ H2_FUNCTIONS(DECLARE)
+ #undef DECLARE
+ static INIT_ONCE library_once = INIT_ONCE_STATIC_INIT;
+ 
++#define H2_DATA(h2) ((h2)->body ? (h2)->body + (h2)->body_off : (const BYTE *)"")
++
+ struct http2_connection
+ {
+     nghttp2_session *session;
+@@ -41,8 +52,8 @@ struct http2_connection
+     int32_t stream;
+     DWORD error, status;
+     BOOL headers_ready, ended, response_installed;
+-    BYTE body[H2_WINDOW];
+-    size_t body_len, header_len;
++    BYTE *body;
++    size_t body_off, body_len, body_cap, header_len; /* Unread data: body + body_off, body_len bytes. */
+     char headers[H2_HEADERS_LIMIT + 1];
+     const BYTE *upload;
+     size_t upload_len, upload_pos;
+@@ -212,7 +223,7 @@ static void diag_response( struct http2_connection *h2 )
+     else if (interesting && h2->body_len)
+     {
+         diag_emit( line, sizeof(line), &pos, " body=" );
+-        diag_append_body( line, sizeof(line), &pos, h2->body,
++        diag_append_body( line, sizeof(line), &pos, H2_DATA( h2 ),
+                           h2->body_len < H2_DIAG_BODY_LIMIT ? h2->body_len : H2_DIAG_BODY_LIMIT );
+     }
+     /* Correlation IDs are safe by shape; extract them from the whole body
+@@ -223,19 +234,19 @@ static void diag_response( struct http2_connection *h2 )
+         char piece[48];
+         while (start + 5 < h2->body_len && pos < sizeof(line) - 64)
+         {
+-            if (h2->body[start] == 'T' && h2->body[start + 1] == 'C' &&
+-                h2->body[start + 2] == 'C' && h2->body[start + 3] == 'L' &&
+-                h2->body[start + 4] == '-')
++            if (H2_DATA( h2 )[start] == 'T' && H2_DATA( h2 )[start + 1] == 'C' &&
++                H2_DATA( h2 )[start + 2] == 'C' && H2_DATA( h2 )[start + 3] == 'L' &&
++                H2_DATA( h2 )[start + 4] == '-')
+             {
+                 size_t n = 0;
+                 start += 5;
+                 while (start + n < h2->body_len && n < 43)
+                 {
+-                    BYTE c = h2->body[start + n];
++                    BYTE c = H2_DATA( h2 )[start + n];
+                     if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || c == '-')) break;
+                     n++;
+                 }
+-                memcpy( piece, h2->body + start, n ); piece[n] = 0;
++                memcpy( piece, H2_DATA( h2 ) + start, n ); piece[n] = 0;
+                 diag_emit( line, sizeof(line), &pos, " tccl=TCCL-" );
+                 diag_emit( line, sizeof(line), &pos, piece );
+                 start += n;
+@@ -345,15 +356,38 @@ static int on_frame( nghttp2_session *session, const nghttp2_frame *frame, void
+     return 0;
+ }
+ 
++/* Make room for length more unread bytes, reclaiming the already-read prefix
++ * before growing. The buffer doubles from a small start up to the window. */
++static BOOL body_reserve( struct http2_connection *h2, size_t length )
++{
++    size_t needed = h2->body_len + length, capacity;
++    BYTE *grown;
++    if (needed > H2_WINDOW) return FALSE;
++    if (h2->body_off + needed <= h2->body_cap) return TRUE;
++    if (h2->body_off)
++    {
++        memmove( h2->body, h2->body + h2->body_off, h2->body_len );
++        h2->body_off = 0;
++    }
++    if (needed <= h2->body_cap) return TRUE;
++    capacity = h2->body_cap ? h2->body_cap * 2 : H2_BODY_INITIAL;
++    if (capacity < needed) capacity = needed;
++    if (capacity > H2_WINDOW) capacity = H2_WINDOW;
++    if (!(grown = realloc( h2->body, capacity ))) return FALSE;
++    h2->body = grown;
++    h2->body_cap = capacity;
++    return TRUE;
++}
++
+ static int on_body( nghttp2_session *session, uint8_t flags, int32_t stream,
+                     const uint8_t *data, size_t length, void *user )
+ {
+     struct http2_connection *h2 = user;
+     (void)session; (void)flags;
+     if (stream != h2->stream) return NGHTTP2_ERR_CALLBACK_FAILURE;
+-    if (!h2->headers_ready || length > sizeof(h2->body) - h2->body_len)
++    if (!h2->headers_ready || !body_reserve( h2, length ))
+         return NGHTTP2_ERR_CALLBACK_FAILURE;
+-    memcpy( h2->body + h2->body_len, data, length );
++    memcpy( h2->body + h2->body_off + h2->body_len, data, length );
+     h2->body_len += length;
+     h2->diag_received += length;
+     /* Sanitized body scan at arrival time: the application drains the
+@@ -495,6 +529,7 @@ void http2_destroy( struct netconn *connection )
+     struct http2_connection *h2 = connection->http2_state;
+     if (!h2) return;
+     p_session_del( h2->session );
++    free( h2->body );
+     free( h2 );
+     connection->http2_state = NULL;
+ }
+@@ -525,12 +560,17 @@ static DWORD initialize( struct request *request )
+     p_option_del( options ); options = NULL;
+     if (result) goto failed;
+     if (p_submit_settings( h2->session, NGHTTP2_FLAG_NONE, settings, ARRAY_SIZE(settings) )) goto failed;
++    /* SETTINGS_INITIAL_WINDOW_SIZE only covers streams. The connection window
++     * always starts at the protocol default and must be raised explicitly. */
++    if (H2_WINDOW > H2_DEFAULT_WINDOW &&
++        p_submit_window_update( h2->session, NGHTTP2_FLAG_NONE, 0, H2_WINDOW - H2_DEFAULT_WINDOW )) goto failed;
+     request->netconn->http2_state = h2;
+     return ERROR_SUCCESS;
+ failed:
+     if (callbacks) p_session_callbacks_del( callbacks );
+     if (options) p_option_del( options );
+     if (h2->session) p_session_del( h2->session );
++    free( h2->body );
+     free( h2 );
+     return ERROR_OUTOFMEMORY;
+ }
+@@ -687,8 +727,9 @@ DWORD http2_read_data( struct netconn *connection, void *buffer, DWORD length, i
+     *read = min( length, h2->body_len );
+     if (*read)
+     {
+-        memcpy( buffer, h2->body, *read ); h2->body_len -= *read;
+-        memmove( h2->body, h2->body + *read, h2->body_len );
++        memcpy( buffer, h2->body + h2->body_off, *read );
++        h2->body_off += *read; h2->body_len -= *read;
++        if (!h2->body_len) h2->body_off = 0;
+         if (p_session_consume( h2->session, h2->stream, *read )) return ERROR_WINHTTP_INVALID_SERVER_RESPONSE;
+         return flush_frames( h2 );
+     }

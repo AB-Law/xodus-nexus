@@ -27,6 +27,10 @@ const noise = Buffer.from(Array.from({ length: body.length }, (_, i) => {
   return (n ^ (n >>> 16)) & 255;
 }));
 const largeGzip = gzipSync(noise);
+// Three receive windows long, so flow control must be refilled repeatedly while the
+// client reads in small pieces and the unread-body buffer grows and is reclaimed.
+const large = Buffer.alloc(24 * 1024 * 1024);
+for (let i = 0; i < large.length; i++) large[i] = 97 + i % 26;
 const server = http2.createSecureServer({ key: await fs.readFile(path.join(root, 'server.key')), cert: await fs.readFile(path.join(root, 'server.pem')), allowHTTP1: true });
 const sessions = new Set();
 server.on('session', session => { sessions.add(session); session.on('error', () => {}); session.on('close', () => sessions.delete(session)); });
@@ -66,6 +70,14 @@ server.on('request', (request, response) => {
     write();
   } else if (request.url === '/encoding') send(request.headers['accept-encoding'] === 'gzip' ? 200 : 400, body);
   else if (request.url === '/body') send(200, body);
+  else if (request.url === '/large') send(200, large);
+  else if (request.url === '/window') {
+    // A fixed 65535-byte window caps a download at window / round-trip time. The
+    // client must offer 8 MiB, on the stream and on the connection.
+    const session = request.stream?.session;
+    const window = 8 * 1024 * 1024;
+    send(session && session.remoteSettings.initialWindowSize >= window && session.state.remoteWindowSize >= window ? 200 : 500);
+  }
   else if (request.url === '/head') send(405);
   else if (request.url === '/error') send(503);
   else if (request.url === '/redirect') send(307, Buffer.alloc(0), { location: '/body' });
