@@ -15,7 +15,6 @@ concurrency:
 
 jobs:
   changes:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     outputs:
       needed: ${{ steps.diff.outputs.needed }}
